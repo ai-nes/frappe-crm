@@ -71,16 +71,36 @@ def member_count(doc):
 	return frappe.db.sql(f"SELECT COUNT(*) FROM ({query}) members")[0][0]
 
 
-def preview(segment=None, filters=None, start=0, page_length=20):
+def _student_search_query(query, search):
+	"""Restrict an already permission-scoped membership query by Student text."""
+	like = frappe.db.escape(f"%{search}%")
+	search_fields = ("name", "full_name", "phone", "high_school", "major", "assigned_to")
+	conditions = " OR ".join(f"student.{field} LIKE {like}" for field in search_fields)
+	return (
+		f"SELECT members.name FROM ({query}) members "
+		f"INNER JOIN `tabCRM Student` student ON student.name = members.name "
+		f"WHERE {conditions}"
+	)
+
+
+def preview(segment=None, filters=None, start=0, page_length=20, search=None):
 	start = integer(start, "start")
 	page_length = integer(page_length, "page_length", maximum=100)
 	if not page_length:
 		fail("page_length must be positive.")
 	if bool(segment) == bool(filters):
 		fail("Provide either a saved segment or draft filters.")
+	search = str(search or "").strip()
+	if len(search) > 140:
+		fail("search must be 140 characters or fewer.")
 	doc = frappe.get_doc("CRM Segment", segment) if segment else None
-	query = membership_query(doc, filters)
+	membership = membership_query(doc, filters)
+	member_count = None
+	if search:
+		member_count = frappe.db.sql(f"SELECT COUNT(*) FROM ({membership}) members")[0][0]
+	query = _student_search_query(membership, search) if search else membership
 	total = frappe.db.sql(f"SELECT COUNT(*) FROM ({query}) members")[0][0]
+	member_count = total if member_count is None else member_count
 	names = [
 		r[0]
 		for r in frappe.db.sql(
@@ -109,6 +129,7 @@ def preview(segment=None, filters=None, start=0, page_length=20):
 	)
 	return {
 		"total": total,
+		"member_count": member_count,
 		"total_students": visible_student_count(),
 		"start": start,
 		"page_length": page_length,

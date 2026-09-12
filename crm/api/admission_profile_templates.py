@@ -8,6 +8,8 @@ from typing import Any
 import frappe
 from frappe import _
 
+from crm.api._pagination import parse_pagination
+
 SUPPORTED_ADMISSION_METHOD_CODES = ("THPT_SCORE", "COLLEGE_GRADUATION", "DIRECT_ADMISSION")
 LEGACY_TEMPLATE_CODES = frozenset({"SPECIAL_PROGRAM", "FPT_POLYTECHNIC"})
 TEMPLATE_ADMIN_ROLES = frozenset({"Administrator", "System Manager", "Admissions Director"})
@@ -539,31 +541,63 @@ def get_admission_profile_catalog(
 
 
 @frappe.whitelist()
-def list_admission_profile_templates(status: str | None = None, search: str | None = None) -> dict[str, Any]:
+def list_admission_profile_templates(
+	status: str | None = None,
+	search: str | None = None,
+	template_kind: str | None = None,
+	start: int | str | None = None,
+	page_length: int | str | None = None,
+) -> dict[str, Any]:
 	"""Return all academic templates and active document types for admin CRUD."""
 	_require_template_admin()
+	is_paginated = start not in (None, "") or page_length not in (None, "")
+	if is_paginated:
+		start_value, template_page_length = parse_pagination(start, page_length)
 	status_value = str(status or "").strip().title()
 	filters = {"profile_type": "academic_admission"}
 	if status_value:
 		if status_value not in TEMPLATE_STATUSES:
 			frappe.throw(_("Template status is invalid."), frappe.ValidationError)
 		filters["status"] = status_value
+	template_kind_value = str(template_kind or "").strip().lower()
+	if template_kind_value:
+		if template_kind_value not in {"standard", "special"}:
+			frappe.throw(_("Template kind is invalid."), frappe.ValidationError)
+		filters["template_kind"] = template_kind_value
+	filters["template_code"] = ["not in", list(LEGACY_TEMPLATE_CODES)]
+	search_value = str(search or "").strip()
+	or_filters = None
+	if search_value:
+		like = f"%{search_value}%"
+		or_filters = [
+			[fieldname, "like", like]
+			for fieldname in ("name", "template_code", "template_name", "description")
+		]
 	all_document_rows = _document_type_rows()
-	document_rows = _document_type_rows(search=search) if str(search or "").strip() else all_document_rows
-	document_types = {row.name: row for row in all_document_rows}
-	rows = frappe.get_all(
-		"CRM Admission Profile Template",
-		filters=filters,
-		fields=["name", "template_code"],
-		order_by="status asc, template_code asc, version desc, name asc",
-		limit_page_length=0,
-		ignore_permissions=True,
+	# The template list is paginated independently; keep the complete document
+	# type catalogue available to create/edit forms even while searching templates.
+	document_rows = (
+		all_document_rows
+		if is_paginated
+		else (_document_type_rows(search=search) if search_value else all_document_rows)
 	)
-	return {
+	document_types = {row.name: row for row in all_document_rows}
+	list_kwargs = {
+		"filters": filters,
+		"or_filters": or_filters,
+		"fields": ["name", "template_code"],
+		"order_by": "status asc, template_code asc, version desc, name asc",
+		"ignore_permissions": True,
+	}
+	if is_paginated:
+		list_kwargs.update(start=start_value, page_length=template_page_length)
+	else:
+		list_kwargs["limit_page_length"] = 0
+	rows = frappe.get_all("CRM Admission Profile Template", **list_kwargs)
+	response = {
 		"templates": [
 			_template_payload(frappe.get_doc("CRM Admission Profile Template", row.name), document_types)
 			for row in rows
-			if row.template_code not in LEGACY_TEMPLATE_CODES
 		],
 		"documentTypes": [
 			{
@@ -576,6 +610,21 @@ def list_admission_profile_templates(status: str | None = None, search: str | No
 			for row in document_rows
 		],
 	}
+	if is_paginated:
+		total_rows = frappe.get_all(
+			"CRM Admission Profile Template",
+			filters=filters,
+			or_filters=or_filters,
+			fields=["count(name) as total"],
+			limit_page_length=0,
+			ignore_permissions=True,
+		)
+		response.update(
+			total=int((total_rows[0].get("total") if total_rows else 0) or 0),
+			start=start_value,
+			page_length=template_page_length,
+		)
+	return response
 
 
 @frappe.whitelist(methods=["POST"])

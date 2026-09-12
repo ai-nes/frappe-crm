@@ -525,6 +525,22 @@ class TestStudentSegment(FrappeTestCase):
 			with self.assertRaises(frappe.ValidationError):
 				segments.preview_segment(filters=self.rules, start=value)
 
+	def test_preview_search_filters_members_before_pagination(self):
+		doc = self.group()
+
+		matched = segments.preview_segment(
+			segment=doc.name,
+			search="Classification Test",
+			page_length=8,
+		)
+		self.assertEqual(matched["total"], 1)
+		self.assertEqual(matched["member_count"], 1)
+		self.assertEqual(matched["students"][0]["name"], self.student.name)
+
+		unmatched = segments.preview_segment(segment=doc.name, search="does-not-exist")
+		self.assertEqual(unmatched["total"], 0)
+		self.assertEqual(unmatched["students"], [])
+
 	def test_malformed_logic_and_level_values(self):
 		for value in ("VIP", 70, True):
 			with self.subTest(value=str(value)[:20]), self.assertRaises(frappe.ValidationError):

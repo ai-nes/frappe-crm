@@ -9,6 +9,7 @@ from typing import Any
 import frappe
 from frappe import _
 
+from crm.api._pagination import paged_list, parse_pagination
 from crm.api.snippets import resolve_snippet_references
 from crm.fcrm.lead_identity import resolve_lead_name
 
@@ -835,30 +836,78 @@ def list_message_template_library() -> dict[str, Any]:
 
 
 @frappe.whitelist()
-def list_admin_message_template_library() -> dict[str, Any]:
+def list_admin_message_template_library(
+	start: int | str | None = None,
+	page_length: int | str | None = None,
+	search: str | None = None,
+	owner: str | None = None,
+) -> dict[str, Any]:
 	"""Return all library templates for the admin management screen."""
 	_require_admin()
-	rows = frappe.get_list(
-		MESSAGE_TEMPLATE_LIBRARY,
-		fields=[
-			"name",
-			"template_name",
-			"category",
-			"description",
-			"subject",
-			"body",
-			"custom_values",
-			"is_active",
-			"owner",
-			"creation",
-			"modified",
-		],
-		order_by="modified desc, creation desc, name desc",
-		limit_page_length=0,
-	)
+	is_paginated = start not in (None, "") or page_length not in (None, "")
+	if is_paginated:
+		start, page_length = parse_pagination(start, page_length)
+	filters = {}
+	owner_value = str(owner or "").strip()
+	if owner_value:
+		filters["owner"] = owner_value
+	search_value = str(search or "").strip()
+	or_filters = None
+	if search_value:
+		like = f"%{search_value}%"
+		or_filters = [
+			[fieldname, "like", like] for fieldname in ("name", "template_name", "subject", "category")
+		]
+	fields = [
+		"name",
+		"template_name",
+		"category",
+		"description",
+		"subject",
+		"body",
+		"custom_values",
+		"is_active",
+		"owner",
+		"creation",
+		"modified",
+	]
+	if is_paginated:
+		result = paged_list(
+			MESSAGE_TEMPLATE_LIBRARY,
+			fields,
+			filters=filters,
+			or_filters=or_filters,
+			start=start,
+			page_length=page_length,
+			order_by="modified desc, creation desc, name desc",
+		)
+		rows = result.pop("rows")
+	else:
+		rows = frappe.get_list(
+			MESSAGE_TEMPLATE_LIBRARY,
+			fields=fields,
+			filters=filters,
+			or_filters=or_filters,
+			order_by="modified desc, creation desc, name desc",
+			limit_page_length=0,
+		)
 	owner_cache: dict[str, str] = {}
 	templates = [_library_payload(row, owner_cache) for row in rows]
-	return {"templates": templates, "owners": [], "total": len(templates)}
+	if not is_paginated:
+		return {"templates": templates, "owners": [], "total": len(templates)}
+
+	owner_rows = frappe.get_all(
+		MESSAGE_TEMPLATE_LIBRARY,
+		fields=["owner"],
+		filters={"owner": ["is", "set"]},
+		group_by="owner",
+		order_by="owner asc",
+		limit_page_length=0,
+	)
+	owners = [
+		{"id": row.owner, "name": _owner_name(row.owner, owner_cache)} for row in owner_rows if row.owner
+	]
+	return {"templates": templates, "owners": owners, **result}
 
 
 @frappe.whitelist()

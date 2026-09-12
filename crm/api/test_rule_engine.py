@@ -198,6 +198,14 @@ class TestCrmRuleVersionApi(FrappeTestCase):
 		self.assertEqual(updated["business_reason_template"], "{action} is waiting on {rule_name}.")
 		self.assertEqual(rule_engine.list_rules(self.version_id)["rules"][0]["outcome"], "WAIT")
 
+	def test_list_rules_search_matches_target_actions(self):
+		rule_engine.create_rule(self.version_id, 0, **self._rule(target_actions=["SEND_EMAIL"]))
+
+		result = rule_engine.list_rules(self.version_id, search="SEND_EMAIL")
+
+		self.assertEqual(len(result["rules"]), 1)
+		self.assertEqual(result["rules"][0]["target_actions"], ["SEND_EMAIL"])
+
 	def test_set_rule_enabled_toggles_only_the_draft_rule_and_bumps_parent_revision(self):
 		rule = rule_engine.create_rule(self.version_id, 0, **self._rule(enabled=True))
 		updated = rule_engine.set_rule_enabled(rule["name"], 1, False)

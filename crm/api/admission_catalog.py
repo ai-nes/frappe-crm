@@ -8,6 +8,8 @@ from typing import Any
 import frappe
 from frappe import _
 
+from crm.api._pagination import paged_list, parse_pagination
+
 DOCUMENT_TYPE = "CRM Document Type"
 ADMISSION_METHOD = "CRM Admission Method"
 STALE_MESSAGE = "Admission catalog item changed; reload before retrying."
@@ -287,31 +289,55 @@ def _delete(doctype: str, name: str, expected_modified: str | None, *, document_
 
 @frappe.whitelist()
 def list_admission_document_types(
-	search: str | None = None, include_archived: bool = True
-) -> dict[str, list[dict[str, Any]]]:
+	search: str | None = None,
+	include_archived: bool = True,
+	status: str | None = None,
+	start: int | str | None = None,
+	page_length: int | str | None = None,
+) -> dict[str, Any]:
 	"""List admission document types, optionally including archived rows."""
 	include_archived = bool(_boolean(include_archived, "include_archived"))
-	filters = {"status": ["in", ["Active", "Archived"]] if include_archived else "Active"}
+	is_paginated = start not in (None, "") or page_length not in (None, "")
+	if is_paginated:
+		start, page_length = parse_pagination(start, page_length)
+	status_value = str(status or "").strip().title()
+	if status_value and status_value not in {"Active", "Archived"}:
+		frappe.throw(_("Document Type status is invalid."), frappe.ValidationError)
+	filters = {"status": status_value or (["in", ["Active", "Archived"]] if include_archived else "Active")}
 	search_value = _text(search, optional=True) or ""
 	or_filters = None
 	if search_value:
 		like = f"%{search_value}%"
 		or_filters = [[fieldname, "like", like] for fieldname in ("name", "code", "label", "category")]
+	fields = [
+		"name",
+		"code",
+		"label",
+		"category",
+		"description",
+		"conditional_key",
+		"status",
+		"is_active",
+		"modified",
+	]
+	if is_paginated:
+		result = paged_list(
+			DOCUMENT_TYPE,
+			fields,
+			filters=filters,
+			or_filters=or_filters,
+			start=start,
+			page_length=page_length,
+			order_by="label asc, name asc",
+		)
+		rows = result.pop("rows")
+		return {"documentTypes": [_payload(row, document_type=True) for row in rows], **result}
+
 	rows = frappe.get_list(
 		DOCUMENT_TYPE,
 		filters=filters,
 		or_filters=or_filters,
-		fields=[
-			"name",
-			"code",
-			"label",
-			"category",
-			"description",
-			"conditional_key",
-			"status",
-			"is_active",
-			"modified",
-		],
+		fields=fields,
 		order_by="label asc, name asc",
 		limit_page_length=0,
 	)
@@ -351,21 +377,44 @@ def delete_admission_document_type(name: str, expected_modified: str | None = No
 
 @frappe.whitelist()
 def list_admission_methods(
-	search: str | None = None, include_disabled: bool = True
-) -> dict[str, list[dict[str, Any]]]:
+	search: str | None = None,
+	include_disabled: bool = True,
+	enabled: bool | str | None = None,
+	start: int | str | None = None,
+	page_length: int | str | None = None,
+) -> dict[str, Any]:
 	"""List admission methods, optionally excluding disabled rows."""
 	include_disabled = bool(_boolean(include_disabled, "include_disabled"))
+	is_paginated = start not in (None, "") or page_length not in (None, "")
+	if is_paginated:
+		start, page_length = parse_pagination(start, page_length)
 	filters = {} if include_disabled else {"enabled": 1}
+	if enabled not in (None, ""):
+		filters["enabled"] = _boolean(enabled, "enabled")
 	search_value = _text(search, optional=True) or ""
 	or_filters = None
 	if search_value:
 		like = f"%{search_value}%"
 		or_filters = [[fieldname, "like", like] for fieldname in ("name", "code", "display_name")]
+	fields = ["name", "code", "display_name", "description", "enabled", "sort_order", "modified"]
+	if is_paginated:
+		result = paged_list(
+			ADMISSION_METHOD,
+			fields,
+			filters=filters,
+			or_filters=or_filters,
+			start=start,
+			page_length=page_length,
+			order_by="sort_order asc, display_name asc, name asc",
+		)
+		rows = result.pop("rows")
+		return {"methods": [_payload(row, document_type=False) for row in rows], **result}
+
 	rows = frappe.get_list(
 		ADMISSION_METHOD,
 		filters=filters,
 		or_filters=or_filters,
-		fields=["name", "code", "display_name", "description", "enabled", "sort_order", "modified"],
+		fields=fields,
 		order_by="sort_order asc, display_name asc, name asc",
 		limit_page_length=0,
 	)
