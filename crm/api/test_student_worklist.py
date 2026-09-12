@@ -1,5 +1,6 @@
 """Focused contract tests for the session-scoped worklist helpers."""
 
+import json
 from contextlib import contextmanager
 from datetime import datetime
 from unittest.mock import call, patch
@@ -220,6 +221,57 @@ class TestStudentWorklistRealNonSystemManagerSession(FrappeTestCase):
 		# all, yet the disposition/status still project through.
 		self.assertEqual(row["evaluation"]["disposition"], "RECOMMEND")
 		self.assertEqual(row["evaluation"]["status"], "completed")
+
+	def test_empty_page_for_a_visible_student_explains_why_without_rule_codes(self):
+		"""No pending recommendation left for this Student, but the latest
+		evaluation carries a rule-engine WAIT decision -- the empty page must
+		surface that business reason in plain Vietnamese, and must never leak
+		the raw `matched_rule_ids` codes into the response."""
+		frappe.db.set_value(
+			"CRM Recommendation", self._recommendation.name, "decision_status", "accepted", update_modified=False
+		)
+		wait_evaluation = frappe.get_doc(
+			{
+				"doctype": "CRM NBA Evaluation",
+				"student": self._student.name,
+				"trigger": "manual",
+				"status": "completed",
+				"disposition": "WAIT",
+				"engine_revision": "nba-engine-test",
+				"evaluation_key": frappe.generate_hash(length=64),
+				"run_generation": 1,
+				"rule_decision": json.dumps(
+					{
+						"business_reason": "He thong ap dung quy tac Already Enrolled.",
+						"matched_rule_ids": ["STU-003"],
+					}
+				),
+			}
+		).insert(ignore_permissions=True)
+		try:
+			with _as_user(self._sale_user):
+				result = list_student_worklist(student_id=self._student.name)
+			self.assertEqual(result["items"], [])
+			self.assertEqual(result["empty_reason"], "He thong ap dung quy tac Already Enrolled.")
+			self.assertNotIn("STU-003", json.dumps(result))
+		finally:
+			frappe.delete_doc("CRM NBA Evaluation", wait_evaluation.name, force=True)
+
+	def test_empty_page_for_a_student_never_evaluated_says_so(self):
+		phone = "0" + "".join(str((int(c, 16) + 2) % 10) for c in frappe.generate_hash(length=9))
+		never_evaluated = frappe.get_doc(
+			{"doctype": "CRM Student", "full_name": "_Test Worklist Never Evaluated", "phone": phone}
+		).insert(ignore_permissions=True)
+		frappe.db.set_value(
+			"CRM Student", never_evaluated.name, "owner_staff", self._sale_staff, update_modified=False
+		)
+		try:
+			with _as_user(self._sale_user):
+				result = list_student_worklist(student_id=never_evaluated.name)
+			self.assertEqual(result["items"], [])
+			self.assertEqual(result["empty_reason"], "Học sinh này chưa được hệ thống AI đánh giá lần nào.")
+		finally:
+			frappe.delete_doc("CRM Student", never_evaluated.name, force=True)
 
 
 class TestStudentNextBestAction(FrappeTestCase):
