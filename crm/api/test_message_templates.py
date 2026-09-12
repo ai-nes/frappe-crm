@@ -151,6 +151,7 @@ class TestMessageTemplates(FrappeTestCase):
 			self.assertFalse(crm_message_template.has_permission(private_doc, "other@example.com", "read"))
 			self.assertTrue(crm_message_template.has_permission(public_doc, "other@example.com", "read"))
 			self.assertFalse(crm_message_template.has_permission(public_doc, "other@example.com", "write"))
+			self.assertFalse(crm_message_template.has_permission(public_doc, "Guest", "read"))
 
 	def test_expected_modified_prevents_lost_update(self):
 		created = self._create()

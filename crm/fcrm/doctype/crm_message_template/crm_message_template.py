@@ -32,6 +32,8 @@ def get_permission_query_conditions(user=None):
 	actor = user or frappe.session.user
 	if actor == "Administrator" or "System Manager" in frappe.get_roles(actor):
 		return ""
+	if actor == "Guest":
+		return "1=0"
 	return (
 		f"(`tabCRM Message Template`.`is_public` = 1 "
 		f"OR `tabCRM Message Template`.`owner` = {frappe.db.escape(actor)})"
@@ -45,6 +47,8 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 	actor = user or frappe.session.user
 	if actor == "Administrator" or "System Manager" in frappe.get_roles(actor):
 		return True
+	if actor == "Guest":
+		return False
 	if doc.owner == actor:
 		return True
 	# Public templates are readable by eligible role holders, but remain owned rows.

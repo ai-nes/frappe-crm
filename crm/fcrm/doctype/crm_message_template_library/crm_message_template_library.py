@@ -35,6 +35,8 @@ def get_permission_query_conditions(user=None):
 	actor = user or frappe.session.user
 	if actor == "Administrator" or "System Manager" in frappe.get_roles(actor):
 		return ""
+	if actor == "Guest":
+		return "1=0"
 	return "`tabCRM Message Template Library`.`is_active` = 1"
 
 
@@ -45,4 +47,6 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 	actor = user or frappe.session.user
 	if actor == "Administrator" or "System Manager" in frappe.get_roles(actor):
 		return True
+	if actor == "Guest":
+		return False
 	return permission_type == "read" and bool(frappe.utils.cint(doc.is_active))

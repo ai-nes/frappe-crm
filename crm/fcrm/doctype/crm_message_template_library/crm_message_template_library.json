@@ -69,6 +69,10 @@
  "permissions": [
   {
    "read": 1,
+   "role": "All"
+  },
+  {
+   "read": 1,
    "role": "Lead Sale"
   },
   {
