@@ -52,6 +52,7 @@ ROUTING_REVIEW_CODES = frozenset(
 		"MISSING_CAMPUS",
 		"TEAM_NOT_FOUND_FOR_PROVINCE",
 		"NO_ELIGIBLE_RECIPIENT",
+		"STAFF_CAPACITY_NOT_CONFIGURED",
 		"TEAM_NOT_READY",
 		"PROVINCE_MISMATCH",
 		"TEAM_PROVINCE_MISMATCH",
@@ -611,10 +612,17 @@ def _resolve_batch_recipient(batch, lead, actor_context: dict[str, Any], *, load
 	"""Resolve a Team and Sale/CTV from the Lead's canonical Province.
 
 	When the province and campus are valid but no Sale/CTV is currently
-	eligible, fall back to the covering Team's own Trưởng nhóm so the Lead
-	still gets an accountable owner instead of sitting unassigned. A missing
-	province/campus or a province with no Team at all cannot fall back to
-	anyone and is left as the specific routing failure.
+	eligible (``NO_ELIGIBLE_RECIPIENT`` — everyone full, or the team has no
+	active staff at all), fall back to the covering Team's own Trưởng nhóm so
+	the Lead still gets an accountable owner instead of sitting unassigned.
+
+	``STAFF_CAPACITY_NOT_CONFIGURED`` deliberately skips that fallback: it
+	means a Sale/CTV exists and is active but was never given a capacity
+	period, which is an admin setup gap, not a staffing gap — the Lead must
+	wait in manual review so it re-routes to the right person once capacity
+	is configured, instead of quietly landing on the Trưởng nhóm forever. A
+	missing province/campus or a province with no Team at all also cannot
+	fall back to anyone and is left as the specific routing failure.
 	"""
 	province = _canonical_province(lead.get("province"))
 	if not province:

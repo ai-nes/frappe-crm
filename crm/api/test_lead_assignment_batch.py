@@ -404,7 +404,7 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 					"staffName": "Nguyễn Minh Khôi",
 					"team": "TEAM-NORTH",
 					"function": "Sale",
-					"capacity": {"active": 2, "limit": 10, "remaining": 8},
+					"capacity": {"active": 2, "limit": 10, "remaining": 8, "configured": True},
 				}
 			],
 			"TEAM-SOUTH": [
@@ -413,7 +413,7 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 					"staffName": "Lê Thanh Hương",
 					"team": "TEAM-SOUTH",
 					"function": "CTV Sale",
-					"capacity": {"active": 0, "limit": 10, "remaining": 10},
+					"capacity": {"active": 0, "limit": 10, "remaining": 10, "configured": True},
 				}
 			],
 		}
@@ -426,7 +426,7 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 			),
 			patch.object(
 				team_routing,
-				"_active_team_recipients",
+				"_team_recipient_pool",
 				side_effect=lambda team_id, at=None: recipients[team_id],
 			),
 		):
@@ -439,6 +439,45 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertEqual(result["ownerStaff"], "STAFF-NORTH")
 		self.assertEqual(result["function"], "Sale")
 		self.assertEqual(result["policyVersion"], "province-capacity-v1")
+
+	def test_province_selection_rejects_staff_with_no_capacity_configured(self):
+		"""A Sale/CTV who has never been given a capacity period is not eligible.
+
+		This is a deliberate business rule, not a display default: missing
+		capacity used to mean "unlimited", but now means "cannot receive any
+		Lead until an admin sets it up" — and the failure message must name
+		that cause distinctly from "everyone is full".
+		"""
+		teams = [{"name": "TEAM-NORTH", "team_name": "Đội Tư vấn Khu Bắc", "campus": "CAMPUS-1"}]
+		recipients = {
+			"TEAM-NORTH": [
+				{
+					"staff": "STAFF-NORTH",
+					"staffName": "Nguyễn Minh Khôi",
+					"team": "TEAM-NORTH",
+					"function": "Sale",
+					"capacity": {"active": 0, "limit": None, "remaining": None, "configured": False},
+				}
+			],
+		}
+		with (
+			patch.object(team_routing, "_active_teams_for_province", return_value=teams),
+			patch.object(
+				team_routing,
+				"team_routing_readiness",
+				return_value={"status": "ready", "reason": "ready"},
+			),
+			patch.object(
+				team_routing,
+				"_team_recipient_pool",
+				side_effect=lambda team_id, at=None: recipients[team_id],
+			),
+		):
+			with self.assertRaises(frappe.ValidationError) as ctx:
+				team_routing.select_province_recipient("Ho Chi Minh City")
+		self.assertIn("thiết lập capacity", str(ctx.exception))
+		self.assertIn("Nguyễn Minh Khôi", str(ctx.exception))
+		self.assertEqual(ctx.exception.code, "STAFF_CAPACITY_NOT_CONFIGURED")
 
 	def test_fallback_recipient_selects_team_lead_when_no_sale_or_ctv_active(self):
 		teams = [{"name": "TEAM-NORTH", "team_name": "Đội Tư vấn Khu Bắc", "campus": "CAMPUS-1"}]
@@ -517,6 +556,35 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 			with self.assertRaises(frappe.ValidationError) as context:
 				lead_assignment_batch._resolve_batch_recipient(batch, lead, {})
 		self.assertEqual(context.exception.code, "TEAM_NOT_FOUND_FOR_PROVINCE")
+
+	def test_batch_recipient_does_not_fall_back_when_capacity_not_configured(self):
+		"""Missing capacity must land in manual_review, not silently on the Trưởng nhóm.
+
+		This is the exact regression the "chưa thiết lập capacity" fix guards
+		against: STAFF_CAPACITY_NOT_CONFIGURED is a distinct code from
+		NO_ELIGIBLE_RECIPIENT precisely so this batch resolver re-raises it
+		instead of calling the fallback — a stand-in team lead would otherwise
+		mask the fact that nobody eligible was ever configured to receive Leads.
+		"""
+		batch = self._BatchScope()
+		lead = frappe._dict(name="LEAD-1", province="Ho Chi Minh City", branch="CAMPUS-1")
+		not_configured = frappe.ValidationError(
+			"Team có Sale/CTV nhưng chưa ai được thiết lập capacity: Nguyễn Minh Khôi."
+		)
+		not_configured.code = "STAFF_CAPACITY_NOT_CONFIGURED"
+		with (
+			patch.object(lead_assignment_batch, "_canonical_province", return_value="Ho Chi Minh City"),
+			patch.object(lead_assignment_batch, "_validate_batch_scope", return_value=None),
+			patch.object(lead_assignment_batch, "select_province_recipient", side_effect=not_configured),
+			patch.object(
+				lead_assignment_batch,
+				"select_province_fallback_recipient",
+				side_effect=AssertionError("must not fall back when capacity was never configured"),
+			),
+		):
+			with self.assertRaises(frappe.ValidationError) as context:
+				lead_assignment_batch._resolve_batch_recipient(batch, lead, {})
+		self.assertEqual(context.exception.code, "STAFF_CAPACITY_NOT_CONFIGURED")
 
 	def test_reset_item_expands_bare_error_code_into_a_specific_reason(self):
 		item = MagicMock()

@@ -112,6 +112,12 @@ tasks:
     cmds:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_assignment_conversion_scenarios.execute"
 
+  seed-capacity-scenarios:
+    desc: Local only — chạy sau seed-assignment-scenarios; dựng 3 trạng thái capacity (chưa thiết lập/đủ tải/đã đầy) để test lỗi phân công
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_assignment_scenarios.execute"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_capacity_scenarios.execute"
+
   extract-school-json:
     desc: Trích các field cần cho school-domain seed từ Excel sang JSON gọn
     cmds:
