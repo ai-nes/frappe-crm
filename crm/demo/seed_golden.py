@@ -2233,6 +2233,15 @@ _AI_SERVICE_READ_DOCTYPES = (
 	"CRM Intent",
 	"CRM Student",
 	"CRM Enrollment Status",
+	# Added after auditing every crm.api.* method ai-crm's bare service
+	# credentials (not a delegated end-user session) actually call --
+	# see FrappeClient's non-delegated methods in ai-crm's frappe_client.py.
+	"CRM NBA Evaluation",
+	"CRM Recommendation",
+	"CRM Interaction Analysis Run",
+	"CRM Student Analysis Run",
+	"CRM School Analysis Run",
+	"CRM Analysis Run Stage",
 )
 
 
