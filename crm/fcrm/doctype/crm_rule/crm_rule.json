@@ -34,7 +34,10 @@
  "name": "CRM Rule",
  "permissions": [
   {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "Administrator"},
-  {"read": 1, "role": "AI Service"}
+  {"read": 1, "role": "AI Service"},
+  {"read": 1, "role": "System Manager"},
+  {"read": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "Business Admin"}
  ],
  "quick_entry": 0,
  "sort_field": "modified",
