@@ -96,6 +96,19 @@ class TestStudentProfileAdmissionSchema(FrappeTestCase):
 		self.assertEqual(account["account_holder_name"]["permlevel"], 1)
 		self.assertEqual(account["is_primary"]["fieldtype"], "Check")
 
+	def test_lead_sale_can_manage_submitted_payment_account_fields(self):
+		account = _doctype("crm_student_payment_account")
+		permissions = {(row["role"], row.get("permlevel", 0)): row for row in account.get("permissions", [])}
+
+		self.assertEqual(
+			permissions[("Lead Sale", 0)],
+			{"create": 1, "read": 1, "write": 1, "role": "Lead Sale"},
+		)
+		self.assertEqual(
+			permissions[("Lead Sale", 1)],
+			{"permlevel": 1, "read": 1, "write": 1, "role": "Lead Sale"},
+		)
+
 	def test_field_owner_catalog_has_one_owner_per_field(self):
 		catalog = unique_owner_catalog()
 		self.assertEqual(len(catalog), len(set(catalog)))

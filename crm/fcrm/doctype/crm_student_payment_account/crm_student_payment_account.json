@@ -28,8 +28,10 @@
  "permissions": [
   {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"},
   {"create": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+  {"create": 1, "read": 1, "write": 1, "role": "Lead Sale"},
   {"permlevel": 1, "read": 1, "write": 1, "role": "System Manager"},
-  {"permlevel": 1, "read": 1, "write": 1, "role": "Admissions Director"}
+  {"permlevel": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+  {"permlevel": 1, "read": 1, "write": 1, "role": "Lead Sale"}
  ],
  "row_format": "Dynamic",
  "search_fields": "student,bank_name,account_holder_name,verification_status",

@@ -5,7 +5,7 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.fcrm.role_policy import managed_docperm_rows
+from crm.fcrm.role_policy import _hardcoded_managed_docperm_rows, managed_docperm_rows
 from crm.patches.v1_0 import setup_crm_permissions
 from crm.patches.v1_0.setup_crm_permissions import get_doctype_perms
 
@@ -22,6 +22,17 @@ class TestSetupCrmPermissions(FrappeTestCase):
 			{"role": "Lead Sale", "read": 1, "write": 1, "create": 1, "delete": 1},
 		)
 		self.assertNotIn("CRM Data Steward", student_permissions)
+
+	def test_lead_sale_can_create_and_update_student_payment_account(self):
+		permissions = {
+			permission["role"]: permission
+			for permission in _hardcoded_managed_docperm_rows()["CRM Student Payment Account"]
+		}
+
+		self.assertEqual(
+			permissions["Lead Sale"],
+			{"create": 1, "read": 1, "role": "Lead Sale", "write": 1},
+		)
 
 	def test_managed_json_fixtures_match_the_canonical_policy(self):
 		for doctype, permissions in managed_docperm_rows().items():
@@ -64,7 +75,11 @@ class TestApplyManagedDocpermsIdempotentSync(FrappeTestCase):
 	def _clear_test_docperm_rows(self):
 		frappe.db.delete(
 			"DocPerm",
-			{"parenttype": "DocType", "role": self.TEST_ROLE, "parent": ["in", [self.TEST_DOCTYPE, self.OTHER_DOCTYPE]]},
+			{
+				"parenttype": "DocType",
+				"role": self.TEST_ROLE,
+				"parent": ["in", [self.TEST_DOCTYPE, self.OTHER_DOCTYPE]],
+			},
 		)
 
 	def _docperm_flags(self, doctype):
@@ -115,7 +130,9 @@ class TestApplyManagedDocpermsIdempotentSync(FrappeTestCase):
 		docperm_deletes = [call for call in delete.call_args_list if call.args[0] == "DocPerm"]
 		self.assertEqual(docperm_deletes, [])
 		docperm_inserts = [
-			call for call in get_doc.call_args_list if call.args and isinstance(call.args[0], dict) and call.args[0].get("doctype") == "DocPerm"
+			call
+			for call in get_doc.call_args_list
+			if call.args and isinstance(call.args[0], dict) and call.args[0].get("doctype") == "DocPerm"
 		]
 		self.assertEqual(docperm_inserts, [])
 		self.assertIsNotNone(self._docperm_flags(self.OTHER_DOCTYPE))
