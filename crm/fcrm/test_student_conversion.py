@@ -58,6 +58,7 @@ class TestStudentConversionCommand(unittest.TestCase):
 				"student_name": "Mapped Lead",
 				"phone": "0911111199",
 				"email": "mapped@example.com",
+				"religion": "Không",
 				"processing_status": "NEW",
 				"source": "Website",
 				"latest_score": 98,
@@ -74,6 +75,7 @@ class TestStudentConversionCommand(unittest.TestCase):
 
 		self.assertEqual(values["full_name"], "Mapped Lead")
 		self.assertEqual(values["phone"], "0911111199")
+		self.assertEqual(values["religion"], "Không")
 		self.assertEqual(values["source"], "Website")
 		self.assertEqual(values["notes"], "Snapshot note")
 		self.assertEqual(values["assigned_to"], "STAFF-1")

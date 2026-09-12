@@ -333,6 +333,11 @@ class TestLeadMappingContract(TestCase):
 
 		self.assertEqual(context.exception.code, "UNKNOWN_FIELD")
 
+	def test_parse_payload_accepts_religion(self):
+		payload = lead_mapping._parse_payload({"student_name": "An", "religion": "Phật giáo"})
+
+		self.assertEqual(payload["religion"], "Phật giáo")
+
 	def test_uploaded_import_file_reads_at_most_configured_limit(self):
 		read_sizes = []
 		stream = SimpleNamespace(
@@ -368,6 +373,7 @@ class TestLeadMappingContract(TestCase):
 				{
 					"student_name": "An",
 					"phone": "0900000000",
+					"religion": "Phật giáo",
 					"province": "Hà Nội",
 					"high_school": "THPT Chu Văn An",
 					"source": "Promoter",
@@ -379,6 +385,7 @@ class TestLeadMappingContract(TestCase):
 		self.assertIsNone(values["major"])
 		self.assertIsNone(values["aspiration"])
 		self.assertIsNone(values["admission_year"])
+		self.assertEqual(values["religion"], "Phật giáo")
 
 	def test_resolve_assignment_allows_blank_owner_only_for_quick_import(self):
 		self.assertEqual(_resolve_assignment(None, allow_unassigned=True), (None, None, None))

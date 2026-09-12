@@ -363,7 +363,8 @@ CANONICAL_PERMISSION_MATRIX = {
 		"permissions": {
 			"system_manager": "rwcdx",
 			"sales": "-",
-			"lead_sales": "-",
+			# Lead Sale manages the submitted bank details from the Student profile.
+			"lead_sales": "rwc",
 			"marketing": "-",
 			"admissions_director": "rwc",
 		},

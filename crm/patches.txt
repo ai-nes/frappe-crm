@@ -103,6 +103,7 @@ crm.patches.v1_0.enforce_frappe_crm_workspace_access
 crm.patches.v1_0.set_sales_default_crm_app
 crm.patches.v1_0.admissions_erd_baseline
 crm.patches.v1_0.backfill_admission_applications
+crm.patches.v1_0.allow_lead_sale_student_payment_account_permissions
 crm.patches.v1_0.crm_action_current_slot_unique
 crm.patches.v1_0.crm_action_revision_unique
 crm.patches.v1_0.crm_action_execution_attempt_indexes
@@ -202,3 +203,4 @@ crm.patches.v1_0.seed_crm_message_templates
 crm.patches.v1_0.migrate_message_template_library
 crm.patches.v1_0.migrate_crm_snippet_fields
 crm.patches.v1_0.restore_ai_capability_gateway_fields
+crm.patches.v1_0.add_religion_to_lead
