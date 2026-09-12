@@ -172,7 +172,13 @@ def _lock_all_versions() -> None:
 	frappe.db.sql("SELECT name FROM `tabCRM Rule Version` ORDER BY name FOR UPDATE")
 
 
-def _lock_version(name: str, permission_type: str = "read"):
+def _lock_version(name: str):
+	"""Lock and read a version for rule APIs.
+
+	Mutating control-plane endpoints enforce the rule-admin role before reaching
+	this helper and persist through the validated rule service. CRM Rule Version
+	intentionally remains read-only to direct DocType writes.
+	"""
 	name = _resolve_version_name(name)
 	rows = frappe.db.sql(
 		"SELECT name FROM `tabCRM Rule Version` WHERE name = %s FOR UPDATE",
@@ -181,7 +187,7 @@ def _lock_version(name: str, permission_type: str = "read"):
 	)
 	if not rows:
 		frappe.throw(_("CRM Rule Version {0} does not exist.").format(name), frappe.DoesNotExistError)
-	return _get_version(name, permission_type)
+	return _get_version(name)
 
 
 def _get_settings(*, create: bool, permission_type: str = "read"):
@@ -625,7 +631,7 @@ def update_rule_version(
 			expected_settings_revision,
 			change_note,
 		)
-	version = _lock_version(name, "write")
+	version = _lock_version(name)
 	_assert_expected_version(version, expected_revision)
 	_assert_draft(version)
 	try:
@@ -731,7 +737,7 @@ def create_rule_group(
 	sort_order: int | str | None = None,
 ) -> dict:
 	_require_admin()
-	version = _lock_version(version_name, "write")
+	version = _lock_version(version_name)
 	_assert_expected_version(version, expected_version_revision)
 	_assert_draft(version)
 	try:
@@ -762,7 +768,7 @@ def update_rule_group(
 	sort_order: int | str | None = None,
 ) -> dict:
 	_require_admin()
-	version = _lock_version(version_name, "write")
+	version = _lock_version(version_name)
 	_assert_expected_version(version, expected_version_revision)
 	_assert_draft(version)
 	groups = _version_groups(version)
@@ -804,7 +810,7 @@ def update_rule_group(
 @frappe.whitelist(methods=["DELETE", "POST"])
 def delete_rule_group(version_name: str, code: str, expected_version_revision: int | str) -> dict:
 	_require_admin()
-	version = _lock_version(version_name, "write")
+	version = _lock_version(version_name)
 	_assert_expected_version(version, expected_version_revision)
 	_assert_draft(version)
 	code = str(code or "").strip().lower()
@@ -898,7 +904,7 @@ def _rule_input_from_doc(doc) -> dict:
 @frappe.whitelist(methods=["POST"])
 def create_rule(version_name: str, expected_version_revision: int | str, **values) -> dict:
 	_require_admin()
-	version = _lock_version(version_name, "write")
+	version = _lock_version(version_name)
 	_assert_expected_version(version, expected_version_revision)
 	_assert_draft(version)
 	values.setdefault("enabled", True)
@@ -924,7 +930,7 @@ def create_rule(version_name: str, expected_version_revision: int | str, **value
 def update_rule(name: str, expected_version_revision: int | str, **values) -> dict:
 	_require_admin()
 	doc = frappe.get_doc("CRM Rule", name)
-	version = _lock_version(doc.rule_version, "write")
+	version = _lock_version(doc.rule_version)
 	_assert_expected_version(version, expected_version_revision)
 	_assert_draft(version)
 	current = _rule_input_from_doc(doc)
@@ -968,7 +974,7 @@ def set_rule_enabled(name: str, expected_version_revision: int | str, enabled: b
 	"""Toggle a draft rule without exposing the version lifecycle as a rule status."""
 	_require_admin()
 	doc = frappe.get_doc("CRM Rule", name)
-	version = _lock_version(doc.rule_version, "write")
+	version = _lock_version(doc.rule_version)
 	_assert_expected_version(version, expected_version_revision)
 	_assert_draft(version)
 	if str(doc.status or "draft").lower() != "draft":
@@ -993,7 +999,7 @@ def set_rule_enabled(name: str, expected_version_revision: int | str, enabled: b
 def delete_draft_rule(name: str, expected_version_revision: int | str) -> dict:
 	_require_admin()
 	doc = frappe.get_doc("CRM Rule", name)
-	version = _lock_version(doc.rule_version, "write")
+	version = _lock_version(doc.rule_version)
 	_assert_expected_version(version, expected_version_revision)
 	_assert_draft(version)
 	if doc.status != "draft":
@@ -1096,10 +1102,10 @@ def _update_rule_version_status(
 	if target == "active":
 		settings = _lock_settings()
 		_lock_all_versions()
-		version = _lock_version(name, "write")
+		version = _lock_version(name)
 		_assert_expected_settings(settings, expected_settings_revision)
 	else:
-		version = _lock_version(name, "write")
+		version = _lock_version(name)
 		settings = None
 	_assert_expected_version(version, expected_revision)
 	current = str(version.status or "draft").strip().lower()
@@ -1157,7 +1163,7 @@ def activate_rule_version(
 	_require_admin()
 	settings = _lock_settings()
 	_lock_all_versions()
-	version = _lock_version(name, "write")
+	version = _lock_version(name)
 	_assert_expected_settings(settings, expected_settings_revision)
 	_assert_expected_version(version, expected_version_revision)
 	_assert_pointer_consistent(settings)
@@ -1193,7 +1199,7 @@ def publish_rule_version(
 def archive_rule_version(name: str, expected_revision: int | str, reason: str | None = None) -> dict:
 	"""Retained for clients that have not moved to the status PUT contract."""
 	_require_admin()
-	_lock_version(name, "read")
+	_lock_version(name)
 	frappe.throw(
 		_(
 			"Manual archiving is disabled. Transition Testing to Active; the previous Active snapshot is archived automatically."
