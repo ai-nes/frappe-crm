@@ -299,10 +299,10 @@ def _normalize_scope(value: Any = "all") -> dict[str, Any]:
 def _authorize_scope(scope: dict[str, Any]) -> None:
 	"""Allow the guest shell to request only the public all-campus aggregate.
 
-	Authenticated callers must be a Director/System Manager and may not use a
-	campus outside their assigned CRM Staff scope.  This keeps ``allow_guest``
-	compatible with the public shell without allowing the query string to choose
-	an arbitrary restricted slice.
+	Authenticated callers must be an approved Director/Marketing reader/System
+	Manager and may not use a campus outside their assigned CRM Staff scope. This
+	keeps ``allow_guest`` compatible with the public shell without allowing the
+	query string to choose an arbitrary restricted slice.
 	"""
 	user = getattr(getattr(frappe, "session", None), "user", None)
 	if not user or user == "Guest":
@@ -317,7 +317,7 @@ def _authorize_scope(scope: dict[str, Any]) -> None:
 
 	from crm.api.director_school_common import require_director_access
 
-	access = require_director_access()
+	access = require_director_access(allow_marketing=True)
 	if scope.get("id") == "all" or user == "Administrator" or access.get("roleState") == "system_manager":
 		return
 
