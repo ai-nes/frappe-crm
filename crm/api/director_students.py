@@ -775,11 +775,10 @@ def _canonical_student_filters(admission_year: str | None) -> dict[str, Any]:
 def _list_scope_student_ids() -> list[str] | None:
 	"""Return explicit IDs for the session's Group/Team list-only read scope.
 
-	The normal CRM Student permission hook remains assigned-only for Sale so
-	direct CRUD/detail access cannot be widened. This endpoint uses the explicit
-	list condition only to expose rows that the session may inspect before
-	assigning; all mutation commands perform their own ownership checks. The
-	condition targets CRM Student, the canonical aggregate.
+	The condition targets CRM Student, the canonical aggregate. Sale members are
+	owner-scoped; Sale Team Leads and Group Leads receive their led Team/group
+	read scope. Mutation commands still perform their own capability and revision
+	checks before applying changes.
 	"""
 	if can_read_full_lead_board():
 		return None
@@ -2798,8 +2797,9 @@ def _require_access():
 
 	The Student detail and operational queries deliberately use Frappe's
 	permission-aware ``get_list``/``has_permission`` APIs. The list endpoint has
-	a separate, explicit Sale read projection so Sale can inspect its team and
-	pool before assigning; direct CRUD/detail scope remains assigned-only.
+	a separate, explicit Sale read projection so Team Leads and Group Leads can
+	inspect their managed Team/group before assigning; regular Sale and CTV Sale
+	remain owner-scoped.
 	"""
 	user = getattr(frappe.session, "user", None)
 	if not user or user == "Guest":

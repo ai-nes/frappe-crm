@@ -18,9 +18,15 @@ from crm.fcrm.doctype.crm_lead.crm_lead import (
 from crm.fcrm.doctype.crm_student.crm_student import (
 	get_permission_query_conditions as contact_conditions,
 )
+from crm.fcrm.doctype.crm_student_document.crm_student_document import (
+	get_permission_query_conditions as student_document_conditions,
+)
 from crm.fcrm.permissions import (
 	can_read_full_lead_board,
+	get_operational_record_permission_query_conditions,
 	get_student_list_read_condition,
+	has_student_admission_application_write_permission,
+	has_student_dashboard_read_permission,
 )
 from crm.fcrm.permissions import (
 	get_permission_query_conditions as shared_conditions,
@@ -93,15 +99,19 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			f"`tabCRM Student`.owner_staff = {frappe.db.escape(staff)}",
 		)
 
-	def test_sale_student_list_scope_includes_team_pool_without_widening_crud_scope(self):
+	def test_sale_member_scope_is_owner_only_until_team_or_group_lead(self):
 		user, staff = self._make_user_and_staff(
 			"_Test Scope Sale List", roles=["Sale"], team=self._team, function="Sale"
 		)
 
 		list_condition = get_student_list_read_condition(user=user)
 
-		self.assertIn("owning_team", list_condition)
+		self.assertNotIn("owning_team", list_condition)
 		self.assertIn(staff, list_condition)
+		self.assertEqual(
+			list_condition,
+			f"`tabCRM Student`.owner_staff = {frappe.db.escape(staff)}",
+		)
 		self.assertEqual(
 			shared_conditions("CRM Lead", user=user),
 			f"`tabCRM Lead`.owner_staff = {frappe.db.escape(staff)}",
@@ -110,7 +120,7 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		self.assertIn("`tabCRM Lead`.owner_staff", lead_list_condition)
 		self.assertNotIn("`tabCRM Student`", lead_list_condition)
 
-	def test_ctv_student_list_scope_is_assigned_only_without_widening_crud_scope(self):
+	def test_ctv_scope_is_owner_only_without_team_lead_widening(self):
 		user, staff = self._make_user_and_staff(
 			"_Test Scope CTV List", roles=["CTV Sale"], team=self._team, function="CTV Sale"
 		)
@@ -120,7 +130,7 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		self.assertNotIn("owning_team", list_condition)
 		self.assertEqual(
 			list_condition,
-			f"(`tabCRM Student`.owner_staff = {frappe.db.escape(staff)})",
+			f"`tabCRM Student`.owner_staff = {frappe.db.escape(staff)}",
 		)
 		self.assertEqual(
 			shared_conditions("CRM Student", user=user),
@@ -161,6 +171,11 @@ class TestSharedScopingPermissions(FrappeTestCase):
 				self.assertIn(frappe.db.escape(team_name), student_condition)
 				self.assertIn(frappe.db.escape(team_name), lead_condition)
 			self.assertIn(frappe.db.escape(province.name), lead_condition)
+			self.assertIn(frappe.db.escape(second_team), shared_conditions("CRM Student", user=user))
+			self.assertEqual(
+				shared_conditions("CRM Student", user=user, for_owner_scope=True),
+				f"`tabCRM Student`.owner_staff = {frappe.db.escape(staff)}",
+			)
 		finally:
 			for team_doc in team_docs:
 				team_doc.group = None
@@ -179,6 +194,45 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			condition = get_student_list_read_condition(user=user)
 			self.assertIn(frappe.db.escape(self._team), condition)
 			self.assertIn("owning_team", condition)
+			self.assertIn(frappe.db.escape(self._team), shared_conditions("CRM Student", user=user))
+			self.assertEqual(
+				shared_conditions("CRM Student", user=user, for_owner_scope=True),
+				f"`tabCRM Student`.owner_staff = {frappe.db.escape(staff)}",
+			)
+		finally:
+			team.team_lead_staff = None
+			team.save(ignore_permissions=True)
+
+	def test_sale_team_lead_write_scope_matches_read_scope_for_lead_and_student(self):
+		user, staff = self._make_user_and_staff("_Test Scope Sale Team Lead Write", roles=["Sale"])
+		team = frappe.get_doc("CRM Team", self._team)
+		team.team_lead_staff = staff
+		team.save(ignore_permissions=True)
+
+		try:
+			for doctype in ("CRM Student", "CRM Lead"):
+				condition = shared_conditions(doctype, user=user)
+				doc = frappe._dict(
+					doctype=doctype,
+					name=f"_Test {doctype} Outside Owner",
+					owner_staff="_Other Staff",
+					assigned_to="_Other Staff",
+					owning_team=self._team,
+				)
+				with (
+					patch(
+						"crm.fcrm.permissions.get_permission_query_conditions",
+						return_value=condition,
+					) as get_conditions,
+					patch("crm.fcrm.permissions.can_write_full_lead_board", return_value=False),
+					patch.object(frappe.db, "sql", return_value=[{"name": doc.name}]),
+				):
+					self.assertTrue(shared_has_permission(doc, user=user, ptype="write"))
+				get_conditions.assert_called_once_with(
+					doctype,
+					user=user,
+					for_owner_scope=False,
+				)
 		finally:
 			team.team_lead_staff = None
 			team.save(ignore_permissions=True)
@@ -194,7 +248,11 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			self.assertNotIn(frappe.db.escape(self._team), condition)
 			self.assertEqual(
 				condition,
-				f"(`tabCRM Student`.owner_staff = {frappe.db.escape(staff)})",
+				f"`tabCRM Student`.owner_staff = {frappe.db.escape(staff)}",
+			)
+			self.assertEqual(
+				shared_conditions("CRM Student", user=user),
+				f"`tabCRM Student`.owner_staff = {frappe.db.escape(staff)}",
 			)
 		finally:
 			team.team_lead_staff = None
@@ -248,8 +306,8 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			frappe.delete_doc("CRM Team Group", group.name, force=True)
 			frappe.delete_doc("CRM Province", province.name, force=True)
 
-	def test_lead_board_full_access_is_separate_from_group_team_list_scope(self):
-		"""Full-board compatibility is retained for detail/write checks only."""
+	def test_lead_sale_has_full_case_read_without_widening_student_mutations(self):
+		"""Lead Sale can read every case while Student mutations stay scoped."""
 		lead_user, lead_staff = self._make_user_and_staff(
 			"_Test Scope Lead Board", roles=["Lead Sale"], team=self._team, function="Lead Sale"
 		)
@@ -258,11 +316,63 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		self.assertTrue(can_read_full_lead_board(user=lead_user))
 		self.assertFalse(can_read_full_lead_board(user=sale_user))
 		self.assertFalse(can_read_full_lead_board(user="Administrator"))
+		student = frappe._dict(
+			doctype="CRM Student",
+			name="_Test Student Outside Lead Sale Team",
+			owner_staff="_Other Staff",
+			assigned_to="_Other Staff",
+			owning_team="_Other Team",
+		)
+		lead = frappe._dict(
+			doctype="CRM Lead",
+			name="_Test Lead Outside Lead Sale Team",
+			owner_staff="_Other Staff",
+			assigned_to="_Other Staff",
+			owning_team="_Other Team",
+		)
+		self.assertTrue(shared_has_permission(student, user=lead_user, ptype="read"))
+		self.assertTrue(shared_has_permission(lead, user=lead_user, ptype="read"))
+		self.assertTrue(has_student_dashboard_read_permission(student, user=lead_user))
+		self.assertFalse(shared_has_permission(student, user=lead_user, ptype="write"))
 		self.assertIn(lead_staff, shared_conditions("CRM Lead", user=lead_user))
 		self.assertEqual(
 			shared_conditions("CRM Lead", user=sale_user),
 			f"`tabCRM Lead`.owner_staff = {frappe.db.escape(sale_staff)}",
 		)
+
+	def test_lead_sale_can_manage_applications_without_student_field_write(self):
+		user, _staff = self._make_user_and_staff(
+			"_Test Scope Lead Application", roles=["Lead Sale"], function="Lead Sale"
+		)
+		student = frappe._dict(
+			doctype="CRM Student",
+			name="_Test Student Outside Lead Sale Team",
+			owner_staff="_Other Staff",
+			assigned_to="_Other Staff",
+			owning_team="_Other Team",
+		)
+
+		with patch("crm.fcrm.permissions.frappe.has_permission", return_value=False) as has_frappe_permission:
+			self.assertTrue(has_student_admission_application_write_permission(student, user=user))
+
+		has_frappe_permission.assert_not_called()
+
+	def test_lead_sale_full_case_read_reaches_admission_detail_records(self):
+		user, _staff = self._make_user_and_staff(
+			"_Test Scope Lead Admission Detail", roles=["Lead Sale"], function="Lead Sale"
+		)
+
+		self.assertIsNone(
+			get_operational_record_permission_query_conditions(
+				user=user, doctype="CRM Admission Application"
+			)
+		)
+		self.assertIsNone(
+			get_operational_record_permission_query_conditions(
+				user=user, doctype="CRM Student Admission Profile"
+			)
+		)
+		self.assertIsNone(student_document_conditions(user=user))
 
 	def test_lead_sale_can_update_any_lead_on_the_full_intake_board(self):
 		user, staff = self._make_user_and_staff(

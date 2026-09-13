@@ -606,6 +606,20 @@ class TestDirectorStudents(FrappeTestCase):
 
 		self.assertEqual(response, {"student": {"name": "An"}})
 
+	def test_detail_endpoint_allows_lead_sale_full_case_read(self):
+		doc = frappe._dict(name="ENR-1", owner_staff="STAFF-2")
+		doc.has_permission = lambda permission_type: False
+		with (
+			patch.object(director_students, "_require_access", return_value=None),
+			patch("crm.fcrm.permissions.can_read_full_lead_board", return_value=True),
+			patch.object(director_students.frappe, "get_doc", return_value=doc),
+			patch.object(director_students, "_hydrate_rows", return_value=[{"id": "ENR-1"}]),
+			patch.object(director_students, "_build_student_360", return_value={"student": {"name": "An"}}),
+		):
+			response = director_students.get_director_student("ENR-1")
+
+		self.assertEqual(response, {"student": {"name": "An"}})
+
 	def test_detail_endpoint_hides_student_without_permission(self):
 		doc = frappe._dict(name="ENR-1", owner_staff="STAFF-2")
 		doc.has_permission = lambda permission_type: False

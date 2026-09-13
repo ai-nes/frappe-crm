@@ -60,7 +60,10 @@ class CRMStudentDocument(Document):
 
 
 def get_permission_query_conditions(user=None):
-	from crm.fcrm.permissions import get_permission_query_conditions
+	from crm.fcrm.permissions import can_read_full_lead_board, get_permission_query_conditions
+
+	if can_read_full_lead_board(user):
+		return None
 
 	condition = get_permission_query_conditions("CRM Student", user=user)
 	if condition is None:
