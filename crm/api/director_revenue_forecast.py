@@ -58,7 +58,7 @@ def get_director_revenue_forecast(
 
 
 def require_revenue_forecast_access() -> dict[str, Any]:
-	"""Extend the canonical Director permission to the dedicated finance role."""
+	"""Allow the canonical Director, Finance Director, or Marketing reader."""
 	user = getattr(frappe.session, "user", None)
 	if not user or user == "Guest":
 		raise_api_error(
@@ -68,7 +68,7 @@ def require_revenue_forecast_access() -> dict[str, Any]:
 		raise_api_error("UNAUTHENTICATED", "Tài khoản không hoạt động.", frappe.AuthenticationError, 401)
 	if user == "Administrator" or "Finance Director" in frappe.get_roles(user):
 		return {"user": user, "profile": "finance_director", "roleState": "canonical_profile"}
-	return require_director_access()
+	return require_director_access(allow_marketing=True)
 
 
 def _parse_timezone(value: Any) -> ZoneInfo:

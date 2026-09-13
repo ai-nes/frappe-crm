@@ -1,4 +1,6 @@
 from datetime import date
+from types import SimpleNamespace
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from frappe.tests.utils import FrappeTestCase
@@ -52,3 +54,22 @@ class TestDirectorRevenueForecast(FrappeTestCase):
 			director_revenue_forecast._resolve_range(
 				"2026", "admission-year", "2026-02-01", "2026-01-01", ZoneInfo("Asia/Ho_Chi_Minh")
 			)
+
+	def test_marketing_profile_uses_opt_in_director_access(self):
+		with (
+			patch.object(
+				director_revenue_forecast.frappe,
+				"session",
+				SimpleNamespace(user="marketing@example.com"),
+			),
+			patch.object(director_revenue_forecast.frappe.db, "get_value", return_value=1),
+			patch.object(
+				director_revenue_forecast,
+				"require_director_access",
+				return_value={"user": "marketing@example.com", "profile": "marketing"},
+			) as require_access,
+		):
+			access = director_revenue_forecast.require_revenue_forecast_access()
+
+		require_access.assert_called_once_with(allow_marketing=True)
+		self.assertEqual(access["profile"], "marketing")

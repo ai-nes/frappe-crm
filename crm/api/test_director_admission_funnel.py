@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import frappe
@@ -168,3 +169,19 @@ class TestDirectorAdmissionFunnel(FrappeTestCase):
 			or director_admission_funnel.get_director_admission_funnel
 			in getattr(frappe, "guest_methods", set())
 		)
+
+	def test_marketing_can_request_all_campus_scope(self):
+		with (
+			patch.object(
+				director_admission_funnel.frappe,
+				"session",
+				SimpleNamespace(user="marketing@example.com"),
+			),
+			patch(
+				"crm.api.director_school_common.require_director_access",
+				return_value={"user": "marketing@example.com", "profile": "marketing"},
+			) as require_access,
+		):
+			director_admission_funnel._authorize_scope({"id": "all", "branch": None, "territory": None})
+
+		require_access.assert_called_once_with(allow_marketing=True)

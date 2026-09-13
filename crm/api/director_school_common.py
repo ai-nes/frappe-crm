@@ -54,12 +54,13 @@ def raise_api_error(code: str, message: str, exception: type[Exception], status:
 	frappe.throw(_(message), exception)
 
 
-def require_director_access(*, allow_sales: bool = False) -> dict[str, Any]:
+def require_director_access(*, allow_sales: bool = False, allow_marketing: bool = False) -> dict[str, Any]:
 	"""Authorize one active, canonical Director endpoint identity.
 
 	When ``allow_sales`` is enabled, the shared read-only NBA queue may also be
 	used by the canonical Sales profiles. The flag is intentionally opt-in so
-	Director-only APIs and mutation commands keep their existing boundary.
+	Director-only APIs and mutation commands keep their existing boundary. The
+	``allow_marketing`` flag follows the same rule for aggregate read-only APIs.
 	"""
 	user = getattr(frappe.session, "user", None)
 	if not user or user == "Guest":
@@ -81,12 +82,13 @@ def require_director_access(*, allow_sales: bool = False) -> dict[str, Any]:
 		"ctv_sale",
 		"lead_sales",
 	}
+	approved_marketing_reader = allow_marketing and classification == "canonical_profile" and profile == "marketing"
 	allowed_system_roles = FRAMEWORK_ROLE_NAMES | frozenset(DESK_MANAGEMENT_ROLE_NAMES) | {"System Manager"}
 	approved_system_manager = classification == "system_manager" and not (roles - allowed_system_roles)
 	forbidden_business_roles = CANONICAL_PROFILE_ROLES | LEGACY_OVERLAY_ROLES | LEGACY_UNMAPPED_ROLES | ROLE_BACKFILL_SOURCES
 	if classification == "system_manager" and roles & (forbidden_business_roles - {"System Manager"}):
 		approved_system_manager = False
-	if not (approved_director or approved_sales_reader or approved_system_manager):
+	if not (approved_director or approved_sales_reader or approved_marketing_reader or approved_system_manager):
 		message = (
 			"Bạn không có quyền truy cập hàng đợi NBA."
 			if allow_sales

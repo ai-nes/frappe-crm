@@ -10,6 +10,7 @@ from frappe import _
 from crm.fcrm.admissions_application_contract import application_projection
 from crm.fcrm.admissions_canonical_contracts import canonical_application_attempt_key
 from crm.fcrm.admissions_migration import provenance
+from crm.fcrm.permissions import has_student_admission_application_write_permission
 from crm.fcrm.student_reference import canonical_student
 
 
@@ -325,7 +326,7 @@ def create_application(*, student: str, values: dict[str, Any], expected_revisio
 		frappe.throw(_("Application values must be an object."), frappe.ValidationError)
 	student = canonical_student(student) or str(student or "").strip()
 	student_doc = frappe.get_doc("CRM Student", student)
-	if not student_doc.has_permission("write"):
+	if not has_student_admission_application_write_permission(student_doc):
 		frappe.throw(
 			_("You are not permitted to create an application for this Student."), frappe.PermissionError
 		)
@@ -416,7 +417,7 @@ def update_application_preference(*, application: str, preference: str) -> dict[
 	application_doc = frappe.get_doc("CRM Admission Application", str(application or "").strip())
 	student = canonical_student(application_doc.student) or application_doc.student
 	student_doc = frappe.get_doc("CRM Student", student)
-	if not student_doc.has_permission("write"):
+	if not has_student_admission_application_write_permission(student_doc):
 		frappe.throw(
 			_("You are not permitted to update this Student's admission application."),
 			frappe.PermissionError,
@@ -462,7 +463,7 @@ def update_application(*, application: str, values: dict[str, Any]) -> dict[str,
 	application_doc = frappe.get_doc("CRM Admission Application", str(application or "").strip())
 	student = canonical_student(application_doc.student) or application_doc.student
 	student_doc = frappe.get_doc("CRM Student", student)
-	if not student_doc.has_permission("write"):
+	if not has_student_admission_application_write_permission(student_doc):
 		frappe.throw(
 			_("You are not permitted to update this Student's admission application."),
 			frappe.PermissionError,

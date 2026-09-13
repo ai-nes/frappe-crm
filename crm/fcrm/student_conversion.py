@@ -163,8 +163,8 @@ def _load_student(student_name: str, actor: str, *, internal_service: bool = Fal
 	if internal_service:
 		return student
 	# Lead Sale operates the full intake board and is explicitly allowed to
-	# convert any assigned Lead. Sale/CTV Sale must still pass the owner scope
-	# below, preserving the assigned-only rule for those profiles.
+	# convert any assigned Lead. Sale/CTV Sale must still pass the current Lead
+	# read/write scope below.
 	if can_convert_all_leads(actor):
 		return student
 	if not has_student_permission(student, user=actor, permission_type="read"):
