@@ -673,6 +673,8 @@ def _get_link_options(
 		title_field = "name"
 
 	fields = ["name"] if title_field == "name" else ["name", title_field]
+	if target_doctype == "CRM Major" and "major_group" not in fields:
+		fields.append("major_group")
 	or_filters = None
 	if search:
 		or_filters = [["name", "like", f"%{search}%"]]
@@ -687,13 +689,32 @@ def _get_link_options(
 		order_by=f"{title_field} asc, name asc",
 		limit_page_length=limit,
 	)
-	return [
-		{
+	group_labels: dict[str, str] = {}
+	if target_doctype == "CRM Major":
+		group_names = sorted({row.get("major_group") for row in rows if row.get("major_group")})
+		if group_names:
+			group_labels = {
+				row.get("name"): row.get("display_name") or row.get("name")
+				for row in frappe.get_list(
+					"CRM Major Group",
+					filters={"name": ["in", group_names]},
+					fields=["name", "display_name"],
+					limit_page_length=0,
+				)
+			}
+
+	options = []
+	for row in rows:
+		option = {
 			"value": row.get("name"),
 			"label": row.get(title_field) or row.get("name"),
 		}
-		for row in rows
-	]
+		if target_doctype == "CRM Major":
+			group_name = row.get("major_group")
+			option["groupName"] = group_name
+			option["groupLabel"] = group_labels.get(group_name) if group_name else None
+		options.append(option)
+	return options
 
 
 def _get_school_area_options(high_school: str, search: str | None, limit: int) -> list[dict]:
