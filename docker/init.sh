@@ -64,6 +64,13 @@ bench set-redis-socketio-host redis://redis:6379
 sed -i '/redis/d' ./Procfile || true
 sed -i '/watch/d' ./Procfile || true
 
+# Werkzeug's debug auto-reloader stat()s every watched Python file (1000+ in
+# this app) roughly once a second. Each stat() crosses the virtiofs boundary
+# on macOS, which keeps the Docker VM busy around the clock. The documented
+# dev workflow already requires a manual `task restart` after backend
+# changes, so the reloader adds cost with no benefit here.
+grep -q -- '--noreload' ./Procfile || sed -i 's/^web: bench serve\(.*\)$/web: bench serve\1 --noreload/' ./Procfile
+
 # IMPORTANT: Use local app source mounted at /workspace (repo root), not remote get-app
 if [ ! -e "apps/crm" ]; then
     bench get-app /workspace --soft-link
