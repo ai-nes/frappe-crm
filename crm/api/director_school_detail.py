@@ -311,7 +311,7 @@ def _build_detail(school, sources, failed, capped, admission_year):
 	school_code = str(school.get("school_code") or "")
 	canonical_school_code = school_code.zfill(3) if school_code.isdigit() else None
 	external_id = school.get("canonical_id")
-	if province.get("province_code") and ward.get("ward_code") and canonical_school_code:
+	if not external_id and province.get("province_code") and ward.get("ward_code") and canonical_school_code:
 		external_id = f"{province['province_code']}-{ward['ward_code']}-{canonical_school_code}"
 
 	contacts = []
