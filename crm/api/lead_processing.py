@@ -22,6 +22,9 @@ from crm.fcrm.lead_processing import (
 	preview_lead as _preview_lead,
 )
 from crm.fcrm.lead_processing import (
+	preview_new_leads as _preview_new_leads,
+)
+from crm.fcrm.lead_processing import (
 	process_lead as _process_lead,
 )
 from crm.fcrm.lead_processing import (
@@ -51,6 +54,15 @@ def _require_assignment_access():
 	return _actor_context(required_capabilities={"student.routing.operate"})
 
 
+def _require_processing_access():
+	"""Require an authenticated operator who can update CRM Lead records."""
+	actor = getattr(frappe.session, "user", None)
+	if not actor or actor in {"Guest", "None"}:
+		frappe.throw("Đăng nhập là bắt buộc.", frappe.AuthenticationError)
+	if not frappe.has_permission("CRM Lead", "write"):
+		frappe.throw("Bạn không có quyền xử lý Lead.", frappe.PermissionError)
+
+
 @frappe.whitelist(methods=["POST"])
 def process_lead(lead: str, resolution: str | None = None, reason: str | None = None) -> dict:
 	return _run(_process_lead, lead=resolve_lead_name(lead), resolution=resolution, reason=reason)
@@ -58,6 +70,7 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 
 @frappe.whitelist(methods=["POST"])
 def process_new_leads(admission_year: str | int | None = None, limit: str | int | None = None) -> dict:
+	_require_processing_access()
 	return _run(_process_new_leads, admission_year=admission_year, limit=limit)
 
 
@@ -74,6 +87,12 @@ def reopen_lead(lead: str, reason: str | None = None) -> dict:
 @frappe.whitelist(methods=["GET", "POST"])
 def preview_lead(lead: str) -> dict:
 	return _run(_preview_lead, lead=resolve_lead_name(lead))
+
+
+@frappe.whitelist(methods=["GET", "POST"])
+def preview_new_leads(admission_year: str | int | None = None, limit: str | int | None = None) -> dict:
+	_require_processing_access()
+	return _run(_preview_new_leads, admission_year=admission_year, limit=limit)
 
 
 @frappe.whitelist(methods=["POST"])
