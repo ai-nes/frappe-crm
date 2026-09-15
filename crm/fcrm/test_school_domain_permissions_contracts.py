@@ -151,6 +151,22 @@ def test_ctv_sale_can_read_school_directory_without_relationship_rows(monkeypatc
 	assert permissions.person_portfolio_condition("ctv@example.com") == "1=0"
 
 
+def test_guest_can_read_school_directory_without_relationship_rows(monkeypatch):
+	fake_frappe = _Frappe()
+	fake_frappe.roles = ["Guest"]
+	monkeypatch.setattr(permissions, "frappe", fake_frappe)
+
+	assert permissions.school_portfolio_condition("CRM High School", "Guest") is None
+	assert (
+		permissions.school_portfolio_condition(
+			"CRM High School Annual Snapshot", "Guest", school_field="high_school"
+		)
+		is None
+	)
+	assert permissions.portfolio_condition("CRM School Activity", "Guest") == "1=0"
+	assert permissions.person_portfolio_condition("Guest") == "1=0"
+
+
 def test_promoter_school_and_snapshot_scope_follow_stakeholder_portfolio(monkeypatch):
 	fake_frappe = _Frappe()
 	monkeypatch.setattr(permissions, "frappe", fake_frappe)

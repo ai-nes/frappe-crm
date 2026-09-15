@@ -205,3 +205,4 @@ crm.patches.v1_0.migrate_crm_snippet_fields
 crm.patches.v1_0.restore_ai_capability_gateway_fields
 crm.patches.v1_0.add_religion_to_lead
 crm.patches.v1_0.import_major_catalog_from_csv
+crm.patches.v1_0.allow_guest_school_detail_reference_reads
