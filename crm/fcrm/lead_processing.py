@@ -335,9 +335,8 @@ def _classify_resolution(lead, identifiers: dict[str, str]) -> tuple[str, str | 
 	return classification["resolution"], classification.get("target_student")
 
 
-def preview_lead(lead: str) -> dict[str, Any]:
-	"""Return the processing decision without mutating the Lead."""
-	lead_doc = _load_lead(lead)
+def _preview_lead_document(lead_doc) -> dict[str, Any]:
+	"""Return the processing decision for an already loaded Lead."""
 	if _get_status(lead_doc) != "NEW":
 		return {
 			"status": _get_status(lead_doc),
@@ -368,6 +367,24 @@ def preview_lead(lead: str) -> dict[str, Any]:
 		"reason": classification.get("reason"),
 		"validation": _processing_validation(lead_doc),
 	}
+
+
+def preview_lead_values(values: dict[str, Any], *, name: str) -> dict[str, Any]:
+	"""Classify a normalized Lead payload without inserting a document."""
+	lead_doc = frappe._dict(
+		{
+			"name": name,
+			"processing_status": "NEW",
+			"resolution": "PENDING",
+			**values,
+		}
+	)
+	return _preview_lead_document(lead_doc)
+
+
+def preview_lead(lead: str) -> dict[str, Any]:
+	"""Return the processing decision without mutating the Lead."""
+	return _preview_lead_document(_load_lead(lead))
 
 
 def _load_lead(lead: str, *, internal_service: bool = False):
@@ -728,6 +745,95 @@ def process_new_leads(admission_year: Any = None, limit: Any = None) -> dict[str
 		)
 
 	frappe.db.commit()
+	return {
+		"summary": summary,
+		"items": items,
+		"admissionYear": filters.get("admission_year"),
+	}
+
+
+def preview_new_leads(admission_year: Any = None, limit: Any = None) -> dict[str, Any]:
+	"""Preview every NEW Lead without persisting processing or routing changes."""
+	filters = _pending_lead_filters(admission_year)
+	rows = frappe.get_all(
+		"CRM Lead",
+		filters=filters,
+		fields=["name"],
+		order_by="creation asc, name asc",
+		limit_page_length=_scan_limit(limit),
+	)
+
+	summary = {
+		"scanned": 0,
+		"readyToAssign": 0,
+		"matchedStudent": 0,
+		"duplicates": 0,
+		"invalid": 0,
+		"needsReview": 0,
+	}
+	items: list[dict[str, Any]] = []
+	for row in rows:
+		name = row.get("name")
+		if not name:
+			continue
+		summary["scanned"] += 1
+		try:
+			lead_doc = _load_lead(name)
+			result = _preview_lead_document(lead_doc)
+			outcome = str(
+				result.get("processing_outcome") or result.get("resolution") or ""
+			).strip().upper()
+			if outcome == "CREATED":
+				summary["readyToAssign"] += 1
+			elif outcome == "MATCHED":
+				summary["matchedStudent"] += 1
+			elif outcome == "DUPLICATE":
+				summary["duplicates"] += 1
+			elif outcome == "INVALID":
+				summary["invalid"] += 1
+			else:
+				summary["needsReview"] += 1
+			items.append(
+				{
+					"lead": lead_doc.name,
+					"leadCode": lead_doc.get("lead_code"),
+					"studentName": lead_doc.get("student_name"),
+					"phone": lead_doc.get("phone"),
+					"province": lead_doc.get("province"),
+					"highSchool": lead_doc.get("high_school"),
+					"status": result.get("status"),
+					"resolution": result.get("resolution"),
+					"processingOutcome": result.get("processing_outcome"),
+					"targetStudent": (
+						result.get("target_student") or result.get("targetStudent")
+					),
+					"duplicateOf": (
+						result.get("duplicate_of") or result.get("duplicateOf")
+					),
+					"duplicateType": (
+						result.get("duplicate_type") or result.get("duplicateType")
+					),
+					"reason": result.get("reason"),
+					"errorCode": result.get("error_code") or result.get("errorCode"),
+				}
+			)
+		except Exception as exc:
+			code = getattr(exc, "code", None) or "PROCESSING_PREVIEW_FAILED"
+			summary["needsReview"] += 1
+			items.append(
+				{
+					"lead": name,
+					"status": None,
+					"resolution": None,
+					"processingOutcome": None,
+					"targetStudent": None,
+					"duplicateOf": None,
+					"duplicateType": None,
+					"reason": str(exc),
+					"errorCode": code,
+				}
+			)
+
 	return {
 		"summary": summary,
 		"items": items,

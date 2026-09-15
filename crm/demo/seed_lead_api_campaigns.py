@@ -14,6 +14,7 @@ LEAD_API_CAMPAIGNS: tuple[dict[str, Any], ...] = (
 		"utm_source": "website",
 		"utm_medium": "organic",
 		"utm_campaign": "lead-api-website-2026",
+		"channel_type": "WEBSITE_DAIHOC_MARCOM",
 	},
 	{
 		"code": "CAM-2026-00002",
@@ -21,6 +22,7 @@ LEAD_API_CAMPAIGNS: tuple[dict[str, Any], ...] = (
 		"utm_source": "facebook",
 		"utm_medium": "paid_social",
 		"utm_campaign": "lead-api-facebook-2026",
+		"channel_type": "FACEBOOK_LANDING_PAGE",
 	},
 	{
 		"code": "CAM-2026-00003",
@@ -28,6 +30,7 @@ LEAD_API_CAMPAIGNS: tuple[dict[str, Any], ...] = (
 		"utm_source": "open_day",
 		"utm_medium": "offline",
 		"utm_campaign": "lead-api-open-day-2026",
+		"channel_type": "OPEN_DAY",
 	},
 	{
 		"code": "CAM-2026-00004",
@@ -35,6 +38,7 @@ LEAD_API_CAMPAIGNS: tuple[dict[str, Any], ...] = (
 		"utm_source": "scholarship",
 		"utm_medium": "referral",
 		"utm_campaign": "lead-api-scholarship-2026",
+		"channel_type": "REFERRAL",
 	},
 )
 
@@ -63,11 +67,19 @@ def _ensure_campaign(spec: dict[str, Any], campus: str) -> tuple[str, bool, str,
 
 	existing = frappe.db.get_value("CRM Campaign", {"stable_code": code}, ["name", "title"], as_dict=True)
 	if existing:
+		if not frappe.db.get_value("CRM Campaign", existing.name, "channel_type"):
+			frappe.db.set_value(
+				"CRM Campaign", existing.name, "channel_type", spec["channel_type"], update_modified=False
+			)
 		existing_code = frappe.db.get_value("CRM Campaign", existing.name, "stable_code")
 		return existing.name, False, existing.title, existing_code
 
 	existing_name = frappe.db.get_value("CRM Campaign", {"title": title}, "name")
 	if existing_name:
+		if not frappe.db.get_value("CRM Campaign", existing_name, "channel_type"):
+			frappe.db.set_value(
+				"CRM Campaign", existing_name, "channel_type", spec["channel_type"], update_modified=False
+			)
 		existing_code = frappe.db.get_value("CRM Campaign", existing_name, "stable_code")
 		return existing_name, False, title, existing_code
 
@@ -82,6 +94,7 @@ def _ensure_campaign(spec: dict[str, Any], campus: str) -> tuple[str, bool, str,
 			"utm_source": spec["utm_source"],
 			"utm_medium": spec["utm_medium"],
 			"utm_campaign": spec["utm_campaign"],
+			"channel_type": spec["channel_type"],
 			"notes": "Seeded for the public create_public_lead API.",
 		}
 	).insert(ignore_permissions=True)
