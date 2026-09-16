@@ -101,6 +101,30 @@ class TestDirectorSchoolCommon(FrappeTestCase):
 
 		self.assertEqual(resolved["ward"], "ward-1")
 
+	def test_resolver_accepts_geometry_code_for_canonical_province(self):
+		province = [{"name": "Đồng Nai"}]
+		ward = [{"name": "26041 - Đồng Nai", "ward_code": "26041"}]
+		school = [{
+			"name": "school-1", "school_name": "Trung tâm GDNN-GDTX tỉnh Đồng Nai",
+			"school_code": "100", "province": "Đồng Nai", "ward": "26041 - Đồng Nai",
+		}]
+
+		def get_list(doctype, filters, **kwargs):
+			if doctype == "CRM Province":
+				self.assertEqual(filters, {"province_code": "VN_DONG_NAI"})
+				return province
+			if doctype == "CRM Ward":
+				return ward
+			if doctype == "CRM High School":
+				return school
+			return []
+
+		with patch.object(common.frappe, "get_list", side_effect=get_list):
+			resolved = common.resolve_school_id("75-26041-100")
+
+		self.assertEqual(resolved["name"], "school-1")
+		self.assertEqual(resolved["canonical_id"], "75-26041-100")
+
 	def test_legacy_collision_fails_closed_without_name_fallback(self):
 		province = [{"name": "province-1"}]
 		collision = [{"name": "school-1"}, {"name": "school-2"}]

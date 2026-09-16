@@ -12,6 +12,7 @@ from pymysql import MySQLError
 
 from crm.api.director_school_common import (
 	METRICS,
+	PROVINCE_GEOMETRY_CODE_BY_SOURCE_CODE,
 	REGIONS,
 	parse_boolean,
 	parse_enum,
@@ -36,15 +37,6 @@ PRIORITY_PROVINCE_CODES = (
 	"VN_TAY_NINH",
 	"VN_DONG_THAP",
 )
-PROVINCE_GEOMETRY_CODE_BY_SOURCE_CODE = {
-	"VN_KHANH_HOA": "56",
-	"VN_DAK_LAK": "66",
-	"VN_LAM_DONG": "68",
-	"VN_DONG_NAI": "75",
-	"VN_HO_CHI_MINH": "79",
-	"VN_TAY_NINH": "80",
-	"VN_DONG_THAP": "82",
-}
 PROVINCE_REGION_BY_SOURCE_CODE = {
 	"VN_KHANH_HOA": "central",
 	"VN_DAK_LAK": "highlands",

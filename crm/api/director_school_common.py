@@ -22,6 +22,19 @@ from crm.fcrm.role_policy import (
 AVAILABILITY_STATES = frozenset({"available", "partial", "unavailable"})
 REGIONS = frozenset({"all", "north", "central", "highlands", "south", "mekong"})
 METRICS = frozenset({"opportunity", "leads", "conversion", "competition", "revenue"})
+PROVINCE_GEOMETRY_CODE_BY_SOURCE_CODE = {
+	"VN_KHANH_HOA": "56",
+	"VN_DAK_LAK": "66",
+	"VN_LAM_DONG": "68",
+	"VN_DONG_NAI": "75",
+	"VN_HO_CHI_MINH": "79",
+	"VN_TAY_NINH": "80",
+	"VN_DONG_THAP": "82",
+}
+PROVINCE_SOURCE_CODE_BY_GEOMETRY_CODE = {
+	geometry_code: source_code
+	for source_code, geometry_code in PROVINCE_GEOMETRY_CODE_BY_SOURCE_CODE.items()
+}
 _EXTERNAL_SCHOOL_ID = re.compile(r"^(?P<province>\d{2})-(?P<middle>\d+)-(?P<school>\d{3})$")
 _SCHOOL_FIELDS = [
 	"name",
@@ -178,11 +191,31 @@ def _unique_visible(doctype: str, *, filters: dict[str, Any], fields: list[str])
 	return dict(rows[0])
 
 
+def _resolve_province(province_code: str) -> dict[str, Any]:
+	candidates = [province_code]
+	canonical_code = PROVINCE_SOURCE_CODE_BY_GEOMETRY_CODE.get(province_code)
+	if canonical_code:
+		candidates.insert(0, canonical_code)
+
+	for candidate in candidates:
+		rows = frappe.get_list(
+			"CRM Province",
+			filters={"province_code": candidate},
+			fields=["name"],
+			order_by="name asc",
+			limit_page_length=2,
+		)
+		if len(rows) > 1:
+			raise_api_error("SCHOOL_NOT_FOUND", "Không tìm thấy trường.", frappe.DoesNotExistError, 404)
+		if rows:
+			return dict(rows[0])
+
+	raise_api_error("SCHOOL_NOT_FOUND", "Không tìm thấy trường.", frappe.DoesNotExistError, 404)
+
+
 def resolve_school_id(school_id: Any) -> dict[str, Any]:
 	province_code, middle_code, school_code, mode = parse_school_id(school_id)
-	province = _unique_visible(
-		"CRM Province", filters={"province_code": province_code}, fields=["name"]
-	)
+	province = _resolve_province(province_code)
 	school_code_values = [school_code, school_code.lstrip("0") or "0"]
 	filters = {"province": province["name"], "school_code": ["in", list(dict.fromkeys(school_code_values))]}
 	if mode == "canonical":

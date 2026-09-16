@@ -5,7 +5,11 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.fcrm.role_policy import _hardcoded_managed_docperm_rows, managed_docperm_rows
+from crm.fcrm.role_policy import (
+	PUBLIC_GUEST_READ_DOCTYPES,
+	_hardcoded_managed_docperm_rows,
+	managed_docperm_rows,
+)
 from crm.patches.v1_0 import setup_crm_permissions
 from crm.patches.v1_0.setup_crm_permissions import get_doctype_perms
 
@@ -33,6 +37,14 @@ class TestSetupCrmPermissions(FrappeTestCase):
 			permissions["Lead Sale"],
 			{"create": 1, "read": 1, "role": "Lead Sale", "write": 1},
 		)
+
+	def test_guest_reads_only_public_school_detail_reference_doctypes(self):
+		for doctype in PUBLIC_GUEST_READ_DOCTYPES:
+			with self.subTest(doctype=doctype):
+				permissions = {row["role"]: row for row in get_doctype_perms()[doctype]}
+				self.assertEqual(permissions["Guest"], {"role": "Guest", "read": 1})
+
+		self.assertNotIn("Guest", {row["role"] for row in get_doctype_perms()["CRM Student"]})
 
 	def test_managed_json_fixtures_match_the_canonical_policy(self):
 		for doctype, permissions in managed_docperm_rows().items():

@@ -26,7 +26,7 @@ MANAGED_DOCPERM_ROLE_NAMES = tuple(
 		| LEGACY_OVERLAY_ROLES
 		| ROLE_BACKFILL_SOURCES
 		| LEGACY_UNMAPPED_ROLES
-		| {"Administrator", "System Manager"}
+		| {"Administrator", "Guest", "System Manager"}
 	)
 )
 

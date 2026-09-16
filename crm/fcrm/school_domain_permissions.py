@@ -13,9 +13,9 @@ PORTFOLIO_ROLES = frozenset({"Promoter"})
 FULL_ACCESS_ROLES = frozenset({"Administrator", "System Manager", "Admissions Director", "Lead Sale"})
 READ_ALL_ROLES = frozenset({"Marketing", "Sale"})
 # The school directory and its annual snapshots are shared read-only reference
-# data for CTV Sale. Keep this separate from READ_ALL_ROLES so CTV Sale does
-# not inherit access to every school relationship record.
-SCHOOL_DIRECTORY_READ_ALL_ROLES = frozenset({"CTV Sale"})
+# data for CTV Sale and the public school-detail endpoint. Keep this separate
+# from READ_ALL_ROLES so neither role inherits access to school relationships.
+SCHOOL_DIRECTORY_READ_ALL_ROLES = frozenset({"CTV Sale", "Guest"})
 
 
 def _user_roles(user: str | None = None) -> set[str]:
