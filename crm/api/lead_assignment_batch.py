@@ -13,7 +13,7 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import getdate, now_datetime, today
+from frappe.utils import add_to_date, getdate, now_datetime, today
 
 from crm.api import lead_mapping
 from crm.api.assignment_workspace import _actor_context
@@ -43,6 +43,8 @@ from crm.fcrm.team_routing import (
 
 BATCH_DOCTYPE = "CRM Lead Assignment Batch"
 MAX_BATCH_SIZE = 1000
+ASSIGNMENT_RUN_LOCK_KEY = "crm:lead-assignment:unassigned-run"
+ASSIGNMENT_RUN_LOCK_TIMEOUT = 30 * 60
 RUNNABLE_STATUSES = {"draft", "ready", "completed_with_errors"}
 TERMINAL_ITEM_STATUSES = {"assigned", "skipped"}
 ROUTING_REVIEW_CODES = frozenset(
@@ -1656,18 +1658,24 @@ def run_lead_assignment_batch(batch_name: str):
 	return _serialize_batch(batch)
 
 
-def _unassigned_lead_names(actor_context: dict[str, Any]) -> list[str]:
+def _unassigned_lead_names(
+	actor_context: dict[str, Any], *, min_age_minutes: int = 0
+) -> list[str]:
 	"""Return visible, processed Leads that still have no owner.
 
 	Lead source is not part of the selection rule because another system owns
 	intake. Processing state is, because "Xử lý Lead" is the operator step that
 	decides which Leads are assignable at all.
 	"""
+	filters: dict[str, Any] = {
+		"processing_status": "PROCESSED",
+	}
+	if min_age_minutes > 0:
+		filters["modified"] = ["<=", add_to_date(now_datetime(), minutes=-min_age_minutes)]
+
 	rows = frappe.get_all(
 		"CRM Lead",
-		filters={
-			"processing_status": "PROCESSED",
-		},
+		filters=filters,
 		fields=["name", "owner_staff", "assigned_to", "converted_student", "resolution"],
 		order_by="creation asc, name asc",
 		limit_page_length=MAX_BATCH_SIZE,
@@ -1689,7 +1697,7 @@ def _unassigned_lead_names(actor_context: dict[str, Any]) -> list[str]:
 
 
 def _new_unassigned_lead_batch(lead_names: list[str]):
-	"""Create an internal audit batch for one manual scan."""
+	"""Create an internal audit batch for one automatic or manual scan."""
 	stamp = now_datetime().strftime("%Y%m%d-%H%M%S")
 	batch_name = f"Phân công Lead {stamp}"
 	if frappe.db.exists(BATCH_DOCTYPE, {"batch_name": batch_name}):
@@ -1719,41 +1727,109 @@ def _new_unassigned_lead_batch(lead_names: list[str]):
 	return batch
 
 
+def _assignment_run_lock(*, blocking: bool, blocking_timeout: int | None):
+	return frappe.cache().lock(
+		ASSIGNMENT_RUN_LOCK_KEY,
+		timeout=ASSIGNMENT_RUN_LOCK_TIMEOUT,
+		blocking=blocking,
+		blocking_timeout=blocking_timeout,
+	)
+
+
+def _empty_assignment_summary() -> dict[str, int]:
+	return {
+		"total": 0,
+		"valid": 0,
+		"invalid": 0,
+		"pending": 0,
+		"assigned": 0,
+		"deferred": 0,
+		"manualReview": 0,
+		"failed": 0,
+		"skipped": 0,
+	}
+
+
+def _run_unassigned_lead_assignment(
+	actor_context: dict[str, Any],
+	*,
+	trigger: str,
+	blocking: bool,
+	blocking_timeout: int | None,
+	min_age_minutes: int = 0,
+):
+	"""Run one serialized scan for processed Leads without an owner."""
+	lock = _assignment_run_lock(
+		blocking=blocking,
+		blocking_timeout=blocking_timeout,
+	)
+	if not lock.acquire():
+		return {
+			"status": "busy",
+			"message": "Một lượt phân công Lead đang chạy. Vui lòng thử lại sau.",
+			"scanned": 0,
+			"batch": None,
+			"items": [],
+			"summary": _empty_assignment_summary(),
+			"trigger": trigger,
+		}
+
+	try:
+		lead_names = _unassigned_lead_names(
+			actor_context,
+			min_age_minutes=min_age_minutes,
+		)
+		if not lead_names:
+			return {
+				"status": "no_work",
+				"message": "Không có Lead đã xử lý nào đang chờ phân công.",
+				"scanned": 0,
+				"batch": None,
+				"items": [],
+				"summary": _empty_assignment_summary(),
+				"trigger": trigger,
+			}
+
+		batch = _new_unassigned_lead_batch(lead_names)
+		result = run_lead_assignment_batch(batch.name)
+		result["scanned"] = len(lead_names)
+		result["trigger"] = trigger
+		return result
+	finally:
+		lock.release()
+
+
 @frappe.whitelist(methods=["POST"])
 def run_unassigned_lead_assignment():
-	"""Scan and assign every processed CRM Lead that does not have an owner.
+	"""Immediately scan and assign every processed Lead that does not have an owner.
 
 	This is the simple operator action used by dashboard-crm. Leads still in
 	NEW must first go through "Xử lý Lead" (``process_new_leads``); this command
 	never advances intake state itself.
 	"""
 	actor_context = _require_access()
-	lead_names = _unassigned_lead_names(actor_context)
-	if not lead_names:
-		return {
-			"status": "no_work",
-			"message": "Không có Lead đã xử lý nào đang chờ phân công.",
-			"scanned": 0,
-			"batch": None,
-			"items": [],
-			"summary": {
-				"total": 0,
-				"valid": 0,
-				"invalid": 0,
-				"pending": 0,
-				"assigned": 0,
-				"deferred": 0,
-				"manualReview": 0,
-				"failed": 0,
-				"skipped": 0,
-			},
-		}
+	return _run_unassigned_lead_assignment(
+		actor_context,
+		trigger="unassigned_leads",
+		blocking=True,
+		blocking_timeout=10,
+	)
 
-	batch = _new_unassigned_lead_batch(lead_names)
-	result = run_lead_assignment_batch(batch.name)
-	result["scanned"] = len(lead_names)
-	result["trigger"] = "unassigned_leads"
-	return result
+
+def run_scheduled_unassigned_lead_assignment():
+	"""Assign processed, unowned Leads from the five-minute scheduler worker."""
+	previous_user = getattr(frappe.session, "user", None) or "Guest"
+	frappe.set_user("Administrator")
+	try:
+		return _run_unassigned_lead_assignment(
+			_require_access(),
+			trigger="scheduled_unassigned_leads",
+			blocking=False,
+			blocking_timeout=None,
+			min_age_minutes=5,
+		)
+	finally:
+		frappe.set_user(previous_user)
 
 
 @frappe.whitelist(methods=["POST"])

@@ -103,6 +103,30 @@ class TestLeadProcessingAPI(FrappeTestCase):
 		self.assertEqual(result["targets"], targets)
 		resolver.assert_called_once_with("Ho Chi Minh City", campus="FPTU Ho Chi Minh Campus")
 
+	def test_assignment_target_service_uses_province_when_lead_has_no_campus(self):
+		lead = frappe._dict(
+			name="HS-2026-HCM-000100",
+			processing_status="PROCESSED",
+			province="Ho Chi Minh City",
+			branch=None,
+			ownership_revision=0,
+			owner_staff=None,
+			assigned_to=None,
+		)
+		targets = [{"staff": "STAFF-1", "team": "TEAM-1"}]
+		with (
+			patch.object(lead_processing_service, "_load_lead", return_value=lead),
+			patch.object(
+				lead_processing_service,
+				"list_province_recipients",
+				return_value=targets,
+			) as resolver,
+		):
+			result = lead_processing_service.list_lead_assignment_targets(lead.name)
+
+		self.assertEqual(result["targets"], targets)
+		resolver.assert_called_once_with("Ho Chi Minh City", campus=None)
+
 	def test_assignment_target_service_rejects_only_new_and_closed_leads(self):
 		base_lead = {
 			"name": "HS-2026-HCM-000098",

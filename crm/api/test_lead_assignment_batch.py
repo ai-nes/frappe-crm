@@ -299,9 +299,12 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertIn("school_owner", item.reason)
 
 	def test_run_unassigned_returns_no_work_without_creating_a_batch(self):
+		lock = MagicMock()
+		lock.acquire.return_value = True
 		with (
 			patch.object(lead_assignment_batch, "_require_access", return_value={}),
 			patch.object(lead_assignment_batch, "_unassigned_lead_names", return_value=[]),
+			patch.object(lead_assignment_batch, "_assignment_run_lock", return_value=lock),
 		):
 			result = lead_assignment_batch.run_unassigned_lead_assignment()
 
@@ -311,8 +314,11 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 
 	def test_run_unassigned_keeps_internal_batch_as_audit_record(self):
 		batch = SimpleNamespace(name="BATCH-1")
+		lock = MagicMock()
+		lock.acquire.return_value = True
 		with (
 			patch.object(lead_assignment_batch, "_require_access", return_value={}),
+			patch.object(lead_assignment_batch, "_assignment_run_lock", return_value=lock),
 			patch.object(
 				lead_assignment_batch,
 				"_unassigned_lead_names",
@@ -330,6 +336,78 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertEqual(result["status"], "completed")
 		self.assertEqual(result["scanned"], 2)
 		self.assertEqual(result["trigger"], "unassigned_leads")
+
+	def test_unassigned_scan_returns_busy_without_starting_another_batch(self):
+		lock = MagicMock()
+		lock.acquire.return_value = False
+		with (
+			patch.object(lead_assignment_batch, "_assignment_run_lock", return_value=lock),
+			patch.object(
+				lead_assignment_batch,
+				"_unassigned_lead_names",
+				side_effect=AssertionError("busy scans must not query Leads"),
+			),
+		):
+			result = lead_assignment_batch._run_unassigned_lead_assignment(
+				{},
+				trigger="scheduled_unassigned_leads",
+				blocking=False,
+				blocking_timeout=None,
+			)
+
+		self.assertEqual(result["status"], "busy")
+		self.assertIsNone(result["batch"])
+		lock.release.assert_not_called()
+
+	def test_unassigned_scan_can_filter_leads_older_than_worker_delay(self):
+		lead = frappe._dict(
+			name="LEAD-1",
+			owner_staff=None,
+			assigned_to=None,
+			converted_student=None,
+			resolution="PENDING",
+		)
+		with (
+			patch.object(
+				lead_assignment_batch.frappe,
+				"get_all",
+				return_value=[lead],
+			) as get_all,
+			patch.object(lead_assignment_batch, "_lead", return_value=lead),
+			patch.object(lead_assignment_batch, "add_to_date", return_value="CUTOFF"),
+		):
+			result = lead_assignment_batch._unassigned_lead_names({}, min_age_minutes=5)
+
+		self.assertEqual(result, ["LEAD-1"])
+		self.assertEqual(
+			get_all.call_args.kwargs["filters"],
+			{"processing_status": "PROCESSED", "modified": ["<=", "CUTOFF"]},
+		)
+
+	def test_scheduled_unassigned_scan_uses_administrator_and_nonblocking_lock(self):
+		expected = {"status": "no_work", "batch": None}
+		previous_user = getattr(lead_assignment_batch.frappe.session, "user", None) or "Guest"
+		with (
+			patch.object(lead_assignment_batch.frappe, "set_user") as set_user,
+			patch.object(lead_assignment_batch, "_require_access", return_value={}),
+			patch.object(
+				lead_assignment_batch,
+				"_run_unassigned_lead_assignment",
+				return_value=expected,
+			) as run_scan,
+		):
+			result = lead_assignment_batch.run_scheduled_unassigned_lead_assignment()
+
+		self.assertIs(result, expected)
+		set_user.assert_any_call("Administrator")
+		self.assertEqual(set_user.call_args_list[-1].args, (previous_user,))
+		run_scan.assert_called_once_with(
+			{},
+			trigger="scheduled_unassigned_leads",
+			blocking=False,
+			blocking_timeout=None,
+			min_age_minutes=5,
+		)
 
 	def test_assignment_batch_has_no_student_handoff_helper(self):
 		self.assertFalse(hasattr(lead_assignment_batch, "_handoff_assigned_lead"))

@@ -446,11 +446,12 @@ scheduler_events = {
 	],
 	"cron": {
 		"10 8 * * *": ["crm.api.agent_events.send_daily_sla_director_digests"],
-		"*/5 * * * *": ["crm.api.sla.recompute_sla_statuses"],
+		"*/5 * * * *": [
+			"crm.api.sla.recompute_sla_statuses",
+			"crm.api.lead_assignment_batch.run_scheduled_unassigned_lead_assignment",
+		],
 		"* * * * *": [
 			"crm.fcrm.master_data_governance.apply_effective_changes",
-			# Assignment runs explicitly from a Lead batch. Keep routing requests
-			# for audit/compatibility, but do not execute them in the background.
 			"crm.fcrm.student_sla.process_due_sla_attempts",
 			"crm.fcrm.student_sla.process_pending_sla_deliveries",
 			"crm.fcrm.student_lead_operations.recall_expired_ctv_batches",
