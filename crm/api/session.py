@@ -2,6 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, today
 
+from crm.api._pagination import parse_pagination
 from crm.fcrm.role_policy import (
 	ADMINISTRATOR_ROLE,
 	CRM_BUSINESS_ROLES,
@@ -22,6 +23,18 @@ from crm.fcrm.student_feature_flags import director_analytics_read_enabled, role
 # canonical policy module rather than adding role literals here.
 CRM_ROLE_PROFILES = PROFILE_ROLE_ALIASES
 CRM_PROFILE_LABELS = PROFILE_LABELS
+USER_FIELDS = [
+	"name",
+	"email",
+	"enabled",
+	"user_image",
+	"first_name",
+	"last_name",
+	"full_name",
+	"user_type",
+	"language",
+]
+CRM_USER_ROLE_NAMES = tuple(sorted(CRM_BUSINESS_ROLES | {ADMINISTRATOR_ROLE, "System Manager"}))
 
 
 def resolve_crm_profile(roles):
@@ -160,12 +173,16 @@ def _get_my_team_memberships(user=None):
 	)
 	team_map = {row.name: row for row in teams}
 	group_ids = sorted({row.group for row in teams if row.group})
-	groups = frappe.get_all(
-		"CRM Team Group",
-		filters={"name": ["in", group_ids], "is_active": 1},
-		fields=["name", "group_name", "province"],
-		limit_page_length=0,
-	) if group_ids else []
+	groups = (
+		frappe.get_all(
+			"CRM Team Group",
+			filters={"name": ["in", group_ids], "is_active": 1},
+			fields=["name", "group_name", "province"],
+			limit_page_length=0,
+		)
+		if group_ids
+		else []
+	)
 	group_map = {row.name: row for row in groups}
 
 	result = []
@@ -257,12 +274,16 @@ def _get_my_managed_group_members(user=None):
 		and (not row.effective_until or getdate(row.effective_until) >= today_date)
 	]
 	staff_ids = sorted({row.staff for row in active_memberships if row.staff})
-	staff_rows = frappe.get_all(
-		"CRM Staff",
-		filters={"name": ["in", staff_ids], "is_active": 1},
-		fields=["name", "full_name", "user"],
-		limit_page_length=0,
-	) if staff_ids else []
+	staff_rows = (
+		frappe.get_all(
+			"CRM Staff",
+			filters={"name": ["in", staff_ids], "is_active": 1},
+			fields=["name", "full_name", "user"],
+			limit_page_length=0,
+		)
+		if staff_ids
+		else []
+	)
 	staff_map = {row.name: row for row in staff_rows}
 
 	result = []
@@ -332,9 +353,7 @@ def get_session_role_flags():
 			"crm_role": None,
 			"crm_role_state": "platform_superuser",
 			"crm_capabilities": sorted(capabilities_for_roles(set(), administrator=True)),
-			"crm_capability_details": capability_details(
-				capabilities_for_roles(set(), administrator=True)
-			),
+			"crm_capability_details": capability_details(capabilities_for_roles(set(), administrator=True)),
 			"crm_policy_version": POLICY_VERSION,
 			"crm_feature_flags": _crm_feature_flags(None),
 		}
@@ -415,23 +434,41 @@ def _csrf_token() -> str | None:
 		return None
 
 
+def _decorate_user(user, session_roles, system_language):
+	if frappe.session.user == user.name:
+		user.session_user = True
+		user.crm_feature_flags = session_roles["crm_feature_flags"]
+
+	user.roles = _get_policy_roles(user.name)
+
+	if user.name == "Administrator":
+		# Same blanket-role-grant issue as get_session_role_flags(): Administrator
+		# holds every role, which trips get_crm_user_role()'s ambiguous-profile
+		# fail-closed check and would otherwise drop it from crm_users below.
+		user.role, user.crm_profile = "System Manager", None
+		user.crm_role = None
+		user.crm_role_state = "platform_superuser"
+		user.crm_capabilities = sorted(capabilities_for_roles(set(), administrator=True))
+	else:
+		user.role, user.crm_profile = get_crm_user_role(user.roles)
+		user.crm_role = CRM_PROFILE_LABELS.get(user.crm_profile, user.crm_profile)
+		user.crm_role_state = classify_role_set(user.roles)
+		user.crm_capabilities = sorted(capabilities_for_roles(user.roles))
+	if not user.role and "Guest" in user.roles:
+		user.role = "Guest"
+
+	user.is_telephony_agent = frappe.db.exists("Telephony Agent", {"user": user.name})
+	user.language = user.language or system_language or "vi"
+	return is_crm_user(user.roles, administrator=user.name == "Administrator")
+
+
 @frappe.whitelist()
 def get_users():
 	session_roles = get_session_role_flags()
 
 	users = frappe.qb.get_query(
 		"User",
-		fields=[
-			"name",
-			"email",
-			"enabled",
-			"user_image",
-			"first_name",
-			"last_name",
-			"full_name",
-			"user_type",
-			"language",
-		],
+		fields=USER_FIELDS,
 		order_by="full_name asc",
 		distinct=True,
 		filters={"enabled": 1},
@@ -441,41 +478,83 @@ def get_users():
 	system_language = frappe.db.get_single_value("System Settings", "language") or "vi"
 
 	for user in users:
-		if frappe.session.user == user.name:
-			user.session_user = True
-			user.crm_feature_flags = session_roles["crm_feature_flags"]
-
-		user.roles = _get_policy_roles(user.name)
-
-		if user.name == "Administrator":
-			# Same blanket-role-grant issue as get_session_role_flags(): Administrator
-			# holds every role, which trips get_crm_user_role()'s ambiguous-profile
-			# fail-closed check and would otherwise drop it from crm_users below.
-			user.role, user.crm_profile = "System Manager", None
-			user.crm_role = None
-			user.crm_role_state = "platform_superuser"
-			user.crm_capabilities = sorted(capabilities_for_roles(set(), administrator=True))
-		else:
-			user.role, user.crm_profile = get_crm_user_role(user.roles)
-			user.crm_role = CRM_PROFILE_LABELS.get(user.crm_profile, user.crm_profile)
-			user.crm_role_state = classify_role_set(user.roles)
-			user.crm_capabilities = sorted(capabilities_for_roles(user.roles))
-		if not user.role and "Guest" in user.roles:
-			user.role = "Guest"
-
-		if frappe.session.user == user.name:
-			user.session_user = True
-
-		user.is_telephony_agent = frappe.db.exists("Telephony Agent", {"user": user.name})
-		user.language = user.language or system_language or "vi"
-
-		if is_crm_user(user.roles, administrator=user.name == "Administrator"):
+		if _decorate_user(user, session_roles, system_language):
 			crm_users.append(user)
 
 	if not session_roles["is_system_manager"]:
 		users = crm_users
 
 	return users, crm_users
+
+
+@frappe.whitelist()
+def list_admin_users(
+	start: int | str = 0,
+	page_length: int | str = 20,
+	search: str | None = None,
+	role: str | None = None,
+) -> dict:
+	"""Return one permission-scoped page for the Admin user-management table."""
+	session_roles = get_session_role_flags()
+	if not session_roles["is_system_manager"]:
+		frappe.throw(_("Only System Managers may list all CRM users."), frappe.PermissionError)
+
+	start, page_length = parse_pagination(start, page_length)
+
+	crm_user_names = frappe.get_all(
+		"Has Role",
+		filters={
+			"parenttype": "User",
+			"role": ["in", list(CRM_USER_ROLE_NAMES)],
+		},
+		pluck="parent",
+		limit_page_length=0,
+	)
+	crm_user_names = [name for name in crm_user_names if name != "Administrator"]
+	filters = {"enabled": 1, "name": ["in", crm_user_names]}
+
+	if role and role != "all":
+		role_users = frappe.get_all(
+			"Has Role",
+			filters={"parenttype": "User", "role": role},
+			pluck="parent",
+			limit_page_length=0,
+		)
+		filters["name"] = ["in", sorted(set(crm_user_names).intersection(role_users))]
+
+	search_value = str(search or "").strip()
+	or_filters = None
+	if search_value:
+		like = f"%{search_value}%"
+		or_filters = [[fieldname, "like", like] for fieldname in ("name", "email", "full_name")]
+
+	users = frappe.get_list(
+		"User",
+		fields=USER_FIELDS,
+		filters=filters,
+		or_filters=or_filters,
+		order_by="full_name asc, name asc",
+		start=start,
+		page_length=page_length,
+	)
+	count_rows = frappe.get_list(
+		"User",
+		filters=filters,
+		or_filters=or_filters,
+		fields=["count(name) as total"],
+		limit_page_length=0,
+	)
+	total = int((count_rows[0].get("total") if count_rows else 0) or 0)
+	system_language = frappe.db.get_single_value("System Settings", "language") or "vi"
+	for user in users:
+		_decorate_user(user, session_roles, system_language)
+
+	return {
+		"users": users,
+		"total": total,
+		"start": start,
+		"page_length": page_length,
+	}
 
 
 def set_default_user_language(doc, event=None):

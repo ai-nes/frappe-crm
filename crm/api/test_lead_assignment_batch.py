@@ -299,9 +299,12 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertIn("school_owner", item.reason)
 
 	def test_run_unassigned_returns_no_work_without_creating_a_batch(self):
+		lock = MagicMock()
+		lock.acquire.return_value = True
 		with (
 			patch.object(lead_assignment_batch, "_require_access", return_value={}),
 			patch.object(lead_assignment_batch, "_unassigned_lead_names", return_value=[]),
+			patch.object(lead_assignment_batch, "_assignment_run_lock", return_value=lock),
 		):
 			result = lead_assignment_batch.run_unassigned_lead_assignment()
 
@@ -311,8 +314,11 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 
 	def test_run_unassigned_keeps_internal_batch_as_audit_record(self):
 		batch = SimpleNamespace(name="BATCH-1")
+		lock = MagicMock()
+		lock.acquire.return_value = True
 		with (
 			patch.object(lead_assignment_batch, "_require_access", return_value={}),
+			patch.object(lead_assignment_batch, "_assignment_run_lock", return_value=lock),
 			patch.object(
 				lead_assignment_batch,
 				"_unassigned_lead_names",
@@ -330,6 +336,78 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertEqual(result["status"], "completed")
 		self.assertEqual(result["scanned"], 2)
 		self.assertEqual(result["trigger"], "unassigned_leads")
+
+	def test_unassigned_scan_returns_busy_without_starting_another_batch(self):
+		lock = MagicMock()
+		lock.acquire.return_value = False
+		with (
+			patch.object(lead_assignment_batch, "_assignment_run_lock", return_value=lock),
+			patch.object(
+				lead_assignment_batch,
+				"_unassigned_lead_names",
+				side_effect=AssertionError("busy scans must not query Leads"),
+			),
+		):
+			result = lead_assignment_batch._run_unassigned_lead_assignment(
+				{},
+				trigger="scheduled_unassigned_leads",
+				blocking=False,
+				blocking_timeout=None,
+			)
+
+		self.assertEqual(result["status"], "busy")
+		self.assertIsNone(result["batch"])
+		lock.release.assert_not_called()
+
+	def test_unassigned_scan_can_filter_leads_older_than_worker_delay(self):
+		lead = frappe._dict(
+			name="LEAD-1",
+			owner_staff=None,
+			assigned_to=None,
+			converted_student=None,
+			resolution="PENDING",
+		)
+		with (
+			patch.object(
+				lead_assignment_batch.frappe,
+				"get_all",
+				return_value=[lead],
+			) as get_all,
+			patch.object(lead_assignment_batch, "_lead", return_value=lead),
+			patch.object(lead_assignment_batch, "add_to_date", return_value="CUTOFF"),
+		):
+			result = lead_assignment_batch._unassigned_lead_names({}, min_age_minutes=5)
+
+		self.assertEqual(result, ["LEAD-1"])
+		self.assertEqual(
+			get_all.call_args.kwargs["filters"],
+			{"processing_status": "PROCESSED", "modified": ["<=", "CUTOFF"]},
+		)
+
+	def test_scheduled_unassigned_scan_uses_administrator_and_nonblocking_lock(self):
+		expected = {"status": "no_work", "batch": None}
+		previous_user = getattr(lead_assignment_batch.frappe.session, "user", None) or "Guest"
+		with (
+			patch.object(lead_assignment_batch.frappe, "set_user") as set_user,
+			patch.object(lead_assignment_batch, "_require_access", return_value={}),
+			patch.object(
+				lead_assignment_batch,
+				"_run_unassigned_lead_assignment",
+				return_value=expected,
+			) as run_scan,
+		):
+			result = lead_assignment_batch.run_scheduled_unassigned_lead_assignment()
+
+		self.assertIs(result, expected)
+		set_user.assert_any_call("Administrator")
+		self.assertEqual(set_user.call_args_list[-1].args, (previous_user,))
+		run_scan.assert_called_once_with(
+			{},
+			trigger="scheduled_unassigned_leads",
+			blocking=False,
+			blocking_timeout=None,
+			min_age_minutes=5,
+		)
 
 	def test_assignment_batch_has_no_student_handoff_helper(self):
 		self.assertFalse(hasattr(lead_assignment_batch, "_handoff_assigned_lead"))
@@ -404,7 +482,7 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 					"staffName": "Nguyễn Minh Khôi",
 					"team": "TEAM-NORTH",
 					"function": "Sale",
-					"capacity": {"active": 2, "limit": 10, "remaining": 8},
+					"capacity": {"active": 2, "limit": 10, "remaining": 8, "configured": True},
 				}
 			],
 			"TEAM-SOUTH": [
@@ -413,7 +491,7 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 					"staffName": "Lê Thanh Hương",
 					"team": "TEAM-SOUTH",
 					"function": "CTV Sale",
-					"capacity": {"active": 0, "limit": 10, "remaining": 10},
+					"capacity": {"active": 0, "limit": 10, "remaining": 10, "configured": True},
 				}
 			],
 		}
@@ -426,7 +504,7 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 			),
 			patch.object(
 				team_routing,
-				"_active_team_recipients",
+				"_team_recipient_pool",
 				side_effect=lambda team_id, at=None: recipients[team_id],
 			),
 		):
@@ -439,6 +517,45 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertEqual(result["ownerStaff"], "STAFF-NORTH")
 		self.assertEqual(result["function"], "Sale")
 		self.assertEqual(result["policyVersion"], "province-capacity-v1")
+
+	def test_province_selection_rejects_staff_with_no_capacity_configured(self):
+		"""A Sale/CTV who has never been given a capacity period is not eligible.
+
+		This is a deliberate business rule, not a display default: missing
+		capacity used to mean "unlimited", but now means "cannot receive any
+		Lead until an admin sets it up" — and the failure message must name
+		that cause distinctly from "everyone is full".
+		"""
+		teams = [{"name": "TEAM-NORTH", "team_name": "Đội Tư vấn Khu Bắc", "campus": "CAMPUS-1"}]
+		recipients = {
+			"TEAM-NORTH": [
+				{
+					"staff": "STAFF-NORTH",
+					"staffName": "Nguyễn Minh Khôi",
+					"team": "TEAM-NORTH",
+					"function": "Sale",
+					"capacity": {"active": 0, "limit": None, "remaining": None, "configured": False},
+				}
+			],
+		}
+		with (
+			patch.object(team_routing, "_active_teams_for_province", return_value=teams),
+			patch.object(
+				team_routing,
+				"team_routing_readiness",
+				return_value={"status": "ready", "reason": "ready"},
+			),
+			patch.object(
+				team_routing,
+				"_team_recipient_pool",
+				side_effect=lambda team_id, at=None: recipients[team_id],
+			),
+		):
+			with self.assertRaises(frappe.ValidationError) as ctx:
+				team_routing.select_province_recipient("Ho Chi Minh City")
+		self.assertIn("thiết lập capacity", str(ctx.exception))
+		self.assertIn("Nguyễn Minh Khôi", str(ctx.exception))
+		self.assertEqual(ctx.exception.code, "STAFF_CAPACITY_NOT_CONFIGURED")
 
 	def test_fallback_recipient_selects_team_lead_when_no_sale_or_ctv_active(self):
 		teams = [{"name": "TEAM-NORTH", "team_name": "Đội Tư vấn Khu Bắc", "campus": "CAMPUS-1"}]
@@ -517,6 +634,35 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 			with self.assertRaises(frappe.ValidationError) as context:
 				lead_assignment_batch._resolve_batch_recipient(batch, lead, {})
 		self.assertEqual(context.exception.code, "TEAM_NOT_FOUND_FOR_PROVINCE")
+
+	def test_batch_recipient_does_not_fall_back_when_capacity_not_configured(self):
+		"""Missing capacity must land in manual_review, not silently on the Trưởng nhóm.
+
+		This is the exact regression the "chưa thiết lập capacity" fix guards
+		against: STAFF_CAPACITY_NOT_CONFIGURED is a distinct code from
+		NO_ELIGIBLE_RECIPIENT precisely so this batch resolver re-raises it
+		instead of calling the fallback — a stand-in team lead would otherwise
+		mask the fact that nobody eligible was ever configured to receive Leads.
+		"""
+		batch = self._BatchScope()
+		lead = frappe._dict(name="LEAD-1", province="Ho Chi Minh City", branch="CAMPUS-1")
+		not_configured = frappe.ValidationError(
+			"Team có Sale/CTV nhưng chưa ai được thiết lập capacity: Nguyễn Minh Khôi."
+		)
+		not_configured.code = "STAFF_CAPACITY_NOT_CONFIGURED"
+		with (
+			patch.object(lead_assignment_batch, "_canonical_province", return_value="Ho Chi Minh City"),
+			patch.object(lead_assignment_batch, "_validate_batch_scope", return_value=None),
+			patch.object(lead_assignment_batch, "select_province_recipient", side_effect=not_configured),
+			patch.object(
+				lead_assignment_batch,
+				"select_province_fallback_recipient",
+				side_effect=AssertionError("must not fall back when capacity was never configured"),
+			),
+		):
+			with self.assertRaises(frappe.ValidationError) as context:
+				lead_assignment_batch._resolve_batch_recipient(batch, lead, {})
+		self.assertEqual(context.exception.code, "STAFF_CAPACITY_NOT_CONFIGURED")
 
 	def test_reset_item_expands_bare_error_code_into_a_specific_reason(self):
 		item = MagicMock()

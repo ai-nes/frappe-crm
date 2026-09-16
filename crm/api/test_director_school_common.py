@@ -36,6 +36,18 @@ class TestDirectorSchoolCommon(FrappeTestCase):
 
 				self.assertEqual(access["profile"], profile)
 
+	def test_marketing_profile_is_allowed_only_for_opt_in_readers(self):
+		with patch.object(common.frappe, "session", SimpleNamespace(user="marketing@example.com")), patch.object(
+			common.frappe.db, "get_value", return_value=1
+		), patch.object(common.frappe, "get_roles", return_value=["Marketing"]), patch.object(
+			common, "classify_role_set", return_value="canonical_profile"
+		), patch.object(common, "resolve_crm_profile", return_value="marketing"):
+			with self.assertRaises(frappe.PermissionError):
+				common.require_director_access()
+			access = common.require_director_access(allow_marketing=True)
+
+		self.assertEqual(access["profile"], "marketing")
+
 	def test_mixed_role_set_is_forbidden_even_if_one_role_is_allowed(self):
 		with patch.object(common.frappe, "session", SimpleNamespace(user="mixed@example.com")), patch.object(
 			common.frappe.db, "get_value", return_value=1
@@ -88,6 +100,30 @@ class TestDirectorSchoolCommon(FrappeTestCase):
 			resolved = common.resolve_school_id("01-00123-062")
 
 		self.assertEqual(resolved["ward"], "ward-1")
+
+	def test_resolver_accepts_geometry_code_for_canonical_province(self):
+		province = [{"name": "Đồng Nai"}]
+		ward = [{"name": "26041 - Đồng Nai", "ward_code": "26041"}]
+		school = [{
+			"name": "school-1", "school_name": "Trung tâm GDNN-GDTX tỉnh Đồng Nai",
+			"school_code": "100", "province": "Đồng Nai", "ward": "26041 - Đồng Nai",
+		}]
+
+		def get_list(doctype, filters, **kwargs):
+			if doctype == "CRM Province":
+				self.assertEqual(filters, {"province_code": "VN_DONG_NAI"})
+				return province
+			if doctype == "CRM Ward":
+				return ward
+			if doctype == "CRM High School":
+				return school
+			return []
+
+		with patch.object(common.frappe, "get_list", side_effect=get_list):
+			resolved = common.resolve_school_id("75-26041-100")
+
+		self.assertEqual(resolved["name"], "school-1")
+		self.assertEqual(resolved["canonical_id"], "75-26041-100")
 
 	def test_legacy_collision_fails_closed_without_name_fallback(self):
 		province = [{"name": "province-1"}]

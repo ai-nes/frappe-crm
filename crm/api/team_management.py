@@ -25,6 +25,7 @@ from crm.api.assignment_workspace import (
 	_reserve_topology_receipt,
 	_topology_receipt,
 )
+from crm.fcrm.role_policy import resolve_crm_profile
 from crm.fcrm.team_routing import team_routing_readiness
 
 RECIPIENT_FUNCTIONS = {"Sale", "CTV Sale"}
@@ -32,7 +33,7 @@ RECIPIENT_FUNCTIONS = {"Sale", "CTV Sale"}
 TEAM_TYPE_LETTERS = {"Sales": "S", "Marketing": "M", "Admissions Operations": "O"}
 # NFKD không tách được Đ/đ, phải map tay trước khi bỏ dấu.
 D_STROKE = str.maketrans({"Đ": "D", "đ": "d"})
-SUPPORTED_FUNCTIONS = ("Sale", "CTV Sale", "Lead Sale")
+SUPPORTED_FUNCTIONS = ("Sale", "CTV Sale")
 TEAM_MANAGEMENT_READ_CAPABILITIES = frozenset(
 	{"system.configure", "admissions.oversee", "team.oversee", "student.execute"}
 )
@@ -172,6 +173,40 @@ def _active_memberships():
 		limit_page_length=0,
 	)
 	return [row for row in rows if _date_active(row)]
+
+
+def _assert_staff_not_in_other_team(staff_doc, team_id):
+	"""Keep new Team Management membership writes within one active Team."""
+	if any(row.staff == staff_doc.name and row.team and row.team != team_id for row in _active_memberships()):
+		_error(
+			"STAFF_ALREADY_ASSIGNED",
+			"Nhân sự đã thuộc một Team khác; hãy gỡ membership cũ trước khi thêm vào Team này.",
+		)
+
+
+def _assert_staff_can_be_team_member(staff_doc):
+	"""Keep Lead Sale users as managers instead of Team members."""
+	user = getattr(staff_doc, "user", None)
+	if user and resolve_crm_profile(frappe.get_roles(user)) == "lead_sales":
+		_error("LEAD_SALE_MANAGER_ONLY", "Lead Sale là quản lý và không phải thành viên của Team.")
+
+
+def _default_team_member_function(staff_doc):
+	"""Resolve the membership function for a staff added as a new Team lead."""
+	user = getattr(staff_doc, "user", None)
+	if user and resolve_crm_profile(frappe.get_roles(user)) == "ctv_sale":
+		return "CTV Sale"
+	return "Sale"
+
+
+def _validate_new_team_lead(staff_id, campus, context):
+	"""Validate the selected new-Team lead before creating any records."""
+	staff_doc = _staff_doc(staff_id, context)
+	if staff_doc.campus != campus:
+		_error("CAMPUS_MISMATCH", "Nhân sự và Team phải cùng Cơ sở.")
+	_assert_staff_can_be_team_member(staff_doc)
+	_assert_staff_not_in_other_team(staff_doc, None)
+	return staff_doc
 
 
 def _with_team_management_scope(context):
@@ -473,6 +508,7 @@ def _read_workspace(context):
 		limit_page_length=0,
 	)
 	memberships = _active_memberships()
+	all_membership_staff_ids = {row.staff for row in memberships if row.staff}
 	team_codes = _code_map("CRM Team", "team_code")
 	group_codes = _code_map("CRM Team Group", "group_code")
 	province_geo = _province_geo_map()
@@ -493,10 +529,40 @@ def _read_workspace(context):
 		visible_staff_ids.update(row.group_lead_staff for row in groups if row.group_lead_staff)
 		if context.get("staff"):
 			visible_staff_ids.add(context["staff"])
+		visible_staff_ids.update(
+			row.name
+			for row in staff
+			if row.is_active
+			and row.name not in all_membership_staff_ids
+			and row.campus in set(context.get("campuses") or [])
+		)
 		staff = [row for row in staff if row.name in visible_staff_ids]
 
+	lead_sale_users = (
+		set(
+			frappe.get_all(
+				"Has Role",
+				filters={
+					"parent": ["in", [row.user for row in staff if row.user]],
+					"parenttype": "User",
+					"role": "Lead Sale",
+				},
+				pluck="parent",
+				limit_page_length=0,
+			)
+		)
+		if any(row.user for row in staff)
+		else set()
+	)
+	team_leads_by_team = {row.name: row.team_lead_staff for row in teams if row.team_lead_staff}
 	team_map = {row.name: row for row in teams}
 	staff_map = {row.name: row for row in staff}
+	lead_sale_staff_ids = {row.name for row in staff if row.user in lead_sale_users}
+	memberships = [
+		row
+		for row in memberships
+		if not (row.staff == team_leads_by_team.get(row.team) and row.staff in lead_sale_staff_ids)
+	]
 	members_by_team = defaultdict(list)
 	memberships_by_staff = defaultdict(list)
 	for membership in memberships:
@@ -551,16 +617,9 @@ def _read_workspace(context):
 			and staff_map.get(row.staff)
 			and staff_map[row.staff].is_active
 		]
-		team_lead = next(
-			(
-				row
-				for row in team_members
-				if row.staff == team.team_lead_staff
-				and staff_map.get(row.staff)
-				and staff_map[row.staff].is_active
-			),
-			None,
-		)
+		team_lead = staff_map.get(team.team_lead_staff)
+		if not team_lead or not team_lead.is_active:
+			team_lead = None
 		lead_id = team.team_lead_staff
 		if not team.is_active:
 			readiness, readiness_reason = "inactive", "Đội đang ngừng hoạt động."
@@ -618,7 +677,7 @@ def _read_workspace(context):
 	for row in staff:
 		joined = memberships_by_staff.get(row.name, [])
 		primary = next((item for item in joined if item.is_primary), joined[0] if joined else None)
-		function = primary.function if primary else "Sale"
+		function = primary.function if primary else ("Lead Sale" if row.user in lead_sale_users else "Sale")
 		member_rows.append(
 			{
 				"id": row.name,
@@ -696,6 +755,11 @@ def _read_workspace(context):
 		"groups": group_rows,
 		"teams": team_rows,
 		"members": member_rows,
+		"availableMembers": [
+			row
+			for row in member_rows
+			if row["isActive"] and row["role"] != "LEAD_SALE" and not row["teamIds"]
+		],
 		"options": {
 			"campuses": [
 				{
@@ -762,6 +826,11 @@ def get_team_detail(team_id):
 		"team": team,
 		"group": next((row for row in payload["groups"] if row["id"] == team["groupId"]), None),
 		"members": [row for row in payload["members"] if row["id"] in member_ids],
+		"availableMembers": [
+			row
+			for row in payload["availableMembers"]
+			if not team["campusId"] or row["campusId"] == team["campusId"]
+		],
 	}
 
 
@@ -892,6 +961,7 @@ def _save_team(
 	team_lead_staff = _text(team_lead_staff, "team_lead_staff", required=False)
 	if not frappe.db.exists("CRM Campus", campus):
 		_error("CAMPUS_NOT_FOUND", "Cơ sở không tồn tại.")
+	team_type = _text(team_type or "Sales", "team_type")
 	if (
 		not _is_global(context)
 		and campus not in set(context.get("campuses") or [])
@@ -925,12 +995,17 @@ def _save_team(
 				_("Bạn không có quyền chọn Trưởng nhóm."),
 				frappe.PermissionError,
 			)
+	lead_staff_doc = None
+	if not team_id and team_lead_staff:
+		if team_type != "Sales":
+			_error("TEAM_TYPE_INVALID", "Chỉ đội Sales mới có Trưởng nhóm nhận Lead.")
+		lead_staff_doc = _validate_new_team_lead(team_lead_staff, campus, context)
 	doc.team_name = team_name
 	if group_id is not None:
 		doc.group = _text(group_id, "group_id", required=False)
 	elif not team_id and _bool(is_active, True):
 		_error("GROUP_REQUIRED", "Team mới đang hoạt động phải thuộc một Group.")
-	doc.team_type = _text(team_type or "Sales", "team_type")
+	doc.team_type = team_type
 	if area_code is not None:
 		doc.area_code = _code_segment(_text(area_code, "area_code", required=False)) or None
 	team_area = getattr(doc, "area_code", None)
@@ -948,17 +1023,21 @@ def _save_team(
 	if team_id:
 		doc.save(ignore_permissions=True)
 	else:
-		# CRM Team validates that its lead already has a membership. Create the
-		# Team without the pointer first; _save_membership sets the pointer after
-		# inserting the membership, so the DocType validation can pass.
-		selected_lead = doc.team_lead_staff
-		doc.team_lead_staff = None
 		doc.insert(ignore_permissions=True)
-		if selected_lead:
-			_ensure_created_team_lead_membership(doc, selected_lead, context)
+		if lead_staff_doc:
+			_save_membership(
+				lead_staff_doc.name,
+				doc.name,
+				_default_team_member_function(lead_staff_doc),
+				False,
+				None,
+				True,
+				context,
+			)
 	return {
 		"action": "team_setup",
 		"teamId": doc.name,
+		"teamLeadStaffId": doc.team_lead_staff,
 		"revision": _team_revision(doc.name),
 	}
 
@@ -1075,6 +1154,9 @@ def _save_membership(
 		_error("TEAM_TYPE_INVALID", "Chỉ đội Sales mới nhận Lead.")
 	if staff_doc.campus != team_doc.campus:
 		_error("CAMPUS_MISMATCH", "Nhân sự và Team phải cùng Cơ sở.")
+	_assert_staff_can_be_team_member(staff_doc)
+	_assert_staff_not_in_other_team(staff_doc, team_doc.name)
+	membership = _find_active_membership(staff_doc, team_doc.name)
 	function = _text(function or "Sale", "function")
 	if function not in SUPPORTED_FUNCTIONS:
 		_error("FUNCTION_INVALID", "Vai trò nhân sự không được hỗ trợ.")
@@ -1085,7 +1167,6 @@ def _save_membership(
 			frappe.PermissionError,
 		)
 	term = _text(term, "term", required=False)
-	membership = _find_active_membership(staff_doc, team_id)
 	if membership and team_doc.team_lead_staff == staff_doc.name and not is_team_lead:
 		_error(
 			"TEAM_LEAD_REPLACEMENT_REQUIRED",
@@ -1125,22 +1206,6 @@ def _save_membership(
 			}
 		),
 	}
-
-
-def _ensure_created_team_lead_membership(team_doc, staff_id, context):
-	"""Add the selected lead to a newly created Team as its organizational lead."""
-	membership_context = dict(context)
-	membership_context["teams"] = sorted(set(context.get("teams") or []) | {team_doc.name})
-	membership_context["campuses"] = sorted(set(context.get("campuses") or []) | {team_doc.campus})
-	return _save_membership(
-		staff_id,
-		team_doc.name,
-		"Sale",
-		False,
-		None,
-		True,
-		membership_context,
-	)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -1219,6 +1284,8 @@ def move_team_member(
 		if source_team.campus != target_team.campus:
 			_error("CAMPUS_MISMATCH", "Team nguồn và Team đích phải cùng Cơ sở.")
 		staff_doc = _staff_doc(staff_id, context)
+		_assert_staff_can_be_team_member(staff_doc)
+		_assert_staff_not_in_other_team(staff_doc, target_team.name)
 		source_membership = _find_active_membership(staff_doc, source_team.name)
 		if not source_membership:
 			_error("MEMBERSHIP_NOT_FOUND", "Nhân sự không còn thuộc Team nguồn.")
@@ -1368,12 +1435,6 @@ def change_team_lead(
 		new_staff_doc = _staff_doc(new_lead_staff, context)
 		if new_staff_doc.campus != team_doc.campus:
 			_error("CAMPUS_MISMATCH", "Nhân sự và Team phải cùng Cơ sở.")
-		new_membership = _find_active_membership(new_staff_doc, team_doc.name)
-		if not new_membership:
-			_error(
-				"MEMBERSHIP_NOT_FOUND",
-				"Trưởng nhóm mới phải là thành viên đang hoạt động của Team.",
-			)
 
 		previous_lead_id = team_doc.team_lead_staff
 		if previous_lead_id == new_staff_doc.name:

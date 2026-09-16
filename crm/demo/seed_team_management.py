@@ -9,7 +9,7 @@ Run locally with::
 
     bench --site crm.localhost execute crm.demo.seed_team_management.execute
 
-All fixture accounts use the local-only password ``12345@``.
+All fixture accounts use the local-only password ``123456``.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from crm.api.user import set_canonical_crm_profile
 from crm.demo import seed_lead_api_lookups, seed_role_accounts, seed_showcase, seed_staff
 
 LOCAL_SITE = "crm.localhost"
-FIXTURE_PASSWORD = "12345@"
+FIXTURE_PASSWORD = "123456"
 FIXTURE_CAMPUS = "FPTU Ho Chi Minh Campus"
 FIXTURE_DEPARTMENT = seed_staff.FIXTURE_DEPARTMENT_NAME
 

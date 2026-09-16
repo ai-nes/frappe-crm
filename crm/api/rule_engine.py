@@ -27,6 +27,7 @@ from crm.fcrm.rule_engine import (
 SETTINGS_NAME = "CRM Rule Settings"
 MAX_PAGE_LENGTH = 200
 HEX_DIGEST = re.compile(r"^[a-f0-9]{64}$")
+CRM_RULE_ADMIN_ROLES = frozenset({"System Manager", "Admissions Director", "Business Admin"})
 VERSION_FIELDS = [
 	"name",
 	"owner",
@@ -41,6 +42,8 @@ VERSION_FIELDS = [
 	"ruleset_digest",
 	"activated_at",
 	"activated_by",
+	"archived_at",
+	"archived_by",
 	"superseded_at",
 	"superseded_by",
 	"change_note",
@@ -60,6 +63,7 @@ RULE_FIELDS = [
 	"unknown_policy",
 	"reason_code",
 	"business_reason_template",
+	"sales_next_step_template",
 	"target_actions",
 	"conditions",
 	"status",
@@ -71,9 +75,10 @@ RULE_FIELDS = [
 
 
 def _require_admin() -> None:
-	if frappe.session.user == "Administrator":
+	user = frappe.session.user
+	if user == "Administrator" or CRM_RULE_ADMIN_ROLES.intersection(frappe.get_roles(user)):
 		return
-	frappe.throw(_("Only Administrator may manage CRM Rules."), frappe.PermissionError)
+	frappe.throw(_("Only an authorized CRM Rule administrator may manage CRM Rules."), frappe.PermissionError)
 
 
 def _require_service_identity() -> None:
@@ -157,9 +162,10 @@ def _resolve_version_name(value: str) -> str:
 	frappe.throw(_("CRM Rule Version {0} does not exist.").format(version_id), frappe.DoesNotExistError)
 
 
-def _get_version(name: str, permission_type: str = "read"):
+def _get_version(name: str, permission_type: str | None = "read"):
 	doc = frappe.get_doc("CRM Rule Version", name)
-	doc.check_permission(permission_type)
+	if permission_type:
+		doc.check_permission(permission_type)
 	return doc
 
 
@@ -167,7 +173,13 @@ def _lock_all_versions() -> None:
 	frappe.db.sql("SELECT name FROM `tabCRM Rule Version` ORDER BY name FOR UPDATE")
 
 
-def _lock_version(name: str, permission_type: str = "read"):
+def _lock_version(name: str, *, permission_type: str | None = "read"):
+	"""Lock and read a version for rule APIs.
+
+	Mutating control-plane endpoints enforce the rule-admin role before reaching
+	this helper and persist through the validated rule service. CRM Rule Version
+	intentionally remains read-only to direct DocType writes.
+	"""
 	name = _resolve_version_name(name)
 	rows = frappe.db.sql(
 		"SELECT name FROM `tabCRM Rule Version` WHERE name = %s FOR UPDATE",
@@ -179,7 +191,7 @@ def _lock_version(name: str, permission_type: str = "read"):
 	return _get_version(name, permission_type)
 
 
-def _get_settings(*, create: bool, permission_type: str = "read"):
+def _get_settings(*, create: bool, permission_type: str | None = "read"):
 	# Single DocTypes are stored in tabSingles, not in a tabCRM Rule Settings
 	# table.  Read the raw rows first so a fresh site can distinguish an
 	# uninitialized singleton from one whose pointer is intentionally empty.
@@ -187,7 +199,8 @@ def _get_settings(*, create: bool, permission_type: str = "read"):
 	if not existing and not create:
 		frappe.throw(_("CRM Rule Settings has no active rule pointer."), frappe.DoesNotExistError)
 	settings = frappe.get_single(SETTINGS_NAME)
-	settings.check_permission(permission_type)
+	if permission_type:
+		settings.check_permission(permission_type)
 	if not existing:
 		settings.pointer_revision = 0
 		with _flag("crm_rule_settings_lifecycle"):
@@ -195,8 +208,8 @@ def _get_settings(*, create: bool, permission_type: str = "read"):
 	return settings
 
 
-def _lock_settings():
-	_get_settings(create=True, permission_type="read")
+def _lock_settings(*, permission_type: str | None = "read"):
+	_get_settings(create=True, permission_type=permission_type)
 	# ``for_update`` is handled by BaseDocument through get_singles_dict for a
 	# Single DocType, locking the singleton rows used by the activation CAS.
 	return frappe.get_doc("CRM Rule Settings", SETTINGS_NAME, for_update=True)
@@ -225,6 +238,93 @@ def _assert_draft(version) -> None:
 		frappe.throw(
 			_("Only a draft CRM Rule Version can be changed. Clone an immutable snapshot first."),
 			frappe.PermissionError,
+		)
+
+
+def _lock_rule_mutation(version_name: str, expected_version_revision) -> tuple[object, object, bool]:
+	# Rule-admin authorization is checked by each API before entering this helper.
+	# CRM Rule Settings is only locked as the shared CAS boundary; it is not exposed
+	# to rule admins as a directly readable DocType.
+	settings = _lock_settings(permission_type=None)
+	version = _lock_version(version_name, permission_type=None)
+	_assert_expected_version(version, expected_version_revision)
+	if str(version.status or "").strip().lower() == "active":
+		if str(settings.active_rule_version or "") != str(version.name):
+			frappe.throw(
+				_("Only the current Active CRM Rule Version can be changed."), frappe.PermissionError
+			)
+		_assert_pointer_consistent(settings, permission_type=None)
+		return settings, version, True
+	_assert_draft(version)
+	return settings, version, False
+
+
+def _lock_rule_for_mutation(name: str, expected_version_revision):
+	version_name = frappe.db.get_value("CRM Rule", name, "rule_version")
+	if not version_name:
+		frappe.throw(_("CRM Rule {0} does not exist.").format(name), frappe.DoesNotExistError)
+	settings, version, is_active = _lock_rule_mutation(version_name, expected_version_revision)
+	# Load the rule after taking the version lock so prior API edits cannot leave this
+	# request holding stale rule values while it waits for the lock.
+	doc = frappe.get_doc("CRM Rule", name)
+	return doc, settings, version, is_active
+
+
+def _assert_rule_status(doc, is_active: bool) -> None:
+	expected_status = "active" if is_active else "draft"
+	if str(doc.status or "").strip().lower() != expected_status:
+		frappe.throw(
+			_("CRM Rule status does not match its parent version."),
+			frappe.ValidationError,
+		)
+
+
+@contextmanager
+def _active_rule_mutation_savepoint():
+	savepoint = "crm_active_rule_mutation"
+	frappe.db.savepoint(savepoint)
+	try:
+		yield
+	except Exception:
+		frappe.db.rollback(save_point=savepoint)
+		raise
+
+
+@contextmanager
+def _rule_version_lifecycle_savepoint():
+	savepoint = "crm_rule_version_lifecycle"
+	frappe.db.savepoint(savepoint)
+	try:
+		yield
+	except Exception:
+		frappe.db.rollback(save_point=savepoint)
+		raise
+
+
+@contextmanager
+def _rule_authoring(*, active: bool):
+	with _flag("crm_rule_authoring"):
+		if active:
+			with _flag("crm_rule_active_authoring"):
+				yield
+		else:
+			yield
+
+
+NON_ACTIVE_STATUSES = {"draft", "testing", "archived"}
+STATUS_TRANSITIONS = {status: NON_ACTIVE_STATUSES | {"active"} for status in NON_ACTIVE_STATUSES}
+STATUS_TRANSITIONS["active"] = {"active"}
+
+
+def _assert_status_transition(current: str, target: str) -> None:
+	current = str(current or "draft").strip().lower()
+	target = str(target or "").strip().lower()
+	if target not in STATUSES:
+		frappe.throw(_("Unsupported CRM Rule Version status."), frappe.ValidationError)
+	if target not in STATUS_TRANSITIONS.get(current, set()):
+		frappe.throw(
+			_("Invalid CRM Rule Version transition: {0} -> {1}.").format(current, target),
+			frappe.ValidationError,
 		)
 
 
@@ -264,6 +364,10 @@ def _version_payload(row, rules_count: int | None = None) -> dict:
 		"version_name": data.get("version_name") or "",
 		"description": data.get("description") or "",
 		"status": data.get("status") or "draft",
+		"is_active": str(data.get("status") or "").lower() == "active",
+		"settings_revision": int(
+			frappe.db.get_single_value(SETTINGS_NAME, "pointer_revision", cache=False) or 0
+		),
 		"group_catalog": _json_field(data.get("group_catalog"), "group_catalog", []),
 		"revision": int(data.get("revision") or 0),
 		"schema_version": data.get("schema_version") or CATALOG_SCHEMA,
@@ -271,6 +375,8 @@ def _version_payload(row, rules_count: int | None = None) -> dict:
 		"ruleset_digest": data.get("ruleset_digest"),
 		"activated_at": data.get("activated_at"),
 		"activated_by": data.get("activated_by"),
+		"archived_at": data.get("archived_at"),
+		"archived_by": data.get("archived_by"),
 		"superseded_at": data.get("superseded_at"),
 		"superseded_by": data.get("superseded_by"),
 		"change_note": data.get("change_note"),
@@ -303,6 +409,7 @@ def _rule_payload(row) -> dict:
 		"unknown_policy": normalized["unknown_policy"],
 		"reason_code": normalized["reason_code"],
 		"business_reason_template": normalized["business_reason_template"],
+		"sales_next_step_template": normalized["sales_next_step_template"],
 		"target_actions": normalized["target_actions"],
 		"conditions": normalized["conditions"],
 		"status": normalized["status"],
@@ -325,23 +432,24 @@ def _group_payloads(version) -> list[dict]:
 		code = str(row.group_code or "").strip().lower()
 		if code:
 			counts[code] = counts.get(code, 0) + 1
-	return [
-		{**group, "rule_count": counts.get(group["code"], 0)}
-		for group in groups
-	]
+	return [{**group, "rule_count": counts.get(group["code"], 0)} for group in groups]
 
 
 def _version_wire_catalog(version, *, require_stored_digest: bool = True) -> dict:
 	rows = _rule_rows(version.name)
-	if str(version.status).lower() not in {"active", "superseded"}:
-		frappe.throw(_("Only Active or Superseded versions have immutable catalogs."), frappe.PermissionError)
+	if str(version.status).lower() not in {"active", "archived"}:
+		frappe.throw(_("Only Active or Archived versions have immutable catalogs."), frappe.PermissionError)
 	if any(str(row.status or "").lower() != str(version.status).lower() for row in rows):
 		frappe.throw(_("Rule status does not match its immutable version."), frappe.ValidationError)
+	try:
+		snapshot_revision = int(version.ruleset_revision or version.revision or 0)
+	except (TypeError, ValueError):
+		frappe.throw(_("The stored CRM Rule Version snapshot revision is invalid."), frappe.ValidationError)
 	try:
 		catalog = catalog_from_rows(
 			rows,
 			version_id=version.version_id,
-			technical_revision=int(version.revision or 0),
+			technical_revision=snapshot_revision,
 			group_catalog=version.group_catalog,
 		)
 	except ValueError as exc:
@@ -418,18 +526,43 @@ def active_rule_catalog_internal(feature_scope: str | None = None) -> dict:
 	return catalog
 
 
-def _assert_pointer_consistent(settings) -> None:
-	if not settings.active_rule_version:
-		return
+def _has_activation_history(settings) -> bool:
+	if int(settings.pointer_revision or 0) > 0 or settings.active_ruleset_digest:
+		return True
+	return bool(frappe.db.exists("CRM Rule Version", {"activated_at": ["is", "set"]}))
+
+
+def _assert_pointer_consistent(
+	settings,
+	*,
+	permission_type: str | None = "read",
+	allow_uninitialized: bool = False,
+) -> dict | None:
+	active_versions = frappe.get_all(
+		"CRM Rule Version", filters={"status": "active"}, pluck="name", limit_page_length=2
+	)
+	pointer = str(settings.active_rule_version or "").strip()
+	if not pointer:
+		if active_versions:
+			frappe.throw(
+				_("An Active CRM Rule Version exists without a Settings pointer."), frappe.ValidationError
+			)
+		if not allow_uninitialized or _has_activation_history(settings):
+			frappe.throw(_("CRM Rule Settings has no active rule pointer."), frappe.ValidationError)
+		return None
+	if len(active_versions) != 1 or active_versions[0] != pointer:
+		frappe.throw(
+			_("CRM Rule Settings must point to the only Active CRM Rule Version."), frappe.ValidationError
+		)
 	try:
-		version = _get_version(settings.active_rule_version, "read")
+		version = _get_version(pointer, permission_type)
 	except Exception:
 		frappe.throw(_("CRM Rule Settings points to a missing version."), frappe.ValidationError)
 	if str(version.status or "").lower() != "active":
 		frappe.throw(_("CRM Rule Settings points to a non-active version."), frappe.ValidationError)
 	if str(settings.active_ruleset_digest or "") != str(version.ruleset_digest or ""):
 		frappe.throw(_("CRM Rule Settings pointer digest is inconsistent."), frappe.ValidationError)
-	_version_wire_catalog(version)
+	return _version_wire_catalog(version)
 
 
 def _save_draft_version(version, groups: list[dict]) -> None:
@@ -441,6 +574,91 @@ def _save_draft_version(version, groups: list[dict]) -> None:
 		version.save(ignore_permissions=True)
 
 
+def _catalog_rule_row(data: Mapping, *, name: str, revision: int) -> dict:
+	return {
+		"name": name,
+		"rule_version": data["rule_version"],
+		"rule_id": data["rule_id"],
+		"group_code": data["group_code"],
+		"rule_name": data["name"],
+		"description": data["description"],
+		"feature": data["feature"],
+		"rule_type": data["rule_type"],
+		"outcome": data["outcome"],
+		"precedence": data["precedence"],
+		"unknown_policy": data["unknown_policy"],
+		"reason_code": data["reason_code"],
+		"business_reason_template": data["business_reason_template"],
+		"sales_next_step_template": data["sales_next_step_template"],
+		"target_actions": data["target_actions"],
+		"conditions": data["conditions"],
+		"status": data["status"],
+		"enabled": data["enabled"],
+		"revision": revision,
+		"schema_version": data["schema_version"],
+	}
+
+
+def _rule_rows_with_replacement(version_name: str, rule_name: str, replacement: Mapping | None) -> list:
+	rows = []
+	found = False
+	for row in _rule_rows(version_name):
+		if row.get("name") == rule_name:
+			found = True
+			if replacement is not None:
+				rows.append(replacement)
+		else:
+			rows.append(row)
+	if not found:
+		frappe.throw(
+			_("CRM Rule {0} does not exist in this version.").format(rule_name), frappe.DoesNotExistError
+		)
+	return rows
+
+
+def _validate_active_rule_catalog(version, rows: list[Mapping], groups: list[dict]) -> dict:
+	if not rows:
+		frappe.throw(_("An Active CRM Rule Version must contain at least one rule."), frappe.ValidationError)
+	try:
+		return catalog_from_rows(
+			rows,
+			version_id=version.version_id,
+			technical_revision=int(version.revision or 0) + 1,
+			group_catalog=groups,
+		)
+	except ValueError as exc:
+		_throw_value_error(exc)
+	return {}
+
+
+def _save_active_group_catalog(version, groups: list[dict]) -> None:
+	version.group_catalog = groups
+	with _flag("crm_rule_version_active_authoring"):
+		version.save(ignore_permissions=True)
+
+
+def _save_active_rule_version(version, settings, groups: list[dict]) -> dict:
+	rows = _rule_rows(version.name)
+	catalog = _validate_active_rule_catalog(version, rows, groups)
+	next_revision = int(version.revision or 0) + 1
+	version.group_catalog = groups
+	version.revision = next_revision
+	version.ruleset_revision = str(next_revision)
+	version.ruleset_digest = catalog["ruleset_digest"]
+	with _flag("crm_rule_version_active_authoring"):
+		version.save(ignore_permissions=True)
+
+	now = frappe.utils.now_datetime()
+	settings.active_ruleset_digest = catalog["ruleset_digest"]
+	settings.pointer_revision = int(settings.pointer_revision or 0) + 1
+	settings.changed_at = now
+	settings.changed_by = frappe.session.user
+	with _flag("crm_rule_settings_lifecycle"):
+		settings.save(ignore_permissions=True)
+	_assert_pointer_consistent(settings, permission_type=None)
+	return catalog
+
+
 def _ensure_group(version, group_code: str) -> tuple[list[dict], bool]:
 	groups = _version_groups(version)
 	for group in groups:
@@ -449,7 +667,10 @@ def _ensure_group(version, group_code: str) -> tuple[list[dict], bool]:
 				frappe.throw(_("The referenced rule group is disabled."), frappe.ValidationError)
 			return groups, False
 	if len(groups) >= MAX_GROUPS:
-		frappe.throw(_("A CRM Rule Version cannot contain more than {0} groups.").format(MAX_GROUPS), frappe.ValidationError)
+		frappe.throw(
+			_("A CRM Rule Version cannot contain more than {0} groups.").format(MAX_GROUPS),
+			frappe.ValidationError,
+		)
 	groups.append(
 		{
 			"code": group_code,
@@ -473,6 +694,7 @@ def _apply_rule_data(doc, data: Mapping) -> None:
 	doc.unknown_policy = data["unknown_policy"]
 	doc.reason_code = data["reason_code"]
 	doc.business_reason_template = data["business_reason_template"]
+	doc.sales_next_step_template = data["sales_next_step_template"]
 	doc.target_actions = json.dumps(data["target_actions"], ensure_ascii=False)
 	doc.conditions = json.dumps(data["conditions"], ensure_ascii=False)
 	doc.status = data["status"]
@@ -485,6 +707,7 @@ def _apply_rule_data(doc, data: Mapping) -> None:
 def list_rule_versions(
 	status: str | None = None,
 	active_only: bool | str = False,
+	search: str | None = None,
 	start: int = 0,
 	page_length: int = 50,
 ) -> dict:
@@ -498,15 +721,30 @@ def list_rule_versions(
 		filters["status"] = status.strip().lower()
 	if _as_bool(active_only):
 		filters["status"] = "active"
+	search_value = str(search or "").strip()
+	or_filters = None
+	if search_value:
+		like = f"%{search_value}%"
+		or_filters = [
+			[field, "like", like] for field in ("name", "version_id", "version_name", "description")
+		]
 	rows = frappe.get_list(
 		"CRM Rule Version",
 		filters=filters,
+		or_filters=or_filters,
 		fields=VERSION_FIELDS,
 		start=start,
 		page_length=page_length,
 		order_by="modified desc, version_id asc",
 	)
-	total = frappe.db.count("CRM Rule Version", filters=filters)
+	total_rows = frappe.get_all(
+		"CRM Rule Version",
+		filters=filters,
+		or_filters=or_filters,
+		fields=["count(name) as total"],
+		limit_page_length=0,
+	)
+	total = int((total_rows[0].get("total") if total_rows else 0) or 0)
 	return {
 		"versions": [
 			_version_payload(row, frappe.db.count("CRM Rule", {"rule_version": row.name})) for row in rows
@@ -520,7 +758,7 @@ def list_rule_versions(
 @frappe.whitelist()
 def get_rule_version(name: str) -> dict:
 	_require_admin()
-	version = _get_version(_resolve_version_name(name))
+	version = _get_version(_resolve_version_name(name), permission_type=None)
 	payload = _version_payload(version, frappe.db.count("CRM Rule", {"rule_version": version.name}))
 	payload["groups"] = _group_payloads(version)
 	return payload
@@ -563,9 +801,20 @@ def update_rule_version(
 	version_name: str | None = None,
 	description: str | None = None,
 	group_catalog=None,
+	status: str | None = None,
+	expected_settings_revision: int | str | None = None,
+	change_note: str | None = None,
 ) -> dict:
 	_require_admin()
-	version = _lock_version(name, "write")
+	if status not in (None, ""):
+		return _update_rule_version_status(
+			name,
+			status,
+			expected_revision,
+			expected_settings_revision,
+			change_note,
+		)
+	version = _lock_version(name, permission_type=None)
 	_assert_expected_version(version, expected_revision)
 	_assert_draft(version)
 	try:
@@ -600,10 +849,10 @@ def clone_rule_version(
 	description: str | None = None,
 ) -> dict:
 	_require_admin()
-	source = _get_version(_resolve_version_name(source_name), "read")
+	source = _get_version(_resolve_version_name(source_name), permission_type=None)
 	groups = _version_groups(source)
 	rows = _rule_rows(source.name)
-	if str(source.status or "").lower() in {"active", "superseded"}:
+	if str(source.status or "").lower() in {"active", "archived"}:
 		_version_wire_catalog(source)
 	elif rows:
 		try:
@@ -656,7 +905,7 @@ def clone_rule_version(
 @frappe.whitelist()
 def list_rule_groups(version_name: str) -> dict:
 	_require_admin()
-	version = _get_version(_resolve_version_name(version_name))
+	version = _get_version(_resolve_version_name(version_name), permission_type=None)
 	return {"version_id": version.version_id, "groups": _group_payloads(version)}
 
 
@@ -671,7 +920,7 @@ def create_rule_group(
 	sort_order: int | str | None = None,
 ) -> dict:
 	_require_admin()
-	version = _lock_version(version_name, "write")
+	version = _lock_version(version_name, permission_type=None)
 	_assert_expected_version(version, expected_version_revision)
 	_assert_draft(version)
 	try:
@@ -702,7 +951,7 @@ def update_rule_group(
 	sort_order: int | str | None = None,
 ) -> dict:
 	_require_admin()
-	version = _lock_version(version_name, "write")
+	version = _lock_version(version_name, permission_type=None)
 	_assert_expected_version(version, expected_version_revision)
 	_assert_draft(version)
 	groups = _version_groups(version)
@@ -744,7 +993,7 @@ def update_rule_group(
 @frappe.whitelist(methods=["DELETE", "POST"])
 def delete_rule_group(version_name: str, code: str, expected_version_revision: int | str) -> dict:
 	_require_admin()
-	version = _lock_version(version_name, "write")
+	version = _lock_version(version_name, permission_type=None)
 	_assert_expected_version(version, expected_version_revision)
 	_assert_draft(version)
 	code = str(code or "").strip().lower()
@@ -766,6 +1015,8 @@ def list_rules(
 	start: int = 0,
 	page_length: int = 50,
 	feature_scope: str | None = None,
+	rule_type: str | None = None,
+	gate_outcome: str | None = None,
 ) -> dict:
 	_require_admin()
 	feature_scope = _validate_feature_scope(feature_scope)
@@ -780,30 +1031,37 @@ def list_rules(
 		filters["group_code"] = rule_group.strip().lower()
 	if status:
 		filters["status"] = status.strip().lower()
+	if rule_type:
+		filters["rule_type"] = str(rule_type).strip().upper()
+	if gate_outcome:
+		filters["outcome"] = str(gate_outcome).strip().upper()
+	if feature_scope and feature_scope != "all":
+		filters["feature"] = ["in", [feature_scope, "all"]]
+	search_value = str(search or "").strip()
+	or_filters = None
+	if search_value:
+		like = f"%{search_value}%"
+		or_filters = [
+			[field, "like", like]
+			for field in ("rule_id", "rule_name", "group_code", "description", "target_actions")
+		]
 	rows = frappe.get_all(
 		"CRM Rule",
 		filters=filters,
+		or_filters=or_filters,
 		fields=RULE_FIELDS,
-		limit_page_length=MAX_RULES,
+		start=start,
+		limit_page_length=page_length,
 		order_by="precedence desc, group_code asc, rule_id asc",
 	)
-	if feature_scope and feature_scope != "all":
-		rows = [
-			row
-			for row in rows
-			if _rule_payload(row)["feature"] in {feature_scope, "all"}
-		]
-	query = str(search or "").strip().lower()
-	if query:
-		rows = [
-			row
-			for row in rows
-			if query in str(row.rule_id or "").lower()
-			or query in str(row.rule_name or "").lower()
-			or query in str(row.group_code or "").lower()
-		]
-	total = len(rows)
-	rows = rows[start : start + page_length]
+	total_rows = frappe.get_all(
+		"CRM Rule",
+		filters=filters,
+		or_filters=or_filters,
+		fields=["count(name) as total"],
+		limit_page_length=0,
+	)
+	total = int((total_rows[0].get("total") if total_rows else 0) or 0)
 	return {
 		"rules": [_rule_payload(row) for row in rows],
 		"total": total,
@@ -829,150 +1087,190 @@ def _rule_input_from_doc(doc) -> dict:
 @frappe.whitelist(methods=["POST"])
 def create_rule(version_name: str, expected_version_revision: int | str, **values) -> dict:
 	_require_admin()
-	version = _lock_version(version_name, "write")
-	_assert_expected_version(version, expected_version_revision)
-	_assert_draft(version)
+	settings, version, is_active = _lock_rule_mutation(version_name, expected_version_revision)
 	values.setdefault("enabled", True)
 	try:
-		data = normalize_rule_data({**values, "rule_version": version.version_id, "status": "draft", "revision": 0})
+		data = normalize_rule_data(
+			{
+				**values,
+				"rule_version": version.version_id,
+				"status": "active" if is_active else "draft",
+				"revision": 0,
+			}
+		)
 	except ValueError as exc:
 		_throw_value_error(exc)
 	groups, added_group = _ensure_group(version, data["group_code"])
-	if added_group:
-		_save_draft_version(version, groups)
 	doc = frappe.new_doc("CRM Rule")
 	_apply_rule_data(doc, data)
-	with _flag("crm_rule_authoring"):
-		doc.insert(ignore_permissions=True)
-	if not added_group:
-		_save_draft_version(version, groups)
+	if is_active:
+		candidate = _catalog_rule_row(data, name=f"new:{data['rule_id']}", revision=0)
+		rows = [*_rule_rows(version.name), candidate]
+		_validate_active_rule_catalog(version, rows, groups)
+		with _active_rule_mutation_savepoint():
+			if added_group:
+				_save_active_group_catalog(version, groups)
+			with _rule_authoring(active=True):
+				doc.insert(ignore_permissions=True)
+			_save_active_rule_version(version, settings, groups)
+	else:
+		if added_group:
+			_save_draft_version(version, groups)
+		with _rule_authoring(active=False):
+			doc.insert(ignore_permissions=True)
+		if not added_group:
+			_save_draft_version(version, groups)
 	return _rule_payload(doc)
 
 
 @frappe.whitelist(methods=["POST", "PUT"])
 def update_rule(name: str, expected_version_revision: int | str, **values) -> dict:
 	_require_admin()
-	doc = frappe.get_doc("CRM Rule", name)
-	version = _lock_version(doc.rule_version, "write")
-	_assert_expected_version(version, expected_version_revision)
-	_assert_draft(version)
+	doc, settings, version, is_active = _lock_rule_for_mutation(name, expected_version_revision)
+	_assert_rule_status(doc, is_active)
 	current = _rule_input_from_doc(doc)
 	if "rule_id" in values and str(values["rule_id"]).strip().upper() != str(doc.rule_id).upper():
 		frappe.throw(_("CRM Rule ID cannot be changed after creation."), frappe.ValidationError)
 	values.pop("rule_id", None)
 	current.update(values)
 	current["rule_version"] = version.version_id
-	current["status"] = "draft"
+	current["status"] = "active" if is_active else "draft"
 	current["revision"] = int(doc.revision or 0)
 	try:
 		data = normalize_rule_data(current)
 	except ValueError as exc:
 		_throw_value_error(exc)
+	if is_active:
+		data["revision"] = int(doc.revision or 0) + 1
 	groups, added_group = _ensure_group(version, data["group_code"])
-	if added_group:
-		_save_draft_version(version, groups)
-	_apply_rule_data(doc, data)
-	# The admin command is the only authoring seam. Keep the same flag active
-	# for the ORM save so the immutable-document guard does not mistake this
-	# intentional update for a direct edit.
-	previous = getattr(frappe.flags, "crm_rule_authoring", None)
-	frappe.flags.crm_rule_authoring = True
-	try:
-		doc.save(ignore_permissions=True)
-	finally:
-		if previous is None:
-			try:
-				delattr(frappe.flags, "crm_rule_authoring")
-			except AttributeError:
-				pass
-		else:
-			frappe.flags.crm_rule_authoring = previous
-	if not added_group:
-		_save_draft_version(version, groups)
+	if is_active:
+		candidate = _catalog_rule_row(data, name=doc.name, revision=data["revision"])
+		rows = _rule_rows_with_replacement(version.name, doc.name, candidate)
+		_validate_active_rule_catalog(version, rows, groups)
+		with _active_rule_mutation_savepoint():
+			if added_group:
+				_save_active_group_catalog(version, groups)
+			_apply_rule_data(doc, data)
+			with _rule_authoring(active=True):
+				doc.save(ignore_permissions=True)
+			_save_active_rule_version(version, settings, groups)
+	else:
+		if added_group:
+			_save_draft_version(version, groups)
+		_apply_rule_data(doc, data)
+		with _rule_authoring(active=False):
+			doc.save(ignore_permissions=True)
+		if not added_group:
+			_save_draft_version(version, groups)
+	return _rule_payload(doc)
+
+
+@frappe.whitelist(methods=["PUT", "POST"])
+def set_rule_enabled(name: str, expected_version_revision: int | str, enabled: bool | str) -> dict:
+	"""Toggle a rule in a Draft or current Active version."""
+	_require_admin()
+	doc, settings, version, is_active = _lock_rule_for_mutation(name, expected_version_revision)
+	_assert_rule_status(doc, is_active)
+	next_enabled = _as_bool(enabled)
+	if _as_bool(doc.enabled) == next_enabled:
+		return _rule_payload(doc)
+	next_revision = int(doc.revision or 0) + 1
+	if is_active:
+		candidate = _rule_input_from_doc(doc)
+		candidate["enabled"] = int(next_enabled)
+		candidate["revision"] = next_revision
+		rows = _rule_rows_with_replacement(version.name, doc.name, candidate)
+		_validate_active_rule_catalog(version, rows, _version_groups(version))
+		with _active_rule_mutation_savepoint():
+			doc.enabled = int(next_enabled)
+			doc.revision = next_revision
+			with _rule_authoring(active=True):
+				doc.save(ignore_permissions=True)
+			_save_active_rule_version(version, settings, _version_groups(version))
+		return _rule_payload(doc)
+
+	frappe.db.set_value(
+		"CRM Rule",
+		doc.name,
+		{"enabled": int(next_enabled), "revision": next_revision},
+		update_modified=True,
+	)
+	_save_draft_version(version, _version_groups(version))
+	doc.enabled = int(next_enabled)
+	doc.revision = next_revision
 	return _rule_payload(doc)
 
 
 @frappe.whitelist(methods=["DELETE", "POST"])
 def delete_draft_rule(name: str, expected_version_revision: int | str) -> dict:
 	_require_admin()
-	doc = frappe.get_doc("CRM Rule", name)
-	version = _lock_version(doc.rule_version, "write")
-	_assert_expected_version(version, expected_version_revision)
-	_assert_draft(version)
-	if doc.status != "draft":
-		frappe.throw(_("Only draft CRM Rules can be deleted."), frappe.PermissionError)
-	with _flag("crm_rule_authoring"):
-		doc.delete(ignore_permissions=True)
-	_save_draft_version(version, _version_groups(version))
+	doc, settings, version, is_active = _lock_rule_for_mutation(name, expected_version_revision)
+	_assert_rule_status(doc, is_active)
+	groups = _version_groups(version)
+	if is_active:
+		rows = _rule_rows_with_replacement(version.name, doc.name, None)
+		_validate_active_rule_catalog(version, rows, groups)
+		with _active_rule_mutation_savepoint():
+			with _rule_authoring(active=True):
+				doc.delete(ignore_permissions=True)
+			_save_active_rule_version(version, settings, groups)
+	else:
+		with _rule_authoring(active=False):
+			doc.delete(ignore_permissions=True)
+		_save_draft_version(version, groups)
 	return {"name": name, "deleted": True, "version_id": version.version_id, "revision": version.revision}
 
 
-@frappe.whitelist(methods=["POST"])
-def activate_rule_version(
-	name: str,
-	expected_settings_revision: int | str,
-	expected_version_revision: int | str,
-	change_note: str | None = None,
-) -> dict:
-	"""Atomically make a draft or known-good superseded snapshot active."""
-	_require_admin()
-	settings = _lock_settings()
-	_lock_all_versions()
-	version = _lock_version(name, "write")
-	_assert_expected_settings(settings, expected_settings_revision)
-	_assert_expected_version(version, expected_version_revision)
-	_assert_pointer_consistent(settings)
+def _activate_locked_rule_version(version, settings, note: str) -> dict:
 	status = str(version.status or "").strip().lower()
-	if status == "active":
-		frappe.throw(_("The selected CRM Rule Version is already active."), frappe.ValidationError)
-	if status not in {"draft", "superseded"}:
-		frappe.throw(_("Only Draft or Superseded versions can be activated."), frappe.ValidationError)
-	note = str(change_note or "").strip()
-	if len(note) > 2000:
-		frappe.throw(_("change_note cannot exceed 2000 characters."), frappe.ValidationError)
+	_assert_status_transition(status, "active")
 	rows = _rule_rows(version.name)
-	if status == "draft":
-		if not rows:
-			frappe.throw(_("A CRM Rule Version must contain at least one rule before activation."), frappe.ValidationError)
-		try:
-			catalog = catalog_from_rows(
-				rows,
-				version_id=version.version_id,
-				technical_revision=int(version.revision or 0) + 1,
-				group_catalog=version.group_catalog,
-			)
-		except ValueError as exc:
-			_throw_value_error(exc)
-		next_revision = int(version.revision or 0) + 1
-		ruleset_revision = str(next_revision)
-	else:
-		catalog = _version_wire_catalog(version)
-		next_revision = int(version.revision or 0)
-		ruleset_revision = str(version.ruleset_revision or next_revision)
+	if not rows:
+		frappe.throw(
+			_("A CRM Rule Version must contain at least one rule before activation."), frappe.ValidationError
+		)
+	try:
+		catalog = catalog_from_rows(
+			rows,
+			version_id=version.version_id,
+			technical_revision=int(version.revision or 0) + 1,
+			group_catalog=version.group_catalog,
+		)
+	except ValueError as exc:
+		_throw_value_error(exc)
+	next_revision = int(version.revision or 0) + 1
 	now = frappe.utils.now_datetime()
-	for old_name in frappe.get_all("CRM Rule Version", filters={"status": "active"}, pluck="name"):
+	for old_version in frappe.get_all(
+		"CRM Rule Version", filters={"status": "active"}, fields=["name", "revision"]
+	):
+		old_name = old_version.name
 		if old_name == version.name:
 			continue
 		frappe.db.set_value(
 			"CRM Rule Version",
 			old_name,
 			{
-				"status": "superseded",
+				"status": "archived",
+				"revision": int(old_version.revision or 0) + 1,
+				"archived_at": now,
+				"archived_by": frappe.session.user,
 				"superseded_at": now,
 				"superseded_by": frappe.session.user,
-				"change_note": note or f"Superseded by {version.version_id}.",
+				"change_note": note or f"Archived by activation of {version.version_id}.",
 			},
 			update_modified=False,
 		)
 		for old_rule in frappe.get_all(
 			"CRM Rule", filters={"rule_version": old_name, "status": "active"}, pluck="name"
 		):
-			frappe.db.set_value("CRM Rule", old_rule, "status", "superseded", update_modified=False)
+			frappe.db.set_value("CRM Rule", old_rule, "status", "archived", update_modified=False)
 	for row in rows:
-		values = {"status": "active"}
-		if status == "draft":
-			values["revision"] = int(row.revision or 0) + 1
-		frappe.db.set_value("CRM Rule", row.name, values, update_modified=False)
+		frappe.db.set_value(
+			"CRM Rule",
+			row.name,
+			{"status": "active", "revision": int(row.revision or 0) + 1},
+			update_modified=False,
+		)
 	frappe.db.set_value(
 		"CRM Rule Version",
 		version.name,
@@ -980,10 +1278,12 @@ def activate_rule_version(
 			"status": "active",
 			"revision": next_revision,
 			"schema_version": CATALOG_SCHEMA,
-			"ruleset_revision": ruleset_revision,
+			"ruleset_revision": str(next_revision),
 			"ruleset_digest": catalog["ruleset_digest"],
 			"activated_at": now,
 			"activated_by": frappe.session.user,
+			"archived_at": None,
+			"archived_by": None,
 			"superseded_at": None,
 			"superseded_by": None,
 			"change_note": note or None,
@@ -997,7 +1297,93 @@ def activate_rule_version(
 	settings.changed_by = frappe.session.user
 	with _flag("crm_rule_settings_lifecycle"):
 		settings.save(ignore_permissions=True)
-	return _version_payload(_get_version(version.name), len(rows))
+	return _version_payload(_get_version(version.name, permission_type=None), len(rows))
+
+
+def _update_rule_version_status(
+	name: str,
+	target_status: str,
+	expected_revision: int | str | None,
+	expected_settings_revision: int | str | None,
+	change_note: str | None,
+) -> dict:
+	target = str(target_status or "").strip().lower()
+	if target not in STATUSES:
+		frappe.throw(_("Unsupported CRM Rule Version status."), frappe.ValidationError)
+	note = str(change_note or "").strip()
+	if len(note) > 2000:
+		frappe.throw(_("change_note cannot exceed 2000 characters."), frappe.ValidationError)
+	settings = _lock_settings(permission_type=None)
+	_lock_all_versions()
+	version = _lock_version(name, permission_type=None)
+	_assert_expected_version(version, expected_revision)
+	current = str(version.status or "draft").strip().lower()
+	_assert_status_transition(current, target)
+	_assert_pointer_consistent(settings, permission_type=None, allow_uninitialized=True)
+	if target == "active":
+		_assert_expected_settings(settings, expected_settings_revision)
+	if current == target:
+		return _version_payload(version, frappe.db.count("CRM Rule", {"rule_version": version.name}))
+
+	rows = _rule_rows(version.name)
+	if target == "testing":
+		if not rows:
+			frappe.throw(
+				_("A CRM Rule Version must contain at least one rule before testing."),
+				frappe.ValidationError,
+			)
+		try:
+			catalog_from_rows(
+				rows,
+				version_id=version.version_id,
+				technical_revision=int(version.revision or 0) + 1,
+				group_catalog=version.group_catalog,
+			)
+		except ValueError as exc:
+			_throw_value_error(exc)
+
+	with _rule_version_lifecycle_savepoint():
+		if target == "active":
+			return _activate_locked_rule_version(version, settings, note)
+
+		now = frappe.utils.now_datetime()
+		for row in rows:
+			frappe.db.set_value("CRM Rule", row.name, "status", target, update_modified=False)
+		frappe.db.set_value(
+			"CRM Rule Version",
+			version.name,
+			{
+				"status": target,
+				"revision": int(version.revision or 0) + 1,
+				"ruleset_revision": None,
+				"ruleset_digest": None,
+				"archived_at": now if target == "archived" else None,
+				"archived_by": frappe.session.user if target == "archived" else None,
+				"superseded_at": None,
+				"superseded_by": None,
+				"change_note": note or None,
+			},
+			update_modified=True,
+		)
+		return _version_payload(_get_version(version.name, permission_type=None), len(rows))
+
+
+@frappe.whitelist(methods=["POST"])
+def activate_rule_version(
+	name: str,
+	expected_settings_revision: int | str,
+	expected_version_revision: int | str,
+	change_note: str | None = None,
+) -> dict:
+	"""Activate any valid non-Active version while atomically archiving the prior Active."""
+	_require_admin()
+	return _update_rule_version_status(
+		name,
+		"active",
+		expected_version_revision,
+		expected_settings_revision,
+		change_note,
+	)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -1024,13 +1410,9 @@ def publish_rule_version(
 
 @frappe.whitelist(methods=["POST"])
 def archive_rule_version(name: str, expected_revision: int | str, reason: str | None = None) -> dict:
-	"""Compatibility endpoint retained as an explicit no-op rejection."""
+	"""Compatibility endpoint for archiving a non-Active version."""
 	_require_admin()
-	_lock_version(name, "read")
-	frappe.throw(
-		_("Archive is retired. Activate another Draft or Superseded snapshot instead."),
-		frappe.PermissionError,
-	)
+	return _update_rule_version_status(name, "archived", expected_revision, None, reason)
 
 
 @frappe.whitelist()
@@ -1055,25 +1437,23 @@ def get_active_rule_catalog(feature_scope: str | None = None) -> dict:
 	_require_service_identity()
 	_validate_feature_scope(feature_scope)
 	settings = _get_settings(create=False, permission_type="read")
-	if not settings.active_rule_version or not settings.active_ruleset_digest:
+	catalog = _assert_pointer_consistent(settings, permission_type="read")
+	if not catalog:
 		frappe.throw(_("CRM Rule Settings has no complete active snapshot."), frappe.ValidationError)
-	version = _get_version(settings.active_rule_version, "read")
-	if str(version.status or "").lower() != "active":
-		frappe.throw(_("CRM Rule Settings points to a non-active snapshot."), frappe.ValidationError)
-	if str(version.ruleset_digest or "") != str(settings.active_ruleset_digest):
-		frappe.throw(_("CRM Rule Settings pointer digest does not match the version."), frappe.ValidationError)
-	return _version_wire_catalog(version)
+	return catalog
 
 
 @frappe.whitelist()
 def get_rule_catalog(version: str, expected_digest: str) -> dict:
-	"""Return one immutable Active/Superseded snapshot by exact digest."""
+	"""Return one immutable Active/Archived snapshot by exact digest."""
 	_require_service_identity()
 	if not isinstance(expected_digest, str) or not HEX_DIGEST.fullmatch(expected_digest):
 		frappe.throw(_("expected_digest must be a lowercase SHA-256 digest."), frappe.ValidationError)
 	doc = _get_version(_resolve_version_name(version), "read")
-	if str(doc.status or "").lower() not in {"active", "superseded"}:
-		frappe.throw(_("Draft rule catalogs cannot be used for durable work."), frappe.PermissionError)
+	if str(doc.status or "").lower() not in {"active", "archived"}:
+		frappe.throw(
+			_("Draft or Testing rule catalogs cannot be used for durable work."), frappe.PermissionError
+		)
 	if str(doc.ruleset_digest or "") != expected_digest:
 		frappe.throw(_("The requested CRM Rule Version digest does not match."), frappe.ValidationError)
 	catalog = _version_wire_catalog(doc)

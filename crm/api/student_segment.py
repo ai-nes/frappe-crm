@@ -1,5 +1,6 @@
 import frappe
 
+from crm.api._pagination import parse_pagination
 from crm.fcrm import student_segments as service
 from crm.fcrm.segment_rules import FIELDS, OPERATORS, fail, integer
 
@@ -75,14 +76,37 @@ def get_segment_by_code(segment_code):
 	return get_segment(segments[0]["name"])
 
 
+def _safe_member_count(segment):
+	"""Keep one malformed legacy segment from taking down the whole list."""
+	if not segment.get("filters"):
+		return 0
+	try:
+		return service.preview(segment=segment["name"], start=0, page_length=1)["total"]
+	except frappe.ValidationError as exc:
+		frappe.logger("crm").warning(
+			"CRM Segment %s has invalid stored filters; returning a zero member count: %s",
+			segment["name"],
+			exc,
+		)
+		return 0
+
+
 @frappe.whitelist()
-def list_segments(status=None, category=None, start=0, page_length=20):
+def list_segments(status=None, category=None, start=0, page_length=20, search=None):
 	filters = {k: v for k, v in {"status": status, "category": category}.items() if v}
 	start = integer(start, "start")
 	page_length = integer(page_length, "page_length", maximum=100) or 20
+	search_value = str(search or "").strip()
+	or_filters = None
+	if search_value:
+		like = f"%{search_value}%"
+		or_filters = [
+			[field, "like", like] for field in ("name", "segment_code", "title", "purpose", "owner")
+		]
 	segments = frappe.get_list(
 		"CRM Segment",
 		filters=filters,
+		or_filters=or_filters,
 		fields=[
 			"name",
 			"segment_code",
@@ -103,12 +127,42 @@ def list_segments(status=None, category=None, start=0, page_length=20):
 		limit_page_length=page_length,
 	)
 	for segment in segments:
-		segment["member_count"] = (
-			service.preview(segment=segment["name"], start=0, page_length=1)["total"]
-			if segment.get("filters")
-			else 0
-		)
+		segment["member_count"] = _safe_member_count(segment)
 	return segments
+
+
+@frappe.whitelist()
+def list_segments_page(status=None, category=None, start=0, page_length=20, search=None):
+	"""Return a paginated segment page with a total for Admin list views."""
+	start, page_length = parse_pagination(start, page_length)
+	filters = {k: v for k, v in {"status": status, "category": category}.items() if v}
+	segments = list_segments(
+		status=status,
+		category=category,
+		start=start,
+		page_length=page_length,
+		search=search,
+	)
+	search_value = str(search or "").strip()
+	or_filters = None
+	if search_value:
+		like = f"%{search_value}%"
+		or_filters = [
+			[field, "like", like] for field in ("name", "segment_code", "title", "purpose", "owner")
+		]
+	count_rows = frappe.get_list(
+		"CRM Segment",
+		filters=filters,
+		or_filters=or_filters,
+		fields=["count(name) as total"],
+		limit_page_length=0,
+	)
+	return {
+		"segments": segments,
+		"total": int((count_rows[0].get("total") if count_rows else 0) or 0),
+		"start": start,
+		"page_length": page_length,
+	}
 
 
 def _analysis_segment_record(segment, member_count):
@@ -166,7 +220,15 @@ def _analysis_segments():
 	for row in rows:
 		doc = frappe.get_doc("CRM Segment", row["name"])
 		code = row.get("segment_code") or row["name"]
-		member_count = service.member_count(doc)
+		try:
+			member_count = service.member_count(doc)
+		except frappe.ValidationError as exc:
+			frappe.logger("crm").warning(
+				"CRM Segment %s has invalid stored filters; excluding it from analysis counts: %s",
+				doc.name,
+				exc,
+			)
+			member_count = 0
 		record = _analysis_segment_record(row, member_count)
 		records.append(record)
 		docs_by_code[code] = doc
@@ -175,9 +237,7 @@ def _analysis_segments():
 
 def _overlap_cells(selected, docs_by_code):
 	queries = {
-		segment["segment_code"]: service.membership_query(
-			docs_by_code[segment["segment_code"]]
-		)
+		segment["segment_code"]: service.membership_query(docs_by_code[segment["segment_code"]])
 		for segment in selected
 	}
 	counts = {}
@@ -230,16 +290,14 @@ def get_segment_analysis(selected_segment_codes=None):
 		"selected_segments": selected,
 		"overlap": {"cells": list(_overlap_cells(selected, docs_by_code))},
 		"attention": [
-			segment
-			for segment in segments
-			if segment["status"] == "active" and segment["member_count"] == 0
+			segment for segment in segments if segment["status"] == "active" and segment["member_count"] == 0
 		],
 	}
 
 
 @frappe.whitelist()
-def preview_segment(segment=None, filters=None, start=0, page_length=20):
-	return service.preview(segment, filters, start, page_length)
+def preview_segment(segment=None, filters=None, start=0, page_length=20, search=None):
+	return service.preview(segment, filters, start, page_length, search=search)
 
 
 @frappe.whitelist()

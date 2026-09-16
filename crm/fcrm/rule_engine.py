@@ -10,6 +10,8 @@ from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
+from crm.fcrm.action_type_catalog import ACTION_TYPE_CATALOG
+
 RULE_SCHEMA_VERSION = "rule-catalog"
 CATALOG_SCHEMA = RULE_SCHEMA_VERSION
 RUNTIME_FEATURES = (
@@ -24,7 +26,7 @@ CATALOG_FEATURES = frozenset(RUNTIME_FEATURES)
 RULE_TYPES = frozenset({"GUARDRAIL", "ELIGIBILITY", "PREREQUISITE", "MODIFIER", "RESOLUTION"})
 GATE_OUTCOMES = frozenset({"PASS", "WAIT", "STOP", "DIRECT", "ESCALATE"})
 OUTCOMES = GATE_OUTCOMES
-STATUSES = frozenset({"draft", "active", "superseded"})
+STATUSES = frozenset({"draft", "testing", "active", "archived"})
 OPERATORS = frozenset(
 	{
 		"eq",
@@ -51,19 +53,21 @@ GROUP_CODE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
 REASON_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{2,63}$")
 TEMPLATE_TOKEN_PATTERN = re.compile(r"\{([a-z][a-z0-9_]*)\}")
 SAFE_TEMPLATE_TOKENS = frozenset({"action", "fact_label", "rule_name"})
+DEFAULT_SALES_NEXT_STEP = "Chưa có bước tiếp theo được xác định."
 PII_LITERAL_PATTERNS = (
 	re.compile(r"(?i)\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b"),
 	re.compile(r"(?<!\d)\+?\d[\d\s().-]{6,}\d(?!\d)"),
 )
 MAX_CONDITION_DEPTH = 8
 MAX_CONDITION_NODES = 50
-MAX_TARGET_ACTIONS = 20
+MAX_TARGET_ACTIONS = 30
 MAX_RULES = 500
 MAX_GROUPS = 50
 EXPLANATION_FIELDS = frozenset(
 	{
 		"reason_codes",
 		"business_reason",
+		"sales_next_step",
 		"affected_actions",
 		"matched_rule_ids",
 		"rule_version",
@@ -143,6 +147,462 @@ FACT_DESCRIPTORS = (
 		"consumers": ["nba", "copilot"],
 	},
 	{
+		"fact_id": "student.stage",
+		"feature": "nba",
+		"producer": "CRM Student.student_stage",
+		"authority": "frappe",
+		"value_type": "string",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["student_360", "nba", "copilot"],
+	},
+	{
+		"fact_id": "student.privacy_restricted",
+		"feature": "nba",
+		"producer": "privacy projection",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "STOP",
+		"pii_class": "restricted",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "contact.consent_state",
+		"feature": "nba",
+		"producer": "append-only consent events",
+		"authority": "frappe",
+		"value_type": "string",
+		"revision_kind": "event_revision",
+		"freshness": "event_bound",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "contact.recipient_bound",
+		"feature": "nba",
+		"producer": "contactability projection",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "contact.call_allowed",
+		"feature": "nba",
+		"producer": "consent scope projection",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "contact.email_allowed",
+		"feature": "nba",
+		"producer": "consent scope projection",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "contact.message_allowed",
+		"feature": "nba",
+		"producer": "consent scope projection",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "contact.email_bounced",
+		"feature": "nba",
+		"producer": "CRM Student.email_bounced",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "application.exists",
+		"feature": "nba",
+		"producer": "Application projection",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "application.status",
+		"feature": "nba",
+		"producer": "Application projection",
+		"authority": "frappe",
+		"value_type": "string",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "application.completeness",
+		"feature": "nba",
+		"producer": "document counters",
+		"authority": "frappe",
+		"value_type": "string",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "application.missing_count",
+		"feature": "nba",
+		"producer": "document counters",
+		"authority": "frappe",
+		"value_type": "number",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "application.days_to_deadline",
+		"feature": "nba",
+		"producer": "application deadline projection",
+		"authority": "frappe",
+		"value_type": "number",
+		"revision_kind": "source_revision",
+		"freshness": "bounded",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "assessment.state",
+		"feature": "nba",
+		"producer": "CRM Student Assessment",
+		"authority": "frappe",
+		"value_type": "string",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "assessment.interest",
+		"feature": "nba",
+		"producer": "CRM Student Assessment",
+		"authority": "frappe",
+		"value_type": "string",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "assessment.fit",
+		"feature": "nba",
+		"producer": "CRM Student Assessment",
+		"authority": "frappe",
+		"value_type": "string",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "assessment.primary_barrier",
+		"feature": "nba",
+		"producer": "CRM Student Assessment",
+		"authority": "frappe",
+		"value_type": "string",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "academic.gpa_quality",
+		"feature": "nba",
+		"producer": "academic projection",
+		"authority": "frappe",
+		"value_type": "string",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "score.freshness",
+		"feature": "nba",
+		"producer": "score projection",
+		"authority": "frappe",
+		"value_type": "string",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "activity.has_contact_history",
+		"feature": "nba",
+		"producer": "latest Interaction",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "activity.days_since_last_contact",
+		"feature": "nba",
+		"producer": "latest Interaction",
+		"authority": "frappe",
+		"value_type": "number",
+		"revision_kind": "source_revision",
+		"freshness": "bounded",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "activity.consecutive_failures",
+		"feature": "nba",
+		"producer": "Interaction/Outcome history",
+		"authority": "frappe",
+		"value_type": "number",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "activity.work_in_flight",
+		"feature": "nba",
+		"producer": "active Action Item",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "sla.state",
+		"feature": "nba",
+		"producer": "Student SLA evidence",
+		"authority": "frappe",
+		"value_type": "string",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "derived",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "requested_action.channel",
+		"feature": "nba",
+		"producer": "CRM Action.default_channel",
+		"authority": "frappe",
+		"value_type": "string",
+		"revision_kind": "snapshot_digest",
+		"freshness": "bounded",
+		"unknown_policy": "WAIT",
+		"pii_class": "none",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "requested_action.in_candidate_set",
+		"feature": "nba",
+		"producer": "eligible action set snapshot",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "snapshot_digest",
+		"freshness": "bounded",
+		"unknown_policy": "WAIT",
+		"pii_class": "none",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "requested_action.enabled",
+		"feature": "nba",
+		"producer": "CRM Action",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "none",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "requested_action.effective",
+		"feature": "nba",
+		"producer": "CRM Action",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "bounded",
+		"unknown_policy": "WAIT",
+		"pii_class": "none",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "requested_action.actor_allowed",
+		"feature": "nba",
+		"producer": "governed action projection",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "none",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "requested_action.requires_approval",
+		"feature": "nba",
+		"producer": "CRM Action",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "none",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "requested_action.approval_state",
+		"feature": "nba",
+		"producer": "approval projection",
+		"authority": "frappe",
+		"value_type": "string",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "none",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "requested_action.requires_parent_authority",
+		"feature": "nba",
+		"producer": "CRM Action",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "none",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "requested_action.parent_authority_valid",
+		"feature": "nba",
+		"producer": "parent authority projection",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "none",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "requested_action.academic_eligible",
+		"feature": "nba",
+		"producer": "action constraint projection",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "none",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "requested_action.duplicate_active",
+		"feature": "nba",
+		"producer": "Action Item history",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "current",
+		"unknown_policy": "WAIT",
+		"pii_class": "none",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "requested_action.recently_completed",
+		"feature": "nba",
+		"producer": "Decision/Action history",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "bounded",
+		"unknown_policy": "WAIT",
+		"pii_class": "none",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "requested_action.time_allowed",
+		"feature": "nba",
+		"producer": "action timing projection",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "source_revision",
+		"freshness": "bounded",
+		"unknown_policy": "WAIT",
+		"pii_class": "none",
+		"consumers": ["nba"],
+	},
+	{
+		"fact_id": "requested_action.alternate_message_available",
+		"feature": "nba",
+		"producer": "candidate set + consent",
+		"authority": "frappe",
+		"value_type": "boolean",
+		"revision_kind": "snapshot_digest",
+		"freshness": "bounded",
+		"unknown_policy": "WAIT",
+		"pii_class": "none",
+		"consumers": ["nba"],
+	},
+	{
 		"fact_id": "copilot.evidence_state",
 		"feature": "copilot",
 		"producer": "crm-agents",
@@ -163,8 +623,15 @@ FACT_CATALOG = {
 	for item in FACT_DESCRIPTORS
 }
 
-ACTION_CATALOG = ("CALL", "SEND_EMAIL", "SEND_ZALO", "CREATE_TASK", "SCHEDULE_MEETING")
-ACTION_CODES = frozenset(ACTION_CATALOG)
+# The CRM Action taxonomy is the producer-owned source of truth.  Rule effects
+# may target a bounded subset of it, but the catalog must not silently narrow
+# valid actions to the smaller MVP subset used by early rule fixtures.
+ACTION_CATALOG = tuple(code for code, _display_name, _category in ACTION_TYPE_CATALOG)
+# ``SCHEDULE_MEETING`` exists in the first rule-catalog fixtures but is not a
+# canonical CRM Action Type. Accept it only as a read-compatible wire value;
+# new authoring and CRM Action records remain bound to the 79-code catalog.
+LEGACY_ACTION_CODES = frozenset({"SCHEDULE_MEETING"})
+ACTION_CODES = frozenset(ACTION_CATALOG) | LEGACY_ACTION_CODES
 
 SURFACE_OUTCOME_MAPPINGS = tuple(
 	{
@@ -173,7 +640,7 @@ SURFACE_OUTCOME_MAPPINGS = tuple(
 		"status": status,
 		"disposition": disposition,
 		"requires_revisit": requires_revisit,
-		"explanation_projection": ["reason_codes", "business_reason"],
+		"explanation_projection": ["reason_codes", "business_reason", "sales_next_step"],
 		"digest_fence": "ruleset_digest",
 	}
 	for surface, values in (
@@ -433,18 +900,26 @@ def _conditions_to_ast(conditions: Sequence[Mapping[str, Any]]) -> dict[str, Any
 	return {"all": leaves}
 
 
-def _validate_business_reason(template: Any) -> str:
-	template = _text(template, "business_reason_template", max_length=240)
+def _validate_template(template: Any, fieldname: str) -> str:
+	template = _text(template, fieldname, max_length=240)
 	if any(ord(char) < 32 for char in template):
-		raise ValueError("business_reason_template cannot contain control characters.")
+		raise ValueError(f"{fieldname} cannot contain control characters.")
 	if any(pattern.search(template) for pattern in PII_LITERAL_PATTERNS):
-		raise ValueError("business_reason_template cannot contain a literal email address or phone number.")
+		raise ValueError(f"{fieldname} cannot contain a literal email address or phone number.")
 	tokens = TEMPLATE_TOKEN_PATTERN.findall(template)
 	if any(token not in SAFE_TEMPLATE_TOKENS for token in tokens):
-		raise ValueError("business_reason_template contains an unsupported token.")
+		raise ValueError(f"{fieldname} contains an unsupported token.")
 	if "{" in TEMPLATE_TOKEN_PATTERN.sub("", template) or "}" in TEMPLATE_TOKEN_PATTERN.sub("", template):
-		raise ValueError("business_reason_template has malformed interpolation.")
+		raise ValueError(f"{fieldname} has malformed interpolation.")
 	return template
+
+
+def _validate_business_reason(template: Any) -> str:
+	return _validate_template(template, "business_reason_template")
+
+
+def _validate_sales_next_step(template: Any) -> str:
+	return _validate_template(template, "sales_next_step_template")
 
 
 def normalize_rule_version_data(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -536,6 +1011,9 @@ def normalize_rule_data(value: Mapping[str, Any]) -> dict[str, Any]:
 	template = _validate_business_reason(
 		value.get("business_reason_template") or "{action} is governed by {rule_name}."
 	)
+	next_step = _validate_sales_next_step(
+		value.get("sales_next_step_template") or DEFAULT_SALES_NEXT_STEP
+	)
 	unknown_policy = str(value.get("unknown_policy") or "WAIT").strip().upper()
 	if unknown_policy not in {"WAIT", "STOP", "PASS"}:
 		raise ValueError("unknown_policy must be one of WAIT, STOP or PASS.")
@@ -557,6 +1035,7 @@ def normalize_rule_data(value: Mapping[str, Any]) -> dict[str, Any]:
 		"unknown_policy": unknown_policy,
 		"reason_code": reason_code,
 		"business_reason_template": template,
+		"sales_next_step_template": next_step,
 		"action": action,
 		"target_actions": target_actions,
 		"conditions": conditions,
@@ -655,6 +1134,8 @@ def _catalog_payload(catalog: Mapping[str, Any]) -> dict[str, Any]:
 	payload = deepcopy(dict(catalog))
 	payload.pop("ruleset_digest", None)
 	for rule in payload.get("rules", []):
+		if rule.get("sales_next_step_template") == DEFAULT_SALES_NEXT_STEP:
+			rule.pop("sales_next_step_template", None)
 		for condition in rule.get("conditions", []):
 			if condition.get("value") is None:
 				condition.pop("value", None)
@@ -731,7 +1212,7 @@ def validate_catalog(payload: Mapping[str, Any]) -> dict[str, Any]:
 		raise ValueError("catalog registries must be arrays.")
 	if not facts or not actions or not groups:
 		raise ValueError("fact, action and group registries cannot be empty.")
-	if len(facts) > 100 or len(actions) > 50 or len(groups) > MAX_GROUPS or len(rules) > MAX_RULES:
+	if len(facts) > 100 or len(actions) > 100 or len(groups) > MAX_GROUPS or len(rules) > MAX_RULES:
 		raise ValueError("catalog registry exceeds its maximum size.")
 
 	fact_ids = set()
@@ -784,6 +1265,8 @@ def validate_catalog(payload: Mapping[str, Any]) -> dict[str, Any]:
 			raise ValueError("fact descriptor consumers must be unique supported features.")
 		fact_ids.add(fact_id)
 		fact_by_id[fact_id] = fact
+	if fact_ids - set(FACT_CATALOG):
+		raise ValueError("fact catalog must use unique closed fact descriptors.")
 
 	if (
 		not all(isinstance(action, str) for action in actions)
@@ -827,10 +1310,17 @@ def validate_catalog(payload: Mapping[str, Any]) -> dict[str, Any]:
 		"effect",
 		"reason_code",
 		"business_reason_template",
+		"sales_next_step_template",
 		"enabled",
 	}
+	legacy_rule_keys = rule_keys - {"sales_next_step_template"}
 	for rule in rules:
-		if not isinstance(rule, Mapping) or set(rule) != rule_keys:
+		if not isinstance(rule, Mapping):
+			raise ValueError("rule has an invalid shape.")
+		if set(rule) == legacy_rule_keys:
+			rule = dict(rule)
+			rule["sales_next_step_template"] = DEFAULT_SALES_NEXT_STEP
+		if set(rule) != rule_keys:
 			raise ValueError("rule has an invalid shape.")
 		rule_id = rule.get("rule_id")
 		if (
@@ -893,6 +1383,7 @@ def validate_catalog(payload: Mapping[str, Any]) -> dict[str, Any]:
 		):
 			raise ValueError("rule reason_code is invalid.")
 		_validate_business_reason(rule.get("business_reason_template"))
+		_validate_sales_next_step(rule.get("sales_next_step_template"))
 		if not isinstance(rule.get("enabled"), bool):
 			raise ValueError("rule enabled must be a boolean.")
 		rule_ids.add(rule_id)
@@ -965,6 +1456,7 @@ def _wire_rule_payload(row: Mapping[str, Any]) -> dict[str, Any]:
 		},
 		"reason_code": data["reason_code"],
 		"business_reason_template": data["business_reason_template"],
+		"sales_next_step_template": data["sales_next_step_template"],
 		"enabled": data["enabled"],
 	}
 

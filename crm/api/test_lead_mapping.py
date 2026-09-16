@@ -92,6 +92,27 @@ class TestLeadMappingContract(TestCase):
 		self.assertEqual(result["sampleRows"][1], {"row": 4, "values": ["B", None, "10"]})
 		self.assertLessEqual(len(result["sampleRows"]), lead_mapping.MAX_IMPORT_SAMPLE_ROWS)
 
+	def test_inspect_drops_server_managed_status_columns_before_mapping(self):
+		upload = SimpleNamespace(
+			filename="with-status.csv",
+			read=lambda: "Name,Tình trạng Lead,Phone\nAn,Mới,0900000000\n".encode(),
+		)
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+			patch.object(lead_mapping.frappe, "request", SimpleNamespace(files={"file": upload})),
+		):
+			result = lead_mapping.inspect_lead_import()
+
+		self.assertEqual(
+			result["headers"],
+			[
+				{"sourceIndex": 0, "label": "Name", "inferredField": None, "enabled": False},
+				{"sourceIndex": 1, "label": "Phone", "inferredField": "phone", "enabled": True},
+			],
+		)
+		self.assertEqual(result["sampleRows"], [{"row": 2, "values": ["An", "0900000000"]}])
+
 	def test_inspect_rejects_without_lead_create_permission_before_reading_file(self):
 		upload = SimpleNamespace(filename="arbitrary.csv", read=lambda: b"Name\nAn\n")
 		with (
@@ -198,6 +219,102 @@ class TestLeadMappingContract(TestCase):
 			require_import_fields=True,
 			campaign_name=None,
 		)
+
+	def test_mapped_preview_marks_existing_student_matches_without_creating_leads(self):
+		upload = SimpleNamespace(
+			filename="arbitrary.csv",
+			read=lambda: b"Name,Phone,Province,School,Source\nAn,0900000000,HCM,School 1,Promoter\n",
+		)
+		mapping = [
+			{"sourceIndex": 0, "targetField": "student_name", "enabled": True},
+			{"sourceIndex": 1, "targetField": "phone", "enabled": True},
+			{"sourceIndex": 2, "targetField": "province", "enabled": True},
+			{"sourceIndex": 3, "targetField": "high_school", "enabled": True},
+			{"sourceIndex": 4, "targetField": "source", "enabled": True},
+		]
+		normalized = {
+			"student_name": "An",
+			"phone": "0900000000",
+			"province": "PROVINCE-1",
+			"high_school": "SCHOOL-1",
+			"source": "SOURCE-1",
+		}
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+			patch.object(lead_mapping.frappe, "request", SimpleNamespace(files={"file": upload})),
+			patch.object(
+				lead_mapping.frappe,
+				"form_dict",
+				{"column_mapping": json.dumps(mapping)},
+				create=True,
+			),
+			patch.object(lead_mapping, "_normalize_lead_payload", return_value=(normalized, [], [], None)),
+			patch(
+				"crm.fcrm.lead_processing.preview_lead_values",
+				return_value={
+					"processing_outcome": "MATCHED",
+					"target_student": "STU-1",
+					"reason": "Đã khớp hồ sơ học sinh.",
+				},
+			) as preview_processing,
+			patch.object(lead_mapping, "_create_lead") as create_lead,
+		):
+			result = lead_mapping.preview_lead_import.__wrapped__()
+
+		self.assertEqual(result["rows"][0]["processingOutcome"], "MATCHED")
+		self.assertEqual(result["rows"][0]["targetStudent"], "STU-1")
+		preview_processing.assert_called_once_with(normalized, name="IMPORT-PREVIEW-2")
+		create_lead.assert_not_called()
+
+	def test_mapped_preview_marks_repeated_identifiers_in_the_same_file(self):
+		upload = SimpleNamespace(filename="arbitrary.csv", read=lambda: b"ignored")
+		rows = [
+			{
+				"row": 2,
+				"fields": {"student_name": "An", "phone": "0900000000", "province": "P1"},
+			},
+			{
+				"row": 3,
+				"fields": {"student_name": "An copy", "phone": "0900000000", "province": "P1"},
+			},
+		]
+		mapping = [{"sourceIndex": 0, "targetField": "student_name", "enabled": True}]
+		normalized_rows = [
+			{"student_name": "An", "phone": "0900000000", "province": "P1"},
+			{"student_name": "An copy", "phone": "0900000000", "province": "P1"},
+		]
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+			patch.object(lead_mapping.frappe, "request", SimpleNamespace(files={"file": upload})),
+			patch.object(
+				lead_mapping.frappe,
+				"form_dict",
+				{"column_mapping": json.dumps(mapping)},
+				create=True,
+			),
+			patch.object(
+				lead_mapping,
+				"_mapped_import_rows",
+				return_value=(rows, {"mappedFields": ["student_name"], "ignoredColumns": []}),
+			),
+			patch.object(lead_mapping, "_normalize_lead_payload", side_effect=[
+				(normalized_rows[0], [], [], None),
+				(normalized_rows[1], [], [], None),
+			]),
+			patch.object(
+				lead_mapping,
+				"_preview_processing",
+				return_value={"processing_outcome": "CREATED"},
+			),
+		):
+			result = lead_mapping.preview_lead_import.__wrapped__()
+
+		self.assertEqual(result["rows"][0]["processingOutcome"], "CREATED")
+		self.assertEqual(result["rows"][1]["processingOutcome"], "DUPLICATE")
+		self.assertEqual(result["rows"][1]["duplicateType"], "SAME_FILE")
+		self.assertEqual(result["rows"][1]["reason"], "Trùng với dòng 2 trong cùng file.")
 
 	def test_quick_multipart_commit_reparses_original_file_and_mapping(self):
 		upload = SimpleNamespace(
@@ -333,6 +450,11 @@ class TestLeadMappingContract(TestCase):
 
 		self.assertEqual(context.exception.code, "UNKNOWN_FIELD")
 
+	def test_parse_payload_accepts_religion(self):
+		payload = lead_mapping._parse_payload({"student_name": "An", "religion": "Phật giáo"})
+
+		self.assertEqual(payload["religion"], "Phật giáo")
+
 	def test_uploaded_import_file_reads_at_most_configured_limit(self):
 		read_sizes = []
 		stream = SimpleNamespace(
@@ -368,6 +490,7 @@ class TestLeadMappingContract(TestCase):
 				{
 					"student_name": "An",
 					"phone": "0900000000",
+					"religion": "Phật giáo",
 					"province": "Hà Nội",
 					"high_school": "THPT Chu Văn An",
 					"source": "Promoter",
@@ -379,6 +502,7 @@ class TestLeadMappingContract(TestCase):
 		self.assertIsNone(values["major"])
 		self.assertIsNone(values["aspiration"])
 		self.assertIsNone(values["admission_year"])
+		self.assertEqual(values["religion"], "Phật giáo")
 
 	def test_resolve_assignment_allows_blank_owner_only_for_quick_import(self):
 		self.assertEqual(_resolve_assignment(None, allow_unassigned=True), (None, None, None))
@@ -542,7 +666,7 @@ class TestLeadMappingContract(TestCase):
 			_normalize_public_lead_payload({"student_name": "An"})
 
 		self.assertEqual(context.exception.code, "REQUIRED_FIELD")
-		self.assertIn("campaign_code", str(context.exception))
+		self.assertIn("chiến dịch", str(context.exception))
 
 	def test_public_payload_normalizes_optional_intake_fields(self):
 		with (
@@ -1094,6 +1218,9 @@ class TestLeadMappingIntegration(FrappeTestCase):
 				{"CTV Sale", "Cộng tác viên Sale"},
 			)
 			self.assertEqual(frappe.db.get_value("CRM Lead", created_name, "source"), "Promoter")
+			self.assertEqual(
+				frappe.db.get_value("CRM Lead", created_name, "processing_status"), "NEW"
+			)
 			self.assertEqual(
 				frappe.db.get_value("CRM Lead", created_name, "advertising_channel"),
 				"Facebook",

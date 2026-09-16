@@ -223,6 +223,73 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 			{"scanned": 3, "processed": 1, "closed": 1, "skipped": 1, "failed": 0},
 		)
 
+	def test_bulk_preview_buckets_outcomes_without_mutating_leads(self):
+		from unittest.mock import patch
+
+		from crm.fcrm import lead_processing
+
+		rows = [{"name": "LEAD-1"}, {"name": "LEAD-2"}, {"name": "LEAD-3"}]
+		leads = {
+			name: frappe._dict(
+				name=name,
+				lead_code=f"CODE-{name[-1]}",
+				student_name=f"Student {name[-1]}",
+				phone=f"090000000{name[-1]}",
+				province="Ho Chi Minh City",
+				high_school="THPT-1",
+			)
+			for name in ("LEAD-1", "LEAD-2", "LEAD-3")
+		}
+		outcomes = {
+			"LEAD-1": {
+				"status": "PROCESSED",
+				"resolution": "PENDING",
+				"processing_outcome": "CREATED",
+				"reason": "Không phát hiện trùng.",
+			},
+			"LEAD-2": {
+				"status": "CLOSED",
+				"resolution": "DUPLICATE",
+				"processing_outcome": "DUPLICATE",
+				"duplicateOf": "LEAD-1",
+				"duplicateType": "PHONE_PROVINCE",
+				"reason": "Trùng số điện thoại và tỉnh/thành phố.",
+			},
+			"LEAD-3": {
+				"status": "CLOSED",
+				"resolution": "PENDING",
+				"processing_outcome": "INVALID",
+				"error_code": "IDENTIFIER_GATE_FAILED",
+				"reason": "Thiếu số điện thoại.",
+			},
+		}
+
+		with (
+			patch.object(lead_processing.frappe, "get_all", return_value=rows),
+			patch.object(lead_processing, "_load_lead", side_effect=leads.__getitem__),
+			patch.object(
+				lead_processing,
+				"_preview_lead_document",
+				side_effect=lambda lead: outcomes[lead.name],
+			),
+			patch.object(lead_processing.frappe.db, "commit") as commit,
+		):
+			result = lead_processing.preview_new_leads(admission_year="2026")
+
+		self.assertEqual(
+			result["summary"],
+			{
+				"scanned": 3,
+				"readyToAssign": 1,
+				"matchedStudent": 0,
+				"duplicates": 1,
+				"invalid": 1,
+				"needsReview": 0,
+			},
+		)
+		self.assertEqual(result["items"][1]["duplicateOf"], "LEAD-1")
+		commit.assert_not_called()
+
 	def test_bulk_scan_rejects_a_malformed_admission_year(self):
 		from crm.fcrm.lead_processing import LeadProcessingError, process_new_leads
 

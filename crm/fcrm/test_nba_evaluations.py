@@ -120,10 +120,15 @@ if FrappeTestCase is not None:
 				conditions=[{"fact": "student.is_opted_out", "operator": "is_true"}],
 				enabled=True,
 			)
+			testing = rule_engine.update_rule_version(
+				cls._test_rule_version_id,
+				expected_revision=1,
+				status="testing",
+			)
 			rule_engine.activate_rule_version(
 				cls._test_rule_version_id,
 				frappe.db.get_single_value(rule_engine.SETTINGS_NAME, "pointer_revision", cache=False) or 0,
-				1,
+				testing["revision"],
 			)
 			cls.student = frappe.get_all("CRM Student", pluck="name", limit_page_length=1)
 			if not cls.student:

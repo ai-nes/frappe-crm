@@ -59,6 +59,11 @@ a backward-compatible `processingStatus` alias, `contactNoAnswer`,
 Contact counters are permission-aware batch projections from Lead-linked Call Logs and
 phone-call Interactions; Call Log references are de-duplicated.
 
+Lead and Student list endpoints accept the backward-compatible `order` query
+parameter (`desc` for newest first, `asc` for oldest first). List ordering
+prioritizes `modified`, then the workflow status/stage, and finally the endpoint's
+existing tie-breaker.
+
 ## Canonical provider call ingest
 
 The provider sends a signed event to `crm-agents` (`ai-crm`) at

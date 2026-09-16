@@ -28,6 +28,11 @@ CUSTOM_FIELDS = {
 
 
 def execute():
+	ensure_ai_capability_gateway_fields()
+
+
+def ensure_ai_capability_gateway_fields():
+	"""Idempotently restore the custom fields and exposure baseline."""
 	create_custom_fields(CUSTOM_FIELDS, ignore_validate=True, update=True)
 	# DocType is a core meta-table whose columns aren't derived from its
 	# custom fields the way an ordinary doctype's are, so create_custom_fields()
@@ -35,9 +40,7 @@ def execute():
 	# missing the `custom_ai_exposed` column — add it directly, guarded so
 	# reruns of this patch stay idempotent.
 	if not frappe.db.has_column("DocType", "custom_ai_exposed"):
-		frappe.db.sql_ddl(
-			"ALTER TABLE `tabDocType` ADD COLUMN `custom_ai_exposed` INT(1) NOT NULL DEFAULT 0"
-		)
+		frappe.db.sql_ddl("ALTER TABLE `tabDocType` ADD COLUMN `custom_ai_exposed` INT(1) NOT NULL DEFAULT 0")
 	_seed_exposed_crm_doctypes()
 
 

@@ -23,7 +23,7 @@ ROLE_ACCOUNTS = (
 	("Marketing", "marketing@gmail.com", "Nhân viên Marketing"),
 	("Lead Marketing", "leadmarketing@gmail.com", "Trưởng nhóm Marketing"),
 )
-PASSWORD = "12345@"
+PASSWORD = "123456"
 
 
 def execute() -> dict:

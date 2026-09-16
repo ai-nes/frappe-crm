@@ -33,13 +33,13 @@ LEAD_COUNT = 20
 SCHOOLS_PER_PROVINCE = seed_lead_api_lookups.SCHOOLS_PER_PROVINCE
 EXPECTED_PROVINCE_COUNT = 7
 PROVINCE_SOURCE_CODES = {
-	"Khánh Hoà": "56",
-	"Đắk Lắk": "66",
-	"Lâm Đồng": "68",
-	"TP. Đồng Nai": "75",
-	"Tp. Hồ Chí Minh": "79",
-	"Tây Ninh": "80",
-	"Đồng Tháp": "82",
+	"Khánh Hoà": "VN_KHANH_HOA",
+	"Đắk Lắk": "VN_DAK_LAK",
+	"Lâm Đồng": "VN_LAM_DONG",
+	"TP. Đồng Nai": "VN_DONG_NAI",
+	"Tp. Hồ Chí Minh": "VN_HO_CHI_MINH",
+	"Tây Ninh": "VN_TAY_NINH",
+	"Đồng Tháp": "VN_DONG_THAP",
 }
 
 OWNER_ACCOUNTS = (
@@ -385,7 +385,6 @@ def _submit_lead(profile: dict[str, Any], context: dict[str, Any], pool: str) ->
 		"campus": context["campus"],
 		"owning_team": pool,
 		"admission_year": context["admission_year"],
-		"enrollment_status": context["enrollment_status"],
 		"high_school": school["name"],
 		"province": school["province"],
 		"ward": school["ward"],
@@ -438,7 +437,6 @@ def _complete_lead(lead: str, profile: dict[str, Any], context: dict[str, Any]) 
 		"email": profile["student_email"],
 		"gender": profile["gender"],
 		"date_of_birth": profile["date_of_birth"],
-		"enrollment_status": context["enrollment_status"],
 		"admission_method": context["admission_method"],
 		"branch": context["campus"],
 		"high_school": school["name"],
@@ -586,7 +584,6 @@ def _ensure_contact(
 		"id_issued_place": "Cục Cảnh sát QLHC về TTXH",
 		"student": lead,
 		"student_identity": frappe.db.get_value("CRM Lead", lead, "identity"),
-		"enrollment_status": context["enrollment_status"],
 		"student_stage": "Connected",
 		"readiness_level": "Level 2 - Đang so sánh",
 		"quality_bucket": "Warm",
@@ -797,7 +794,6 @@ def _ensure_parent(lead: str, profile: dict[str, Any], context: dict[str, Any], 
 		"full_name": parent["name"],
 		"phone": parent["phone"],
 		"email": parent["email"],
-		"enrollment_status": context["enrollment_status"],
 		"readiness_level": "Level 2 - Đang so sánh",
 		"quality_bucket": "Warm",
 		"is_verified_lead": 1,

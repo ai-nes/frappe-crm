@@ -58,7 +58,10 @@ def _write_receipt(
 		"nonce_key": f"case-key:{command_key}",
 		"request_fingerprint": fingerprint,
 		"outcome": "attached",
-		"target_student": student,
+		# `student` is a CRM Lead name (case keys are resolved before Student
+		# conversion); target_student is typed to CRM Student, so it must only
+		# ever hold a genuine converted Student.
+		"target_student": student if frappe.db.exists("CRM Student", student) else None,
 		"target_case_key": case_key,
 		"actor": frappe.session.user,
 		"schema_version": "admissions-erd-v2",

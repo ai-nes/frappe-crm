@@ -7,6 +7,7 @@ import json
 import re
 import unicodedata
 from datetime import timedelta
+from functools import cmp_to_key
 from statistics import mean
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -16,6 +17,7 @@ from frappe import _
 
 from crm.fcrm.interaction_log import CHATWOOT_INTERACTION_TYPE
 from crm.fcrm.interaction_semantics import resolve_interaction_type
+from crm.fcrm.lead_identity import resolve_lead_name
 from crm.fcrm.permissions import (
 	can_read_full_lead_board,
 	get_student_list_read_condition,
@@ -199,6 +201,7 @@ def get_director_students(
 	q: str | None = "",
 	stage: str | None = None,
 	province: str | None = None,
+	campaign: str | None = None,
 	ownerId: str | None = None,
 	sort: str = "score",
 	order: str = "desc",
@@ -223,6 +226,7 @@ def get_director_students(
 		q=q,
 		stage=stage,
 		province=province,
+		campaign=campaign,
 		ownerId=ownerId,
 		sort=sort,
 		order=order,
@@ -273,6 +277,7 @@ def get_director_students(
 				"stage": STAGES[query["stage"]]["label"] if query["stage"] else None,
 				"assignmentStatus": query["assignment_status"],
 				"lifecycleStatus": query["lifecycle_status"],
+				"campaign": query["campaign"],
 				"province": _province_label(resolved_province),
 			},
 			"sort": {"field": query["sort"], "order": query["order"]},
@@ -341,10 +346,11 @@ def get_student_interactions(student_id: str) -> dict[str, Any]:
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_lead_call_logs(lead_id: str) -> dict[str, Any]:
 	"""Return permission-scoped call history for one CRM Lead."""
-	payload = get_student_interactions(lead_id)
-	calls = payload.get("calls") or []
+	requested_lead_id, lead_name, lead_doc = _resolve_lead_call_target(lead_id)
+	interactions = _student_interactions(lead_name)
+	calls = _student_call_records(lead_name, interactions, lead_doc, {})
 	return {
-		"lead_id": payload.get("student_id"),
+		"lead_id": requested_lead_id,
 		"calls": calls,
 		"total": len(calls),
 	}
@@ -441,6 +447,7 @@ def _parse_query(
 	q: str | None = "",
 	stage: str | None = None,
 	province: str | None = None,
+	campaign: str | None = None,
 	ownerId: str | None = None,
 	sort: str = "score",
 	order: str = "desc",
@@ -456,6 +463,9 @@ def _parse_query(
 	page_number = _parse_int(page, "page", 1, minimum=1)
 	page_size = _parse_int(pageSize, "pageSize", 20, minimum=1, maximum=100)
 	normalized_stage = _normalize_enum(stage, STAGES, "stage") if stage else None
+	campaign_value = str(campaign or "").strip() or None
+	if campaign_value and _fold(campaign_value) == "all":
+		campaign_value = None
 	assignment_value = _first_query_value(assignmentStatus, assignment_status)
 	lifecycle_value = _first_query_value(lifecycleStatus, lifecycle_status)
 	if lifecycle_value:
@@ -495,6 +505,7 @@ def _parse_query(
 		"query": str(q or "").strip(),
 		"stage": normalized_stage,
 		"province": str(province_value or "").strip() or None,
+		"campaign": campaign_value,
 		"owner_id": owner_id,
 		"assignment_status": normalized_assignment_status,
 		"lifecycle_status": normalized_lifecycle_status,
@@ -615,6 +626,8 @@ def _student_filters(query: dict[str, Any], province: str | None) -> tuple[dict[
 		filters["name"] = "__student_without_owner__"
 	if province:
 		filters["province"] = province
+	if query.get("campaign"):
+		filters["campaign"] = _resolve_campaign(query["campaign"])
 	if query.get("lifecycle_status"):
 		filters["student_stage"] = query["lifecycle_status"]
 	if query["stage"]:
@@ -645,6 +658,13 @@ def _student_filters(query: dict[str, Any], province: str | None) -> tuple[dict[
 		if display_code_ids:
 			or_filters.append(["name", "in", display_code_ids])
 	return filters, or_filters
+
+
+def _resolve_campaign(value: str) -> str:
+	"""Accept a campaign document name or its stable code as a filter value."""
+	if frappe.db.exists("CRM Campaign", value):
+		return value
+	return frappe.db.get_value("CRM Campaign", {"stable_code": value}, "name") or value
 
 
 def _display_code_student_ids(display_code: str, admission_year: str | None) -> list[str]:
@@ -707,6 +727,24 @@ def _resolve_activity_target(student_id: str | None) -> tuple[str, str, str | No
 	return requested_id, lead_id or resolved_id, canonical_id
 
 
+def _resolve_lead_call_target(lead_id: str | None) -> tuple[str, str, Any]:
+	"""Resolve a Lead reference without requiring a canonical Student."""
+	requested_id = str(lead_id or "").strip()
+	if not requested_id:
+		_raise_api_error("INVALID_LEAD_ID", "leadId không được để trống.", frappe.ValidationError, 400)
+
+	lead_name = resolve_lead_name(requested_id)
+	try:
+		lead_doc = frappe.get_doc("CRM Lead", lead_name)
+	except frappe.DoesNotExistError:
+		_raise_api_error("LEAD_NOT_FOUND", "Không tìm thấy Lead.", frappe.DoesNotExistError, 404)
+
+	if not lead_doc.has_permission("read") and not can_read_full_lead_board():
+		_raise_api_error("LEAD_NOT_FOUND", "Không tìm thấy Lead.", frappe.DoesNotExistError, 404)
+
+	return requested_id, lead_name, lead_doc
+
+
 def _resolve_canonical_activity_target(student_id: str | None) -> tuple[str, str]:
 	"""Resolve activity requests to the canonical Student aggregate."""
 	requested_id = str(student_id or "").strip()
@@ -737,11 +775,10 @@ def _canonical_student_filters(admission_year: str | None) -> dict[str, Any]:
 def _list_scope_student_ids() -> list[str] | None:
 	"""Return explicit IDs for the session's Group/Team list-only read scope.
 
-	The normal CRM Student permission hook remains assigned-only for Sale so
-	direct CRUD/detail access cannot be widened. This endpoint uses the explicit
-	list condition only to expose rows that the session may inspect before
-	assigning; all mutation commands perform their own ownership checks. The
-	condition targets CRM Student, the canonical aggregate.
+	The condition targets CRM Student, the canonical aggregate. Sale members are
+	owner-scoped; Sale Team Leads and Group Leads receive their led Team/group
+	read scope. Mutation commands still perform their own capability and revision
+	checks before applying changes.
 	"""
 	if can_read_full_lead_board():
 		return None
@@ -819,8 +856,8 @@ def _fetch_student_rows(
 
 
 def _student_order_by(sort_field: str, order: str) -> str:
-	"""Keep the list grouped by Student workflow stage before applying the requested sort."""
-	return f"{STUDENT_STAGE_ORDER} asc, {sort_field} {order}, name {order}"
+	"""Prioritize recency, then workflow stage, then the requested tie-breaker."""
+	return f"modified {order}, {STUDENT_STAGE_ORDER} asc, {sort_field} {order}, name {order}"
 
 
 def _fetch_computed_sort_rows(
@@ -869,16 +906,51 @@ def _fetch_computed_sort_rows(
 			filters={"state": ["in", list(ACTIVE_ACTION_STATES)], "current_slot": "CURRENT"},
 		)
 
-	present, missing = [], []
 	for row in rows:
-		value = _sort_related_value(query["sort"], related.get(row.get("name")))
-		(missing if value is None else present).append((value, row.get("name") or "", row))
-	present.sort(key=lambda entry: (entry[0], entry[1]), reverse=query["order"] == "desc")
-	missing.sort(key=lambda entry: entry[1])
-	sorted_rows = [entry[2] for entry in present + missing]
-	sorted_rows.sort(key=_student_stage_rank)
+		row["_sort_related_value"] = _sort_related_value(
+			query["sort"], related.get(row.get("name"))
+		)
+
+	sorted_rows = sorted(
+		rows,
+		key=cmp_to_key(lambda left, right: _compare_student_rows(left, right, query["order"])),
+	)
+	for row in sorted_rows:
+		row.pop("_sort_related_value", None)
 	start = (query["page"] - 1) * query["page_size"]
 	return sorted_rows[start : start + query["page_size"]]
+
+
+def _compare_student_rows(left, right, order: str) -> int:
+	"""Compare rows by modified time, stage, related sort value, then name."""
+	reverse = order == "desc"
+	for left_value, right_value, descending in (
+		(left.get("modified"), right.get("modified"), reverse),
+		(_student_stage_rank(left), _student_stage_rank(right), False),
+		(left.get("_sort_related_value"), right.get("_sort_related_value"), reverse),
+		(left.get("name") or "", right.get("name") or "", reverse),
+	):
+		comparison = _compare_optional_values(left_value, right_value, descending)
+		if comparison:
+			return comparison
+	return 0
+
+
+def _compare_optional_values(left, right, descending: bool) -> int:
+	"""Compare values while keeping missing values at the end of each tier."""
+	if left is None and right is None:
+		return 0
+	if left is None:
+		return 1
+	if right is None:
+		return -1
+	if left == right:
+		return 0
+	try:
+		comparison = -1 if left < right else 1
+	except TypeError:
+		comparison = -1 if str(left) < str(right) else 1
+	return -comparison if descending else comparison
 
 
 def _student_stage_rank(row) -> int:
@@ -1030,6 +1102,20 @@ def _student_query_ids(student_ids: list[str]) -> list[str]:
 			if candidate and candidate not in seen:
 				seen.add(candidate)
 				values.append(candidate)
+	return values
+
+
+def _activity_query_ids(reference_id: str | None) -> list[str]:
+	"""Include both sides of the Lead/Student activity compatibility boundary."""
+	if not reference_id:
+		return []
+
+	values = [reference_id]
+	canonical_id = canonical_student(reference_id)
+	lead_id = lead_for_student(canonical_id) if canonical_id else None
+	for candidate in (canonical_id, lead_id):
+		if candidate and candidate not in values:
+			values.append(candidate)
 	return values
 
 
@@ -1783,7 +1869,7 @@ def _build_probability_trend(assessments: list, interactions: list) -> list[dict
 def _student_interactions(student_id: str | None) -> list:
 	if not student_id or not _table_exists("CRM Interaction"):
 		return []
-	student_ids = _student_query_ids([student_id])
+	student_ids = _activity_query_ids(student_id)
 	return frappe.get_all(
 		"CRM Interaction",
 		filters={"student": ["in", student_ids]},
@@ -1802,6 +1888,9 @@ def _student_interactions(student_id: str | None) -> list:
 			"conversation_id",
 			"reference_doctype",
 			"reference_docname",
+			"source_namespace",
+			"source_record_id",
+			"external_id",
 		],
 		order_by="interaction_datetime desc, creation desc",
 		limit_page_length=50,
@@ -1987,12 +2076,27 @@ def _student_call_records(
 
 	calls: list[dict[str, Any]] = []
 	seen_call_ids: set[str] = set()
+	call_interactions: dict[str, Any] = {}
+	for ix in interactions:
+		if ix.get("reference_doctype") == "Call Log" and ix.get("reference_docname"):
+			call_interactions[str(ix.get("reference_docname"))] = ix
+
+		# Canonical provider interactions may refer to the operational Call Log by
+		# source_record_id instead of the legacy reference fields. Reuse that row
+		# so the dashboard keeps one call card with the recording and summary.
+		source_record_id = str(ix.get("source_record_id") or "").strip()
+		if source_record_id:
+			call_interactions.setdefault(source_record_id, ix)
+
+		external_id = str(ix.get("external_id") or "").strip()
+		if ":" in external_id:
+			call_interactions.setdefault(external_id.split(":", 1)[1], ix)
 
 	if _table_exists("Call Log"):
 		try:
 			call_logs = frappe.get_list(
 				"Call Log",
-				filters={"reference_docname": student_id},
+				filters={"reference_docname": ["in", _activity_query_ids(student_id)]},
 				or_filters=[
 					{"reference_doctype": "CRM Student"},
 					{"reference_doctype": "CRM Lead"},
@@ -2024,6 +2128,7 @@ def _student_call_records(
 		note_projections = _call_note_projections(call_logs)
 		for cl in call_logs:
 			seen_call_ids.add(cl.get("name"))
+			canonical_interaction = call_interactions.get(str(cl.get("name")))
 			is_inbound = _fold(cl.get("type") or "") in {"incoming", "inbound"}
 			duration_secs = int(cl.get("duration") or 0)
 			status_fold = _fold(cl.get("status") or "")
@@ -2052,9 +2157,9 @@ def _student_call_records(
 				phone_number = cl.get("to") or student_phone
 
 			note_projection = note_projections.get(str(cl.get("note") or ""), {})
-			topic = note_projection.get("summary") or "Cuộc gọi tư vấn"
-			summary = note_projection.get("summary") or f"Cuộc gọi {cl.get('status') or ''}"
-			summary_available = bool(note_projection.get("summary"))
+			topic = note_projection.get("summary") or (canonical_interaction or {}).get("summary") or "Cuộc gọi tư vấn"
+			summary = note_projection.get("summary") or (canonical_interaction or {}).get("summary") or f"Cuộc gọi {cl.get('status') or ''}"
+			summary_available = bool(note_projection.get("summary") or (canonical_interaction or {}).get("summary"))
 
 			calls.append(
 				{
@@ -2071,7 +2176,9 @@ def _student_call_records(
 					"topic": topic,
 					"summary": summary,
 					"summaryAvailable": summary_available,
+					"summaryStatus": "COMPLETED" if summary_available else "NOT_AVAILABLE",
 					"transcript": note_projection.get("transcript"),
+					"interactionId": canonical_interaction.get("name") if canonical_interaction else None,
 					"recordingUrl": get_recording_url_path(
 						cl.get("name"),
 						cl.get("recording_url"),
@@ -2095,6 +2202,11 @@ def _student_call_records(
 
 		ref_doc = ix.get("reference_docname")
 		if ix.get("reference_doctype") == "Call Log" and ref_doc in seen_call_ids:
+			continue
+		if str(ix.get("source_record_id") or "").strip() in seen_call_ids:
+			continue
+		external_id = str(ix.get("external_id") or "").strip()
+		if ":" in external_id and external_id.split(":", 1)[1] in seen_call_ids:
 			continue
 		if ix.get("name") in seen_call_ids:
 			continue
@@ -2142,6 +2254,9 @@ def _student_call_records(
 				"durationSeconds": 0,
 				"topic": topic,
 				"summary": summary,
+				"summaryAvailable": True,
+				"summaryStatus": "COMPLETED",
+				"interactionId": str(ix.get("name")),
 				"recordingUrl": None,
 			}
 		)
@@ -2682,8 +2797,9 @@ def _require_access():
 
 	The Student detail and operational queries deliberately use Frappe's
 	permission-aware ``get_list``/``has_permission`` APIs. The list endpoint has
-	a separate, explicit Sale read projection so Sale can inspect its team and
-	pool before assigning; direct CRUD/detail scope remains assigned-only.
+	a separate, explicit Sale read projection so Team Leads and Group Leads can
+	inspect their managed Team/group before assigning; regular Sale and CTV Sale
+	remain owner-scoped.
 	"""
 	user = getattr(frappe.session, "user", None)
 	if not user or user == "Guest":

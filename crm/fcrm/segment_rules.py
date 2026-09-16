@@ -5,6 +5,8 @@ import math
 
 import frappe
 
+from crm.fcrm.permissions import get_student_list_read_condition
+
 FIELDS = {
 	"student_stage": {
 		"label": "Student Stage",
@@ -130,15 +132,53 @@ def _condition(condition):
 	return {"field": field, "operator": operator, "value": value}
 
 
-def _visible_student_query():
-	return frappe.get_list(
+def _list_scope_student_ids():
+	"""Return the session's dashboard-visible Student ids when it has a list scope."""
+	user = frappe.session.user
+	condition = get_student_list_read_condition(user=user, doctype="CRM Student")
+	if condition is None:
+		return None
+
+	if condition == "1=0":
+		return []
+
+	rows = frappe.db.sql(
+		f"select name from `tabCRM Student` where ({condition})",
+		as_dict=True,
+	)
+	return [row["name"] for row in rows if row.get("name")]
+
+
+def _scoped_filters(filters, student_ids):
+	if student_ids is None:
+		return filters
+	if not student_ids:
+		return [["name", "in", ["__no_visible_students__"]]]
+
+	scope_filter = ["name", "in", student_ids]
+	if filters is None:
+		return [scope_filter]
+	if isinstance(filters, dict):
+		return [[field, "=", value] for field, value in filters.items()] + [scope_filter]
+	return [*filters, scope_filter]
+
+
+def _student_query(filters=None, or_filters=None):
+	student_ids = _list_scope_student_ids()
+	reader = frappe.get_all if student_ids is not None else frappe.get_list
+	return reader(
 		"CRM Student",
+		filters=_scoped_filters(filters, student_ids),
+		or_filters=or_filters or [],
 		fields=["name"],
-		or_filters=student_scope_or_filters(),
 		limit_page_length=0,
 		order_by="",
 		run=False,
 	)
+
+
+def visible_student_query():
+	return _student_query(or_filters=student_scope_or_filters())
 
 
 def _condition_filter(condition):
@@ -181,17 +221,12 @@ def _classification_predicate(condition):
 
 def _condition_query(condition):
 	if condition["field"] not in ("need", "tag"):
-		return frappe.get_list(
-			"CRM Student",
-			fields=["name"],
+		return _student_query(
 			filters=[_condition_filter(condition)],
 			or_filters=student_scope_or_filters(),
-			limit_page_length=0,
-			order_by="",
-			run=False,
 		)
 
-	query = _visible_student_query()
+	query = visible_student_query()
 	return f"SELECT allowed.name FROM ({query}) allowed WHERE {_classification_predicate(condition)}"
 
 
@@ -205,14 +240,9 @@ def _group_query(group):
 		for condition in conditions
 		if condition["field"] not in ("need", "tag")
 	]
-	query = frappe.get_list(
-		"CRM Student",
-		fields=["name"],
+	query = _student_query(
 		filters=student_conditions,
 		or_filters=student_scope_or_filters(),
-		limit_page_length=0,
-		order_by="",
-		run=False,
 	)
 	predicates = [
 		_classification_predicate(condition)
@@ -227,9 +257,9 @@ def _group_query(group):
 def scoped_rule_query(filters):
 	"""Build permission-checked queries for nested AND/OR segment rules.
 
-	Every condition branch uses Frappe's field sanitization, DocPerm, permission
-	hooks and User Permissions. UNION and inner joins implement the selected
-	logic while keeping overlapping results deduplicated.
+	Every condition branch uses Frappe's field sanitization and either the
+	permission-aware reader or the explicit dashboard list scope. UNION and inner
+	joins implement the selected logic while keeping overlapping results deduplicated.
 	"""
 	filters = validate_filters(filters)
 	queries = [_group_query(group) for group in filters["groups"]]

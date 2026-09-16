@@ -45,6 +45,7 @@ CTV_SALE_DIRECTOR_READ_DOCTYPES = (
 	"CRM Ward",
 	"CRM High School Annual Snapshot",
 	"CRM Recommendation",
+	"CRM Campaign",
 	"Call Log",
 )
 

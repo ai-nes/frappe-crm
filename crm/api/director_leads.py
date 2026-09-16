@@ -70,6 +70,8 @@ LEAD_FIELDS = [
 	"notes",
 	"owner_staff",
 	"assigned_to",
+	"owning_team",
+	"ownership_revision",
 	"student",
 	"matched_student",
 	"converted_student",
@@ -141,6 +143,7 @@ def get_director_leads(
 		"statusOptions": _status_options(),
 		"resolution": query["resolution"],
 		"resolutionOptions": _resolution_options(),
+		"order": query["order"],
 		"asOf": _as_iso(frappe.utils.now_datetime()),
 	}
 	if query.get("campaign"):
@@ -383,8 +386,8 @@ def _fetch_lead_rows(
 
 
 def _lead_order_by(order: str) -> str:
-	"""Keep the list grouped by workflow status before applying recency."""
-	return f"{PROCESSING_STATUS_ORDER} asc, modified {order}, name {order}"
+	"""Prioritize recency, then keep the workflow status order deterministic."""
+	return f"modified {order}, {PROCESSING_STATUS_ORDER} asc, name {order}"
 
 
 def _load_lookups(rows: list) -> dict[str, Any]:
@@ -572,6 +575,9 @@ def _map_lead_row(row, *, lookups: dict[str, Any] | None = None) -> dict[str, An
 		"source": lookups.get("sources", {}).get(row.get("source")) or row.get("source") or "",
 		"campaign": row.get("campaign") or "",
 		"owner": lookups.get("owners", {}).get(owner_key) or owner_key or "Chưa phân công",
+		"ownerStaff": owner_key,
+		"owningTeam": row.get("owning_team"),
+		"ownershipRevision": int(row.get("ownership_revision") or 0),
 	}
 	contact_count = lookups.get("contact_counts", {}).get(str(row.get("name")), {})
 	item["contactNoAnswer"] = max(0, int(contact_count.get("no_answer", 0) or 0))
@@ -592,6 +598,9 @@ def _map_detail_row(
 	item = _map_lead_row(row, lookups=lookups)
 	return {
 		**item,
+		"ownerStaff": row.get("owner_staff") or row.get("assigned_to"),
+		"owningTeam": row.get("owning_team"),
+		"ownershipRevision": int(row.get("ownership_revision") or 0),
 		"lifecycleStatus": _processing_status_label(row.get("processing_status")),
 		"lifecycleStatusCode": row.get("processing_status"),
 		"email": row.get("email") or "",

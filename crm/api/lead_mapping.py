@@ -152,6 +152,8 @@ _HEADER_ALIASES = {
 	"mobile": "phone",
 	"phone": "phone",
 	"email": "email",
+	"ton giao": "religion",
+	"religion": "religion",
 	"email khac": "other_email",
 	"other email": "other_email",
 	"tinh thanh pho": "province",
@@ -206,6 +208,7 @@ _LEAD_FIELDS = frozenset(
 		"other_email",
 		"gender",
 		"date_of_birth",
+		"religion",
 		"province",
 		"ward",
 		"high_school",
@@ -253,6 +256,7 @@ _IMPORT_FIELD_DEFINITIONS = (
 	{"key": "id_number", "label": "CCCD", "required": False, "valueType": "text"},
 	{"key": "gender", "label": "Giới tính", "required": False, "valueType": "text"},
 	{"key": "date_of_birth", "label": "Ngày sinh", "required": False, "valueType": "text"},
+	{"key": "religion", "label": "Tôn giáo", "required": False, "valueType": "text"},
 	{"key": "province", "label": "Tỉnh/Thành phố", "required": True, "valueType": "text"},
 	{"key": "ward", "label": "Phường/Xã", "required": False, "valueType": "text"},
 	{"key": "high_school", "label": "Trường THPT", "required": True, "valueType": "text"},
@@ -297,6 +301,7 @@ _PUBLIC_LEAD_FIELDS = frozenset(
 		"other_email",
 		"gender",
 		"date_of_birth",
+		"religion",
 		"source",
 		"campaign",
 		"campaign_code",
@@ -459,42 +464,40 @@ def _resolve_source(value: Any) -> str:
 def _resolve_campaign_code(value: Any) -> str:
 	code = _text(value)
 	if not code:
-		_fail("REQUIRED_FIELD", "campaign_code là bắt buộc.")
+		_fail("REQUIRED_FIELD", "Vui lòng chọn chiến dịch.")
 	if not is_valid_campaign_code(code):
 		_fail(
 			"INVALID_CAMPAIGN_CODE",
-			"campaign_code phải có dạng CMP-{CAMPUS_CODE}-{YYMMDD}-{TOKEN4} "
-			"(hoặc mã legacy CAM-YYYY-NNNNN).",
+			"Mã chiến dịch không đúng định dạng. Vui lòng kiểm tra lại.",
 		)
 	campaign = frappe.db.get_value("CRM Campaign", {"stable_code": code}, "name")
 	if not campaign:
-		_fail("INVALID_CAMPAIGN_CODE", f"Không tìm thấy Campaign với code: {code}.")
+		_fail("INVALID_CAMPAIGN_CODE", f"Không tìm thấy chiến dịch với mã: {code}.")
 	return campaign
 
 
 def _resolve_quick_import_campaign(value: Any) -> str:
 	code = _text(value)
 	if not code:
-		_fail("CAMPAIGN_REQUIRED", "Campaign là bắt buộc khi import Lead nhanh.")
+		_fail("CAMPAIGN_REQUIRED", "Vui lòng chọn chiến dịch trước khi import Lead.")
 	code = code.upper()
 	if not is_valid_campaign_code(code):
 		_fail(
 			"INVALID_CAMPAIGN_CODE",
-			"campaign_code phải có dạng CMP-{CAMPUS_CODE}-{YYMMDD}-{TOKEN4} "
-			"(hoặc mã legacy CAM-YYYY-NNNNN).",
+			"Mã chiến dịch không đúng định dạng. Vui lòng kiểm tra lại.",
 		)
 	campaign = frappe.db.get_value(
 		"CRM Campaign", {"stable_code": code}, ["name", "status"], as_dict=True
 	)
 	if not campaign or not campaign.get("name"):
-		_fail("INVALID_CAMPAIGN_CODE", f"Không tìm thấy Campaign với code: {code}.")
+		_fail("INVALID_CAMPAIGN_CODE", f"Không tìm thấy chiến dịch với mã: {code}.")
 	if not frappe.has_permission("CRM Campaign", "read", campaign.get("name")):
-		_fail("CAMPAIGN_PERMISSION_DENIED", "Bạn không có quyền đọc Campaign đã chọn.")
+		_fail("CAMPAIGN_PERMISSION_DENIED", "Bạn không có quyền sử dụng chiến dịch này.")
 	status = (_text(campaign.get("status")) or "").upper()
 	if status not in _QUICK_IMPORT_CAMPAIGN_STATUSES:
 		_fail(
 			"CAMPAIGN_STATUS_NOT_ALLOWED",
-			"Chỉ Campaign ACTIVE hoặc CLOSED mới được dùng để import Lead.",
+			"Chiến dịch phải ở trạng thái đang hoạt động hoặc đã đóng mới được dùng để nhập Lead.",
 		)
 	return campaign.get("name")
 
@@ -684,6 +687,7 @@ def _normalize_lead_payload(
 		"other_email": other_email,
 		"gender": _text(payload.get("gender")),
 		"date_of_birth": _text(payload.get("date_of_birth")),
+		"religion": _text(payload.get("religion")),
 		"province": province,
 		"ward": ward,
 		"high_school": high_school,
@@ -842,6 +846,7 @@ def _normalize_public_lead_payload(
 		"other_email": other_email,
 		"gender": _text(payload.get("gender")),
 		"date_of_birth": _text(payload.get("date_of_birth")),
+		"religion": _text(payload.get("religion")),
 		"source": source,
 		"campaign": campaign,
 		"advertising_channel": _text(payload.get("advertising_channel")),
@@ -1209,6 +1214,28 @@ def _pad_import_row(values: Iterable[Any], width: int) -> list[Any]:
 	return row[:width] + [None] * max(0, width - len(row))
 
 
+def _drop_server_managed_import_columns(table: dict[str, Any]) -> dict[str, Any]:
+	"""Remove status columns before exposing the mapping table to clients."""
+	headers = table["headers"]
+	kept_indexes = [
+		index
+		for index, header in enumerate(headers)
+		if _normalize_header(header) not in _SERVER_MANAGED_IMPORT_HEADERS
+	]
+	if len(kept_indexes) == len(headers):
+		return table
+	return {
+		"headers": [headers[index] for index in kept_indexes],
+		"rows": [
+			{
+				"row": row["row"],
+				"values": [row["values"][index] for index in kept_indexes],
+			}
+			for row in table["rows"]
+		],
+	}
+
+
 def _check_import_column_count(headers: list[Any]) -> None:
 	if len(headers) > MAX_IMPORT_COLUMNS:
 		_fail("TOO_MANY_COLUMNS", f"File import tối đa {MAX_IMPORT_COLUMNS} cột.")
@@ -1238,7 +1265,7 @@ def _parse_raw_csv_table(csv_content: str) -> dict[str, Any]:
 		_fail("INVALID_CSV", "CSV không có header.")
 	if not data_rows:
 		_fail("INVALID_CSV", "CSV không có dòng dữ liệu.")
-	return {"headers": headers, "rows": data_rows}
+	return _drop_server_managed_import_columns({"headers": headers, "rows": data_rows})
 
 
 def _parse_raw_xlsx_table(file_content: bytes) -> dict[str, Any]:
@@ -1274,7 +1301,7 @@ def _parse_raw_xlsx_table(file_content: bytes) -> dict[str, Any]:
 			_fail("INVALID_XLSX", "XLSX không có header.")
 		if not data_rows:
 			_fail("INVALID_XLSX", "XLSX không có dòng dữ liệu.")
-		return {"headers": headers, "rows": data_rows}
+		return _drop_server_managed_import_columns({"headers": headers, "rows": data_rows})
 	except LeadMappingError:
 		raise
 	except Exception:
@@ -1352,7 +1379,11 @@ def _validate_column_mapping(
 	for item in mapping:
 		source_index = item["sourceIndex"]
 		if source_index >= header_count:
-			_fail("INVALID_SOURCE_INDEX", f"Không tìm thấy sourceIndex: {source_index}.")
+			_fail(
+				"INVALID_SOURCE_INDEX",
+				"Cấu hình mapping không khớp với số cột trong file. "
+				"Vui lòng chọn lại file và map lại các cột.",
+			)
 		if source_index in seen_sources:
 			_fail("DUPLICATE_SOURCE_INDEX", f"sourceIndex bị lặp: {source_index}.")
 		seen_sources.add(source_index)
@@ -1648,6 +1679,22 @@ def _preview_fields(values: dict[str, Any]) -> dict[str, Any]:
 	}
 
 
+def _preview_processing(values: dict[str, Any], row: int) -> dict[str, Any]:
+	"""Classify a valid import row without creating the Lead."""
+	try:
+		from crm.fcrm.lead_processing import preview_lead_values
+
+		return preview_lead_values(values, name=f"IMPORT-PREVIEW-{row}")
+	except Exception:
+		# Validation remains usable when the optional duplicate lookup is not
+		# available; the row is kept visible for the later processing step.
+		return {
+			"processing_outcome": None,
+			"reason": "Chưa thể đối chiếu hồ sơ trùng ở bước xem trước.",
+			"error_code": "PROCESSING_PREVIEW_FAILED",
+		}
+
+
 @frappe.whitelist(methods=["POST"])
 def preview_lead_import() -> dict[str, Any]:
 	"""Validate a quick-import file without inserting any Lead."""
@@ -1670,6 +1717,7 @@ def preview_lead_import() -> dict[str, Any]:
 		]
 	preview_rows = []
 	errors = []
+	seen_identifiers: dict[tuple[str, str], int] = {}
 	for parsed_row in parsed_rows:
 		index = parsed_row["row"]
 		row = parsed_row["fields"]
@@ -1683,11 +1731,59 @@ def preview_lead_import() -> dict[str, Any]:
 				require_import_fields=True,
 				campaign_name=campaign_name,
 			)
-			preview_rows.append({"row": index, "fields": _preview_fields(values), "errors": []})
+			processing = _preview_processing(values, index)
+			outcome = str(processing.get("processing_outcome") or "").strip().upper()
+			identifier_key = (
+				_text(values.get("phone")),
+				" ".join(str(values.get("province") or "").strip().split()).casefold(),
+			)
+			if identifier_key[0] and identifier_key[1]:
+				previous_row = seen_identifiers.get(identifier_key)
+				if previous_row and outcome in {"CREATED", "MATCHED"}:
+					processing = {
+						**processing,
+						"processing_outcome": "DUPLICATE",
+						"duplicateOf": None,
+						"duplicateType": "SAME_FILE",
+						"reason": f"Trùng với dòng {previous_row} trong cùng file.",
+					}
+				elif previous_row is None:
+					seen_identifiers[identifier_key] = index
+			preview_rows.append(
+				{
+					"row": index,
+					# Keep the mapped source keys in the preview.  Normalization maps
+					# ``description`` to the Lead's storage field ``notes``; replacing
+					# the source key here makes the Step 3 table lose that value.
+					"fields": _preview_fields({**values, **preview_row}),
+					"errors": [],
+					"processingOutcome": processing.get("processing_outcome"),
+					"targetStudent": processing.get("target_student"),
+					"duplicateOf": processing.get("duplicateOf")
+					or processing.get("duplicate_of"),
+					"duplicateType": processing.get("duplicateType")
+					or processing.get("duplicate_type"),
+					"reason": processing.get("reason"),
+					"errorCode": processing.get("error_code")
+					or processing.get("errorCode"),
+				}
+			)
 		except Exception as error:
 			row_error = {"row": index, **_row_error(error)}
 			errors.append(row_error)
-			preview_rows.append({"row": index, "fields": {}, "errors": [row_error]})
+			preview_rows.append(
+				{
+					"row": index,
+					"fields": _preview_fields(preview_row),
+					"errors": [row_error],
+					"processingOutcome": "INVALID",
+					"targetStudent": None,
+					"duplicateOf": None,
+					"duplicateType": None,
+					"reason": row_error["message"],
+					"errorCode": row_error["code"],
+				}
+			)
 	response = {
 		"filename": filename,
 		"total": len(parsed_rows),

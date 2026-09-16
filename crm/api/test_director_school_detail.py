@@ -63,6 +63,22 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 		self.assertEqual(response["school"]["schoolCode"], "020")
 		self.assertEqual(response["school"]["id"], "01-00123-020")
 
+	def test_detail_preserves_requested_geometry_id_when_province_uses_source_code(self):
+		school = {
+			"name": "school-1", "province": "Đồng Nai", "ward": "ward-1", "school_code": "100",
+			"school_name": "Trung tâm GDNN-GDTX tỉnh Đồng Nai", "canonical_id": "75-26041-100",
+		}
+		sources = {
+			"province": {"province_code": "VN_DONG_NAI", "province_name": "Đồng Nai"},
+			"ward": {"ward_code": "26041", "ward_name": "Phường Trấn Biên"},
+			"snapshot": None, "intelligence": {}, "stakeholders": [],
+			"people": {}, "roles": {}, "activities": [], "activity_types": {},
+		}
+
+		response = detail._build_detail(school, sources, set(), set(), "2026")
+
+		self.assertEqual(response["school"]["id"], "75-26041-100")
+
 	def test_school_id_accepts_current_seven_digit_ward_code(self):
 		with patch.object(
 			common,

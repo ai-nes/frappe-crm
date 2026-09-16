@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Iterable, Mapping
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from crm.fcrm.action_type_catalog import ACTION_TYPE_CODES, action_category
 from crm.fcrm.nba_canonical import (
@@ -19,6 +19,7 @@ from crm.fcrm.nba_canonical import (
 	canonical_digest,
 	json_string_list,
 )
+from crm.fcrm.nba_timing import is_time_allowed
 from crm.fcrm.student_stage import STUDENT_STAGES, TERMINAL_STAGES
 
 EXCLUSION_REASONS: frozenset[str] = frozenset(
@@ -87,6 +88,139 @@ _STAGE_ALLOWED_CATEGORIES: dict[str, frozenset[str]] = {
 		"CONTACT", "INFORMATION", "ENGAGEMENT", "APPLICATION", "CONVERSION", "PARENT", "RECOVERY"
 	}),
 }
+
+_HISTORY_LOOKBACK_DAYS = 14
+_ACTIVE_ACTION_ITEM_STATES = frozenset({
+	"pending",
+	"accepted",
+	"in-progress",
+	"requires-review",
+	"deferred",
+})
+_ACTIVE_RECOMMENDATION_STATES = frozenset({"proposed", "active"})
+
+# The CRM Need catalogue and the AI NBA semantic-need vocabulary are separate
+# contracts. Do not forward ``CRM Need.code`` directly: values such as
+# ``NOT_READY`` are valid Frappe master-data identifiers but are not valid NBA
+# semantic needs.
+_SEMANTIC_ACTION_METADATA: dict[str, dict[str, object]] = {
+	"ADVISE_MAJOR": {
+		"addresses_needs": ["RESOLVE_MAJOR_UNCERTAINTY"],
+		"desired_outcomes": ["major_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"COMPARE_MAJORS": {
+		"addresses_needs": ["RESOLVE_MAJOR_UNCERTAINTY"],
+		"desired_outcomes": ["major_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_MAJOR_INFO": {
+		"addresses_needs": ["RESOLVE_MAJOR_UNCERTAINTY"],
+		"desired_outcomes": ["major_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_MAJOR_VIDEO": {
+		"addresses_needs": ["RESOLVE_MAJOR_UNCERTAINTY"],
+		"desired_outcomes": ["major_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"ADVISE_TUITION": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_TUITION_INFO": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_FINANCIAL_PLAN": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"ADVISE_SCHOLARSHIP": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_SCHOLARSHIP_INFO": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"ASSIST_APPLICATION_FEE": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_PARENT_TUITION": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_PARENT_SCHOLARSHIP": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"ADVISE_CAREER": {
+		"addresses_needs": ["UNDERSTAND_CAREER_OUTLOOK"],
+		"desired_outcomes": ["career_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_CAREER_INFO": {
+		"addresses_needs": ["UNDERSTAND_CAREER_OUTLOOK"],
+		"desired_outcomes": ["career_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_TRAINING_ROADMAP": {
+		"addresses_needs": ["UNDERSTAND_CAREER_OUTLOOK"],
+		"desired_outcomes": ["career_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_PARENT_CAREER_INFO": {
+		"addresses_needs": ["UNDERSTAND_CAREER_OUTLOOK"],
+		"desired_outcomes": ["career_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+}
+
+
+def semantic_action_metadata(code: str | None) -> dict[str, object]:
+	"""Return the bounded AI semantic contract for one canonical action."""
+	if str(code or "").strip().upper() == "ASK_DECISION_REASON":
+		return {
+			"addresses_needs": [],
+			"desired_outcomes": ["decision_clarity"],
+			"collects_information": True,
+			"readiness_target": "none",
+		}
+	metadata = _SEMANTIC_ACTION_METADATA.get(str(code or "").strip().upper())
+	if metadata is None:
+		return {
+			"addresses_needs": [],
+			"desired_outcomes": [],
+			"collects_information": False,
+			"readiness_target": "none",
+		}
+	return {key: list(value) if isinstance(value, list) else value for key, value in metadata.items()}
 
 
 def action_opportunities(code: str | None, category: str | None = None) -> tuple[str, ...]:
@@ -169,6 +303,114 @@ def _parse_time_slots(value: object) -> list[str]:
 	return [str(item) for item in value if str(item)]
 
 
+def _academic_eligibility(
+	constraint: object, decision_context: Mapping[str, object] | None
+) -> bool | None:
+	"""Evaluate the optional bounded GPA constraint without guessing missing data.
+
+	An empty constraint is an explicit pass.  A configured constraint requires a
+	current academic projection and supports only the documented ``min_gpa`` /
+	``max_gpa`` bounds; malformed or incomplete constraints remain unknown so the
+	NBA kernel can fail closed with WAIT.
+	"""
+	if not constraint:
+		return True
+	if not isinstance(constraint, Mapping) or not isinstance(decision_context, Mapping):
+		return None
+	academic = decision_context.get("academic")
+	if not isinstance(academic, Mapping) or academic.get("quality") != "current":
+		return None
+	try:
+		gpa = float(academic.get("gpa"))
+	except (TypeError, ValueError):
+		return None
+	if not math.isfinite(gpa):
+		return None
+	try:
+		minimum = constraint.get("min_gpa")
+		maximum = constraint.get("max_gpa")
+		if minimum is None and maximum is None:
+			return None
+		if minimum is not None and gpa < float(minimum):
+			return False
+		if maximum is not None and gpa > float(maximum):
+			return False
+	except (TypeError, ValueError):
+		return None
+	return True
+
+
+def _action_history_flags(
+	student: str, action_codes: Iterable[str], at: datetime
+) -> tuple[dict[str, bool], dict[str, bool]]:
+	"""Return active and recently-completed flags for the candidate action codes.
+
+	The flags are produced here, at the Frappe boundary, because the AI service
+	must not infer dedupe state from opaque history.  The bounded lookback keeps
+	the projection deterministic and avoids treating an old completion as a
+	current duplicate.
+	"""
+	import frappe
+
+	codes = {str(code) for code in action_codes if code}
+	if not codes:
+		return {}, {}
+	at = at.replace(tzinfo=None) if at.tzinfo else at
+	since = at - timedelta(days=_HISTORY_LOOKBACK_DAYS)
+	active: set[str] = set()
+	recently_completed: set[str] = set()
+
+	action_items = frappe.get_all(
+		"CRM Action Item",
+		# Active work must be found even when it was deferred for longer than
+		# the completion lookback; the date bound applies only to completed rows.
+		filters={"student": student},
+		fields=["action", "action_type", "state", "execution_status", "completed_at"],
+		order_by="creation desc",
+		limit_page_length=500,
+		ignore_permissions=True,
+	)
+	for row in action_items:
+		code = str(row.get("action") or row.get("action_type") or "")
+		if code not in codes:
+			continue
+		state = str(row.get("state") or "")
+		execution_status = str(row.get("execution_status") or "")
+		if state in _ACTIVE_ACTION_ITEM_STATES or execution_status in {"planned", "in_progress"}:
+			active.add(code)
+		if state == "completed" or execution_status == "completed":
+			completed_at = _coerce_datetime(row.get("completed_at"))
+			if completed_at and since <= completed_at <= at:
+				recently_completed.add(code)
+
+	recommendations = frappe.get_all(
+		"CRM Recommendation",
+		filters={"target_id": student},
+		fields=["action", "lifecycle_status", "expires_at", "decided_at", "recommended_at"],
+		order_by="creation desc",
+		limit_page_length=500,
+		ignore_permissions=True,
+	)
+	for row in recommendations:
+		code = str(row.get("action") or "")
+		if code not in codes:
+			continue
+		expires_at = _coerce_datetime(row.get("expires_at"))
+		if row.get("lifecycle_status") in _ACTIVE_RECOMMENDATION_STATES and (
+			expires_at is None or expires_at > at
+		):
+			active.add(code)
+		if row.get("lifecycle_status") == "completed":
+			completed_at = _coerce_datetime(row.get("decided_at") or row.get("recommended_at"))
+			if completed_at and since <= completed_at <= at:
+				recently_completed.add(code)
+
+	return (
+		{code: code in active for code in codes},
+		{code: code in recently_completed for code in codes},
+	)
+
+
 def filter_eligible_actions(
 	catalog_rows: Iterable[Mapping[str, object]],
 	*,
@@ -178,6 +420,8 @@ def filter_eligible_actions(
 	cooldown_by_code: Mapping[str, int] | None = None,
 	decision_context: Mapping[str, object] | None = None,
 	parent_authority_channels: set[str] | None = None,
+	duplicate_active_by_code: Mapping[str, bool] | None = None,
+	recently_completed_by_code: Mapping[str, bool] | None = None,
 ) -> dict:
 	"""Split catalog rows into the eligible set and an explained exclusion list.
 
@@ -276,6 +520,7 @@ def filter_eligible_actions(
 			if channel == "NONE" or channel not in parent_channels:
 				exclusions.append({"action": code, "reason": "PARENT_AUTHORITY_MISSING"})
 				continue
+		semantic = semantic_action_metadata(code)
 		actions.append(
 			{
 				"code": code,
@@ -283,13 +528,35 @@ def filter_eligible_actions(
 				"digest": _row_digest(row),
 				"category": category,
 				"default_channel": snapshot["default_channel"],
+				# These facts are true because this row passed the corresponding
+				# Frappe eligibility gate above. They must be explicit on the wire;
+				# omission is interpreted as UNKNOWN by the NBA rule catalog.
+				"in_candidate_set": True,
+				"enabled": True,
+				"effective": True,
+				"actor_allowed": True,
+				"requires_approval": bool(snapshot.get("requires_approval")),
 				"requires_parent_authority": bool(row.get("requires_parent_authority")),
 				"academic_constraint": snapshot.get("academic_constraint") or {},
+				"academic_eligible": _academic_eligibility(
+					snapshot.get("academic_constraint"), decision_context
+				),
+				"duplicate_active": (
+					bool(duplicate_active_by_code.get(code, False))
+					if duplicate_active_by_code is not None
+					else None
+				),
+				"recently_completed": (
+					bool(recently_completed_by_code.get(code, False))
+					if recently_completed_by_code is not None
+					else None
+				),
 				"allowed_actors": allowed_actors,
 				"purpose": snapshot["purpose"],
-				"addresses_needs": [str(row["need"])] if row.get("need") else [],
+				**semantic,
 				"addresses_opportunities": list(opportunities),
 				"allowed_time_slots": _parse_time_slots(row.get("allowed_time_slots")),
+				"time_allowed": is_time_allowed(now, _parse_time_slots(row.get("allowed_time_slots"))),
 			}
 		)
 
@@ -603,6 +870,11 @@ def eligible_action_set_for_student(
 	)
 	for row in catalog_rows:
 		row["category"] = row.get("action_type")
+	duplicate_active_by_code, recently_completed_by_code = _action_history_flags(
+		student,
+		(row.get("code") for row in catalog_rows),
+		evaluated_at,
+	)
 
 	# Frequency-cap inputs are deliberately omitted until a policy supplies real
 	# per-code cooldown caps; `_recent_action_counts` alone would just be a
@@ -618,6 +890,8 @@ def eligible_action_set_for_student(
 			if decision_context is not None
 			else None
 		),
+		duplicate_active_by_code=duplicate_active_by_code,
+		recently_completed_by_code=recently_completed_by_code,
 	)
 	revision = max((action["revision"] for action in result["actions"]), default=0)
 	return {

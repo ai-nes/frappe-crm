@@ -237,6 +237,74 @@ def test_missing_allowed_time_slots_is_an_empty_list():
 	assert actions[0]["allowed_time_slots"] == []
 
 
+def test_eligible_action_publishes_explicit_rule_facts():
+	result = filter_eligible_actions(
+		[
+			_row(
+				allowed_time_slots=["6-12"],
+				academic_constraint={"min_gpa": 8.0},
+			)
+		],
+		now=NOW,
+		actor_roles={"Sale"},
+		decision_context={
+			"student_stage": "Connected",
+			"academic": {"gpa": 8.5, "quality": "current"},
+			"contactability": {"consent": True, "channels": ["CALL"]},
+		},
+		duplicate_active_by_code={"CALL": False},
+		recently_completed_by_code={"CALL": False},
+	)["actions"]
+
+	action = result[0]
+	assert action["in_candidate_set"] is True
+	assert action["enabled"] is True
+	assert action["effective"] is True
+	assert action["actor_allowed"] is True
+	assert action["requires_approval"] is False
+	assert action["academic_eligible"] is True
+	assert action["duplicate_active"] is False
+	assert action["recently_completed"] is False
+	assert action["time_allowed"] is True
+
+
+def test_semantic_action_metadata_uses_the_ai_need_vocabulary():
+	result = filter_eligible_actions(
+		[_row("ADVISE_MAJOR", category="CONVERSION", need="DECISION_SUPPORT")],
+		now=NOW,
+	)["actions"]
+
+	assert result[0]["addresses_needs"] == ["RESOLVE_MAJOR_UNCERTAINTY"]
+	assert result[0]["desired_outcomes"] == ["major_clarity"]
+	assert result[0]["collects_information"] is False
+	assert result[0]["readiness_target"] == "advice"
+
+
+def test_decision_reason_action_publishes_clarification_semantics():
+	result = filter_eligible_actions(
+		[_row("ASK_DECISION_REASON", category="RECOVERY", need="NOT_READY")],
+		now=NOW,
+	)["actions"]
+
+	assert result[0]["addresses_needs"] == []
+	assert result[0]["desired_outcomes"] == ["decision_clarity"]
+	assert result[0]["collects_information"] is True
+	assert result[0]["readiness_target"] == "none"
+
+
+def test_academic_constraint_stays_unknown_without_current_gpa():
+	result = filter_eligible_actions(
+		[_row(academic_constraint={"min_gpa": 8.0})],
+		now=NOW,
+		decision_context={
+			"student_stage": "Connected",
+			"contactability": {"consent": True, "channels": ["CALL"]},
+		},
+	)["actions"]
+
+	assert result[0]["academic_eligible"] is None
+
+
 def test_validate_decision_policy_numbers_rejects_bad_ranges():
 	validate_decision_policy_numbers(3, 10, 0.0)
 	with pytest.raises(ValueError):

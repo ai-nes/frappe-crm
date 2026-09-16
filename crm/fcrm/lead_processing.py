@@ -30,9 +30,15 @@ from crm.fcrm.role_policy import resolve_crm_profile
 from crm.fcrm.student_conversion import StudentConversionError, convert_student
 from crm.fcrm.student_intake import normalize_email, normalize_phone
 from crm.fcrm.student_stage import StudentStageError, set_student_stage
-from crm.fcrm.team_routing import RECIPIENT_FUNCTIONS, _active_memberships, team_routing_readiness
+from crm.fcrm.team_routing import (
+	RECIPIENT_FUNCTIONS,
+	_active_memberships,
+	list_province_recipients,
+	team_routing_readiness,
+)
 
 PROCESSING_STATUSES = ("NEW", "PROCESSING", "PROCESSED", "ASSIGNED", "CLOSED")
+ASSIGNABLE_STATUSES = frozenset({"PROCESSING", "PROCESSED", "ASSIGNED"})
 RESOLUTIONS = ("PENDING", "MATCHED", "CREATED", "DUPLICATE", "INVALID", "SPAM", "FAILED")
 ADVANCING_RESOLUTIONS = frozenset({"MATCHED", "CREATED"})
 TERMINAL_RESOLUTIONS = frozenset({"DUPLICATE", "INVALID", "SPAM", "FAILED"})
@@ -258,9 +264,7 @@ def _canonical_lead_rank(row: Any) -> tuple[int, str, str, str]:
 def _classify_resolution_details(lead, identifiers: dict[str, str]) -> dict[str, Any]:
 	"""Classify Student matches and Lead duplicates without closing every copy."""
 	student_matches = _candidate_rows("CRM Student", identifiers)
-	student_matches = [
-		row for row in student_matches if _duplicate_match_type(identifiers, row)
-	]
+	student_matches = [row for row in student_matches if _duplicate_match_type(identifiers, row)]
 	if len(student_matches) > 1:
 		return {
 			"resolution": "DUPLICATE",
@@ -331,9 +335,8 @@ def _classify_resolution(lead, identifiers: dict[str, str]) -> tuple[str, str | 
 	return classification["resolution"], classification.get("target_student")
 
 
-def preview_lead(lead: str) -> dict[str, Any]:
-	"""Return the processing decision without mutating the Lead."""
-	lead_doc = _load_lead(lead)
+def _preview_lead_document(lead_doc) -> dict[str, Any]:
+	"""Return the processing decision for an already loaded Lead."""
 	if _get_status(lead_doc) != "NEW":
 		return {
 			"status": _get_status(lead_doc),
@@ -354,9 +357,7 @@ def preview_lead(lead: str) -> dict[str, Any]:
 		}
 	classification = _classify_resolution_details(lead_doc, identifiers)
 	return {
-		"status": "PROCESSED"
-		if classification["resolution"] in ADVANCING_RESOLUTIONS
-		else "CLOSED",
+		"status": "PROCESSED" if classification["resolution"] in ADVANCING_RESOLUTIONS else "CLOSED",
 		"resolution": "PENDING",
 		"lead": lead_doc.name,
 		"target_student": classification.get("target_student"),
@@ -366,6 +367,24 @@ def preview_lead(lead: str) -> dict[str, Any]:
 		"reason": classification.get("reason"),
 		"validation": _processing_validation(lead_doc),
 	}
+
+
+def preview_lead_values(values: dict[str, Any], *, name: str) -> dict[str, Any]:
+	"""Classify a normalized Lead payload without inserting a document."""
+	lead_doc = frappe._dict(
+		{
+			"name": name,
+			"processing_status": "NEW",
+			"resolution": "PENDING",
+			**values,
+		}
+	)
+	return _preview_lead_document(lead_doc)
+
+
+def preview_lead(lead: str) -> dict[str, Any]:
+	"""Return the processing decision without mutating the Lead."""
+	return _preview_lead_document(_load_lead(lead))
 
 
 def _load_lead(lead: str, *, internal_service: bool = False):
@@ -393,6 +412,29 @@ def _get_status(lead) -> str:
 
 def _get_resolution(lead) -> str:
 	return str(lead.get("resolution") or "PENDING").strip().upper()
+
+
+def _assert_assignable_status(lead) -> None:
+	if _get_status(lead) not in ASSIGNABLE_STATUSES:
+		_fail("INVALID_STATUS", "Lead ở trạng thái Mới hoặc Đã đóng không thể phân công.")
+
+
+def list_lead_assignment_targets(lead: str) -> dict[str, Any]:
+	"""Return active Sale/CTV recipients eligible for manual Lead assignment."""
+	lead_doc = _load_lead(lead)
+	_assert_assignable_status(lead_doc)
+
+	province = str(lead_doc.get("province") or "").strip()
+	branch = str(lead_doc.get("branch") or "").strip() or None
+	if not province:
+		_fail("MISSING_PROVINCE", "Lead chưa có tỉnh để phân công.")
+
+	return {
+		"lead": lead_doc.name,
+		"province": province,
+		"ownership_revision": int(lead_doc.get("ownership_revision") or 0),
+		"targets": list_province_recipients(province, campus=branch),
+	}
 
 
 def _validate_lead_ownership_target(lead_doc, owner_staff: str, target_team_id: str) -> None:
@@ -430,12 +472,14 @@ def _validate_lead_ownership_target(lead_doc, owner_staff: str, target_team_id: 
 		_fail("RECIPIENT_NOT_ELIGIBLE", "Target Sale is not active at the Lead campus.")
 	if not staff.user or frappe.db.get_value("User", staff.user, "enabled") not in (1, True, "1"):
 		_fail("RECIPIENT_NOT_ELIGIBLE", "Target Sale user is not enabled.")
-	if resolve_crm_profile(frappe.get_roles(staff.user)) not in {"sales", "ctv_sale"} and not is_team_lead_target:
+	if (
+		resolve_crm_profile(frappe.get_roles(staff.user)) not in {"sales", "ctv_sale"}
+		and not is_team_lead_target
+	):
 		_fail("RECIPIENT_NOT_ELIGIBLE", "Target staff is not a Sale or CTV Sale recipient.")
 
-	if not any(
-		membership.staff == owner_staff
-		and (membership.function in RECIPIENT_FUNCTIONS or (is_team_lead_target and membership.function == "Lead Sale"))
+	if not is_team_lead_target and not any(
+		membership.staff == owner_staff and membership.function in RECIPIENT_FUNCTIONS
 		for membership in _active_memberships(target_team_id)
 	):
 		_fail("RECIPIENT_NOT_ELIGIBLE", "Target Sale is not an active member of the target Team.")
@@ -706,13 +750,101 @@ def process_new_leads(admission_year: Any = None, limit: Any = None) -> dict[str
 	}
 
 
+def preview_new_leads(admission_year: Any = None, limit: Any = None) -> dict[str, Any]:
+	"""Preview every NEW Lead without persisting processing or routing changes."""
+	filters = _pending_lead_filters(admission_year)
+	rows = frappe.get_all(
+		"CRM Lead",
+		filters=filters,
+		fields=["name"],
+		order_by="creation asc, name asc",
+		limit_page_length=_scan_limit(limit),
+	)
+
+	summary = {
+		"scanned": 0,
+		"readyToAssign": 0,
+		"matchedStudent": 0,
+		"duplicates": 0,
+		"invalid": 0,
+		"needsReview": 0,
+	}
+	items: list[dict[str, Any]] = []
+	for row in rows:
+		name = row.get("name")
+		if not name:
+			continue
+		summary["scanned"] += 1
+		try:
+			lead_doc = _load_lead(name)
+			result = _preview_lead_document(lead_doc)
+			outcome = str(
+				result.get("processing_outcome") or result.get("resolution") or ""
+			).strip().upper()
+			if outcome == "CREATED":
+				summary["readyToAssign"] += 1
+			elif outcome == "MATCHED":
+				summary["matchedStudent"] += 1
+			elif outcome == "DUPLICATE":
+				summary["duplicates"] += 1
+			elif outcome == "INVALID":
+				summary["invalid"] += 1
+			else:
+				summary["needsReview"] += 1
+			items.append(
+				{
+					"lead": lead_doc.name,
+					"leadCode": lead_doc.get("lead_code"),
+					"studentName": lead_doc.get("student_name"),
+					"phone": lead_doc.get("phone"),
+					"province": lead_doc.get("province"),
+					"highSchool": lead_doc.get("high_school"),
+					"status": result.get("status"),
+					"resolution": result.get("resolution"),
+					"processingOutcome": result.get("processing_outcome"),
+					"targetStudent": (
+						result.get("target_student") or result.get("targetStudent")
+					),
+					"duplicateOf": (
+						result.get("duplicate_of") or result.get("duplicateOf")
+					),
+					"duplicateType": (
+						result.get("duplicate_type") or result.get("duplicateType")
+					),
+					"reason": result.get("reason"),
+					"errorCode": result.get("error_code") or result.get("errorCode"),
+				}
+			)
+		except Exception as exc:
+			code = getattr(exc, "code", None) or "PROCESSING_PREVIEW_FAILED"
+			summary["needsReview"] += 1
+			items.append(
+				{
+					"lead": name,
+					"status": None,
+					"resolution": None,
+					"processingOutcome": None,
+					"targetStudent": None,
+					"duplicateOf": None,
+					"duplicateType": None,
+					"reason": str(exc),
+					"errorCode": code,
+				}
+			)
+
+	return {
+		"summary": summary,
+		"items": items,
+		"admissionYear": filters.get("admission_year"),
+	}
+
+
 def mark_lead_assigned(lead: str, reason: str | None = None) -> dict[str, Any]:
 	"""Mark a successfully owned Lead as ASSIGNED without writing ownership twice."""
 	lead_doc = _load_lead(lead)
 	if _get_status(lead_doc) == "ASSIGNED":
 		return {"status": "ASSIGNED", "lead": lead_doc.name, "resolution": "PENDING"}
-	if _get_status(lead_doc) != "PROCESSED":
-		_fail("INVALID_STATUS", "Only processed valid Leads can be assigned.")
+	_assert_assignable_status(lead_doc)
 	if not lead_doc.get("owner_staff") and not lead_doc.get("assigned_to"):
 		_fail("OWNER_REQUIRED", "Lead ownership must be written before marking it assigned.")
 	_set_processing_values(lead_doc.name, {"processing_status": "ASSIGNED", "resolution": "PENDING"})
@@ -753,8 +885,7 @@ def change_lead_ownership(
 	lead_doc = _load_lead(lead_name)
 	_lock_lead(lead_doc.name)
 	lead_doc = _load_lead(lead_doc.name)
-	if _get_status(lead_doc) != "PROCESSED":
-		_fail("INVALID_STATUS", "Only processed valid Leads can change ownership.")
+	_assert_assignable_status(lead_doc)
 
 	try:
 		current_revision = int(lead_doc.get("ownership_revision") or 0)
@@ -832,10 +963,9 @@ def assign_lead(
 	expected_revision: Any,
 	correlation_id: str | None = None,
 ) -> dict[str, Any]:
-	"""Assign a processed Lead to a Sale and then move it to ASSIGNED."""
+	"""Assign or reassign a Lead to a Sale and move it to ASSIGNED."""
 	lead_doc = _load_lead(lead)
-	if _get_status(lead_doc) != "PROCESSED":
-		_fail("INVALID_STATUS", "Only processed valid Leads can be assigned.")
+	_assert_assignable_status(lead_doc)
 	owner_staff = _required(owner_staff, "owner_staff")
 	target_team_id = _required(target_team_id, "target_team_id")
 	idempotency_key = _required(idempotency_key, "idempotency_key")
@@ -937,6 +1067,7 @@ def handoff_lead(
 			correlation_id=correlation_id,
 			target_student=target_student,
 			_internal_service=_internal_service,
+			_lead_handoff=True,
 		)
 		student_id = conversion.get("target_student") or conversion.get("student_id")
 		if not student_id:

@@ -111,6 +111,44 @@ class TestStudentSegment(FrappeTestCase):
 		self.assertEqual(rows[incomplete.name]["member_count"], 0)
 		self.assertEqual(rows[complete.name]["segment_code"], complete.segment_code)
 
+	def test_shared_segments_are_readable_by_sales_profiles(self):
+		segment = self.group()
+
+		for role in ("Lead Sale", "Sale", "CTV Sale"):
+			user = frappe.get_doc(
+				{
+					"doctype": "User",
+					"email": f"{frappe.generate_hash(length=10)}@example.com",
+					"first_name": f"Shared segment {role}",
+					"send_welcome_email": 0,
+					"roles": [{"role": role}],
+				}
+			).insert()
+			frappe.set_user(user.name)
+			try:
+				result = segments.get_segment_analysis()
+				self.assertIn(
+					segment.segment_code,
+					{row["segment_code"] for row in result["segments"]},
+				)
+			finally:
+				frappe.set_user("Administrator")
+
+	def test_list_survives_a_legacy_segment_with_invalid_filters(self):
+		legacy = self.group(title="Legacy source segment")
+		frappe.db.set_value(
+			"CRM Segment",
+			legacy.name,
+			"filters",
+			'{"groups":[{"conditions":[{"field":"source","operator":"=","value":"Legacy"}]}]}',
+			update_modified=False,
+		)
+
+		rows = {row["name"]: row for row in segments.list_segments()}
+
+		self.assertIn(legacy.name, rows)
+		self.assertEqual(rows[legacy.name]["member_count"], 0)
+
 	def test_get_segment_by_code_returns_the_authorized_segment(self):
 		segment = self.group()
 
@@ -509,6 +547,22 @@ class TestStudentSegment(FrappeTestCase):
 		for value in (-1, "abc", True):
 			with self.assertRaises(frappe.ValidationError):
 				segments.preview_segment(filters=self.rules, start=value)
+
+	def test_preview_search_filters_members_before_pagination(self):
+		doc = self.group()
+
+		matched = segments.preview_segment(
+			segment=doc.name,
+			search="Classification Test",
+			page_length=8,
+		)
+		self.assertEqual(matched["total"], 1)
+		self.assertEqual(matched["member_count"], 1)
+		self.assertEqual(matched["students"][0]["name"], self.student.name)
+
+		unmatched = segments.preview_segment(segment=doc.name, search="does-not-exist")
+		self.assertEqual(unmatched["total"], 0)
+		self.assertEqual(unmatched["students"], [])
 
 	def test_malformed_logic_and_level_values(self):
 		for value in ("VIP", 70, True):

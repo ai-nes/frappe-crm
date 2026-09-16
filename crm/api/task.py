@@ -664,7 +664,13 @@ def _list_action_items(
 	or_filters = None
 	if search:
 		like = f"%{search}%"
-		or_filters = [["objective", "like", like], ["description", "like", like]]
+		or_filters = [
+			["objective", "like", like],
+			["description", "like", like],
+			["action", "like", like],
+			["action_type", "like", like],
+			["action_owner", "like", like],
+		]
 	result = paged_list(
 		"CRM Action Item",
 		_ACTION_ITEM_FIELDS,

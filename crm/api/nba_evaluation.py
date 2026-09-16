@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import frappe
 
@@ -441,7 +442,16 @@ def _shape_student(projection: Mapping, *, now: datetime, timezone: str) -> dict
 	}
 
 
-def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
+def _wire_temporal(value: object, *, timezone: str) -> object:
+	"""Serialize Frappe temporal values with an explicit timezone for AI facts."""
+	if not isinstance(value, (date, datetime)):
+		return value
+	if isinstance(value, datetime) and value.tzinfo is None:
+		value = value.replace(tzinfo=ZoneInfo(timezone))
+	return value.isoformat()
+
+
+def _shape_context(projection: Mapping, *, student: str, now: datetime, timezone: str) -> dict:
 	intent = projection.get("intent") or {}
 	interaction = projection.get("interaction") or {}
 	assessment = projection.get("assessment") or {}
@@ -449,11 +459,9 @@ def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
 	score = projection.get("score") or {}
 	academic = projection.get("academic") or {}
 	interaction_at = interaction.get("at")
-	if isinstance(interaction_at, (date, datetime)):
-		interaction_at = interaction_at.isoformat()
+	interaction_at = _wire_temporal(interaction_at, timezone=timezone)
 	application_deadline = application.get("deadline")
-	if isinstance(application_deadline, (date, datetime)):
-		application_deadline = application_deadline.isoformat()
+	application_deadline = _wire_temporal(application_deadline, timezone=timezone)
 	academic_signal = {
 		"gpa": academic.get("gpa"),
 		"quality": academic.get("quality") or "unknown",
@@ -600,6 +608,18 @@ def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 				"addresses_opportunities": list(action.get("addresses_opportunities") or []),
 				"allowed_channels": [channel] if channel not in (None, "NONE") else [],
 				"allowed_actors": list(action.get("allowed_actors") or []),
+				# Action eligibility facts are authoritative Frappe projections. Keep
+				# them explicit: the NBA catalog treats an omitted fact as UNKNOWN
+				# and therefore applies its fail-closed WAIT policy.
+				"in_candidate_set": action.get("in_candidate_set"),
+				"enabled": action.get("enabled"),
+				"effective": action.get("effective"),
+				"actor_allowed": action.get("actor_allowed"),
+				"requires_approval": action.get("requires_approval"),
+				"academic_eligible": action.get("academic_eligible"),
+				"duplicate_active": action.get("duplicate_active"),
+				"recently_completed": action.get("recently_completed"),
+				"time_allowed": action.get("time_allowed"),
 				"addresses_needs": list(action.get("addresses_needs") or []),
 				"desired_outcomes": list(action.get("desired_outcomes") or []),
 				"collects_information": bool(action.get("collects_information")),
@@ -607,6 +627,7 @@ def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 				"execution_parameter_schema": {},
 				"default_parameters": {},
 				"hard_constraints": {
+					"requires_approval": action.get("requires_approval"),
 					"requires_parent_authority": bool(
 						action.get("requires_parent_authority") or action.get("category") == "PARENT"
 					),
@@ -773,7 +794,7 @@ def build_nba_evaluation_input(
 	eligible_set = _shape_eligible_action_set(eligible, timezone=timezone)
 	return assemble_evaluation_input(
 		_shape_student(projection, now=moment, timezone=timezone),
-		_shape_context(projection, student=student, now=moment),
+		_shape_context(projection, student=student, now=moment, timezone=timezone),
 		eligible_set,
 		_shape_policies(
 			decision,

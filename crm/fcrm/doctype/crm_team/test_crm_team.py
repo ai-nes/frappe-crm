@@ -111,6 +111,23 @@ class TestCRMTeam(FrappeTestCase):
 
 		self._cleanup_staff(staff.name, user)
 
+	def test_team_lead_does_not_need_team_membership(self):
+		team = self._make_team("_Test Team Manager Without Membership")
+		staff, user = self._make_staff("_Test Team Manager")
+
+		team.team_lead_staff = staff.name
+		team.save(ignore_permissions=True)
+
+		self.assertEqual(team.team_lead_staff, staff.name)
+		self.assertFalse(
+			frappe.db.exists(
+				"CRM Team Membership",
+				{"team": team.name, "parent": staff.name, "parenttype": "CRM Staff"},
+			)
+		)
+
+		self._cleanup_staff(staff.name, user)
+
 	# ---------------------------------------------------------------- helpers
 
 	def _make_campus(self, name):

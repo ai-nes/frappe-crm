@@ -476,6 +476,45 @@ class TestStudentSchoolApi(TestCase):
 			limit_page_length=10,
 		)
 
+	def test_get_field_options_adds_major_group_metadata(self):
+		field = Mock(fieldname="major", fieldtype="Link", options="CRM Major")
+		source_meta = Mock(fields=[field])
+		target_meta = Mock(
+			fields=[Mock(fieldname="name"), Mock(fieldname="major_name"), Mock(fieldname="major_group")],
+			title_field="major_name",
+		)
+		with (
+			patch.object(frappe, "get_meta", side_effect=[source_meta, target_meta]),
+			patch.object(
+				frappe,
+				"get_list",
+				side_effect=[
+					[
+						{
+							"name": "Software Engineering",
+							"major_name": "Kỹ thuật phần mềm",
+							"major_group": "ENGINEERING",
+						}
+					],
+					[{"name": "ENGINEERING", "display_name": "Công nghệ"}],
+				],
+			) as get_list,
+		):
+			result = get_field_options("CRM Lead", "major", limit=10)
+
+		self.assertEqual(
+			result["options"],
+			[
+				{
+					"value": "Software Engineering",
+					"label": "Kỹ thuật phần mềm",
+					"groupName": "ENGINEERING",
+					"groupLabel": "Công nghệ",
+				}
+			],
+		)
+		self.assertEqual(get_list.call_args_list[1].kwargs["filters"], {"name": ["in", ["ENGINEERING"]]})
+
 	def test_get_field_options_filters_school_area_by_selected_high_school(self):
 		field = Mock(fieldname="school_area", fieldtype="Link", options="CRM School Area")
 		source_meta = Mock(fields=[field])

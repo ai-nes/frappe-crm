@@ -1,15 +1,14 @@
 """Shared row-level data-scope logic for CRM Contact and CRM Student.
 
 Implements the locked row-level data-scope matrix:
-- Sale / CTV Sale        -> own-assigned records only for direct CRUD/detail
+- CTV Sale               -> own-assigned records only for read/detail and CRUD
+- Sale                   -> own-assigned records; Team/Group Leads read/write led scope
 - Lead Sale              -> own team(s) + own team's unassigned pool
 - System Manager / CRM Manager / Administrator / Admissions Director -> full
 
-The Sale and Lead Sale list projections are intentionally handled by dashboard
-APIs as separate read-only Group/Team/pool views because those profiles have
-assignment authority. Neither projection changes the canonical CRUD/detail
-scope; the Lead Sale and full-visibility profiles use unrestricted dashboard
-readers where their list contract requires it.
+The Sale list/detail read and write projection is derived from active Team/Group
+leadership links; deletes remain owner-scoped. Lead Sale and the full-visibility
+profiles use unrestricted dashboard readers where their list contract requires it.
 
 One doctype-parameterized function is used for both CRM Contact and CRM Student so the two
 doctypes can never drift into the two inconsistent mechanisms they had before this phase.
@@ -67,6 +66,10 @@ def get_operational_record_permission_query_conditions(user=None, doctype=None):
 	student_field = OPERATIONAL_RECORD_STUDENT_FIELDS.get(doctype)
 	if not student_field:
 		return "1=0"
+	if doctype in {"CRM Admission Application", "CRM Student Admission Profile"} and can_read_full_lead_board(
+		user
+	):
+		return None
 	student_condition = get_permission_query_conditions("CRM Student", user=user)
 	if student_condition is None:
 		return None
@@ -152,7 +155,7 @@ def _nba_operational_student(doc):
 	return target_id if target_type == "CRM Student" else None
 
 
-def get_permission_query_conditions(doctype, user=None):
+def get_permission_query_conditions(doctype, user=None, *, for_owner_scope=False):
 	if not user:
 		user = frappe.session.user
 	if user == frappe.conf.get("crm_agents_service_user") and doctype in {
@@ -192,6 +195,18 @@ def get_permission_query_conditions(doctype, user=None):
 			return _campus_condition(table, crm_staff_name)
 		return _team_leader_condition(table, crm_staff_name)
 
+	# Query conditions are primarily consumed by read/list queries. Sale Team
+	# Leads and Group Leads may read/write their wider organisational scope, while
+	# `has_permission(..., ptype="delete")` opts into the canonical owner-only
+	# condition below through `for_owner_scope=True`; write access follows the
+	# same read scope for Sale Team Leads and Group Leads by product policy.
+	profile = resolve_crm_profile(roles)
+	if not for_owner_scope and doctype in {"CRM Lead", "CRM Student"} and profile in {
+		"sales",
+		"ctv_sale",
+	}:
+		return get_student_list_read_condition(user=user, doctype=doctype)
+
 	if scope in {"team_and_team_pool", "team_members_and_own_team_pool"}:
 		team_condition = _team_leader_condition(table, crm_staff_name)
 		# Lead Sale must be able to see every Lead that has not been assigned
@@ -214,20 +229,30 @@ def get_permission_query_conditions(doctype, user=None):
 
 
 def can_read_full_lead_board(user=None) -> bool:
-	"""Whether this profile keeps full-board compatibility for Lead detail/write.
+	"""Whether Lead Sale has full read compatibility for Lead and Student details.
 
 	Lead Sale routes Leads into every province's Team, so the board it works
-	from must keep allowing detail and routing writes after a batch commits
-	ownership to a Sale on another Team. The LeadList API applies the explicit
-	Group/Team scope separately, so this compatibility flag no longer widens
-	list visibility.
+	from must allow detail reads after a batch commits ownership to a Sale on
+	another Team. The Student detail API uses the same read grant because Lead
+	Sale is also entitled to inspect every canonical Student. List APIs apply
+	their own explicit full-list reader.
 
-	The flag still aligns the Lead Sale write check with detail access; Student,
-	delete, and every assignment, conversion, ownership, or lifecycle command keep
+	This is read-only compatibility. The Lead write check remains separate, and
+	Student writes, deletes, assignments, ownership, and lifecycle commands keep
 	their existing checks.
 	"""
 	user = user or frappe.session.user
 	return resolve_crm_profile(_get_policy_roles(user)) == "lead_sales"
+
+
+def can_convert_all_leads(user=None) -> bool:
+	"""Whether the actor may convert any assigned Lead.
+
+	Lead Sale works the full intake board, so conversion must not re-apply the
+	team-limited CRUD scope after the Lead has passed the ASSIGNED gate. Sale and
+	CTV Sale continue through their current Lead read/write scope in ``has_permission``.
+	"""
+	return can_read_full_lead_board(user)
 
 
 def can_write_full_lead_board(user=None) -> bool:
@@ -242,12 +267,12 @@ def can_write_full_lead_board(user=None) -> bool:
 
 
 def get_student_list_read_condition(user=None, *, doctype="CRM Student"):
-	"""Return the list-only Student read scope for roles with assignment access.
+	"""Return the case read scope for roles with assignment access.
 
-	Sale and CTV Sale keep the canonical assigned-only row scope for direct CRUD
-	and detail operations, but their list projection exposes their Team and team
-	pool. The assignment command still enforces its own authorization and
-	ownership revision checks.
+	CTV Sale remains assigned-only. Sale sees its own records and, when the
+	current CRM Staff is a Team Lead or Group Lead, records in the led Team(s),
+	including the corresponding unassigned pool. The assignment command still
+	enforces its own authorization and ownership revision checks.
 
 	Lead Sale additionally sees assigned Students in active Teams belonging to
 	active Groups led by the current CRM Staff. This is the existing Student
@@ -277,39 +302,46 @@ def get_student_list_read_condition(user=None, *, doctype="CRM Student"):
 	if not crm_staff_name:
 		return "1=0"
 
-	own_condition = f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"
-	team_condition = _team_leader_condition(table, crm_staff_name)
-	return f"({own_condition} or {team_condition})"
+	return _sales_list_read_condition(
+		table,
+		crm_staff_name,
+		profile=profile,
+		doctype=doctype,
+	)
 
 
 def has_student_dashboard_read_permission(doc, user=None):
-	"""Check existing Student dashboard/detail visibility for Lead Sale.
+	"""Check Student detail visibility for the current profile.
 
 	This helper is deliberately separate from ``has_student_list_read_permission``
-	because the latter is also used by ownership commands. The Group-level
-	visibility is therefore not accidentally reused as a mutation grant.
+	because the latter is also used by ownership commands. Lead Sale has full
+	case read access; other profiles continue through the single-record check.
 	"""
 	user = user or frappe.session.user
-	if resolve_crm_profile(_get_policy_roles(user)) != "lead_sales":
-		return bool(doc.has_permission("read"))
+	if can_read_full_lead_board(user):
+		return True
+	return bool(doc.has_permission("read"))
 
-	condition = get_student_list_read_condition(user)
-	if condition == "1=0" or not getattr(doc, "name", None):
-		return False
-	return bool(
-		frappe.db.sql(
-			f"select name from `tabCRM Student` where name = %s and ({condition}) limit 1",
-			(doc.name,),
-		)
-	)
+
+def has_student_admission_application_write_permission(doc, user=None):
+	"""Check whether an actor may create or update an application for a Student.
+
+	Lead Sale has full case read access and the ``CRM Admission Application``
+	DocType grants it application write access. That command must not require
+	direct Student field-write access, which remains scoped separately.
+	"""
+	user = user or frappe.session.user
+	if can_read_full_lead_board(user):
+		return True
+	return bool(frappe.has_permission(doc=doc, ptype="write", user=user))
 
 
 def has_student_list_read_permission(doc, user=None):
 	"""Check the Student read scope used by list-and-assign flows.
 
-	For ordinary Student CRUD/detail access, callers must continue using
-	``has_permission``. Sale's assignment flow is the one deliberate exception:
-	it may inspect a Student in its own team or pool before assigning it.
+	The same owner/led-Team/led-Group scope is used by Student read and write
+	checks. Ownership commands still apply their own capability and revision
+	guards before changing an assignment.
 	"""
 	condition = get_student_list_read_condition(user)
 	if condition is None:
@@ -573,12 +605,22 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 	# The regular DocType permission check remains responsible for deciding who
 	# may create; this hook scopes existing rows only.
 	permission_type = permission_type or ptype
+	if (
+		permission_type == "read"
+		and getattr(doc, "doctype", None) in {"CRM Lead", "CRM Student"}
+		and can_read_full_lead_board(user)
+	):
+		return True
 	if permission_type == "create" and not getattr(doc, "name", None):
 		return True
 	if permission_type == "write" and doc.doctype == "CRM Lead" and can_write_full_lead_board(user):
 		return True
 
-	condition = get_permission_query_conditions(doc.doctype, user=user)
+	condition = get_permission_query_conditions(
+		doc.doctype,
+		user=user,
+		for_owner_scope=permission_type not in {"read", "write"},
+	)
 	if condition == "1=0":
 		return False
 	if condition is not None:
@@ -724,6 +766,99 @@ def _in_clause(field, values):
 		return None
 	escaped = ", ".join(frappe.db.escape(v) for v in values)
 	return f"{field} in ({escaped})"
+
+
+def _sales_list_scope_teams(crm_staff_name, profile):
+	"""Resolve the active led-Team scope for a Sale/CTV read projection.
+
+	The organizational links are authoritative here:
+
+	- Sale members do not inherit a Team-wide read scope from membership alone.
+	- Sale Team Leads also see active Teams where ``team_lead_staff`` matches.
+	- Sale Group Leads also see every active Team in their active Groups.
+	- CTV Sale is intentionally assigned-only, even if a stale or exceptional
+	  membership or Group/Team lead link points at the staff record.
+
+	This is deliberately uncached because Team/Group changes are authorization
+	changes and list visibility must reflect them on the next request.
+	"""
+	if profile == "ctv_sale":
+		return set(), set()
+
+	active_group_ids = set(
+		frappe.get_all(
+			"CRM Team Group",
+			filters={"is_active": 1},
+			pluck="name",
+			limit_page_length=0,
+		)
+	)
+	team_rows = frappe.get_all(
+		"CRM Team",
+		fields=["name", "group", "team_lead_staff", "is_active"],
+		limit_page_length=0,
+	)
+	active_teams = {
+		row.get("name")
+		for row in team_rows
+		if row.get("name")
+		and row.get("is_active")
+		and (not row.get("group") or row.get("group") in active_group_ids)
+	}
+
+	group_lead_groups = set(
+		frappe.get_all(
+			"CRM Team Group",
+			filters={"group_lead_staff": crm_staff_name, "is_active": 1},
+			pluck="name",
+			limit_page_length=0,
+		)
+	)
+	group_lead_teams = {
+		row.get("name")
+		for row in team_rows
+		if row.get("name") in active_teams and row.get("group") in group_lead_groups
+	}
+	team_lead_teams = {
+		row.get("name")
+		for row in team_rows
+		if row.get("name") in active_teams and row.get("team_lead_staff") == crm_staff_name
+	}
+
+	return group_lead_teams | team_lead_teams, group_lead_groups
+
+
+def _sales_list_read_condition(table, crm_staff_name, *, profile, doctype):
+	"""Build the owner plus led Group/Team scope for read and write operations."""
+	teams, group_ids = _sales_list_scope_teams(crm_staff_name, profile)
+	parts = [f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"]
+
+	team_clause = _in_clause(f"{table}.owning_team", teams)
+	if team_clause:
+		assigned_clause = f"{table}.owner_staff is not null and {table}.assigned_to is not null"
+		parts.append(f"({assigned_clause} and {team_clause})")
+		parts.append(f"({table}.owner_staff is null and {table}.assigned_to is null and {team_clause})")
+
+	# A Lead can arrive before routing assigns a Team. A Sale Group Lead may
+	# still discover that intake record through the Group's Province; Student
+	# rows do not use this fallback because the Student API requires conversion
+	# and assignment first.
+	if doctype == "CRM Lead" and group_ids:
+		group_provinces = frappe.get_all(
+			"CRM Team Group",
+			filters={"name": ["in", sorted(group_ids)], "is_active": 1},
+			pluck="province",
+			limit_page_length=0,
+		)
+		province_clause = _in_clause(f"{table}.province", group_provinces)
+		if province_clause:
+			parts.append(
+				f"({table}.owner_staff is null and {table}.assigned_to is null and {province_clause})"
+			)
+
+	if len(parts) == 1:
+		return parts[0]
+	return "(" + " or ".join(parts) + ")"
 
 
 def _team_leader_condition(table, crm_staff_name):

@@ -22,6 +22,19 @@ from crm.fcrm.role_policy import (
 AVAILABILITY_STATES = frozenset({"available", "partial", "unavailable"})
 REGIONS = frozenset({"all", "north", "central", "highlands", "south", "mekong"})
 METRICS = frozenset({"opportunity", "leads", "conversion", "competition", "revenue"})
+PROVINCE_GEOMETRY_CODE_BY_SOURCE_CODE = {
+	"VN_KHANH_HOA": "56",
+	"VN_DAK_LAK": "66",
+	"VN_LAM_DONG": "68",
+	"VN_DONG_NAI": "75",
+	"VN_HO_CHI_MINH": "79",
+	"VN_TAY_NINH": "80",
+	"VN_DONG_THAP": "82",
+}
+PROVINCE_SOURCE_CODE_BY_GEOMETRY_CODE = {
+	geometry_code: source_code
+	for source_code, geometry_code in PROVINCE_GEOMETRY_CODE_BY_SOURCE_CODE.items()
+}
 _EXTERNAL_SCHOOL_ID = re.compile(r"^(?P<province>\d{2})-(?P<middle>\d+)-(?P<school>\d{3})$")
 _SCHOOL_FIELDS = [
 	"name",
@@ -54,12 +67,13 @@ def raise_api_error(code: str, message: str, exception: type[Exception], status:
 	frappe.throw(_(message), exception)
 
 
-def require_director_access(*, allow_sales: bool = False) -> dict[str, Any]:
+def require_director_access(*, allow_sales: bool = False, allow_marketing: bool = False) -> dict[str, Any]:
 	"""Authorize one active, canonical Director endpoint identity.
 
 	When ``allow_sales`` is enabled, the shared read-only NBA queue may also be
 	used by the canonical Sales profiles. The flag is intentionally opt-in so
-	Director-only APIs and mutation commands keep their existing boundary.
+	Director-only APIs and mutation commands keep their existing boundary. The
+	``allow_marketing`` flag follows the same rule for aggregate read-only APIs.
 	"""
 	user = getattr(frappe.session, "user", None)
 	if not user or user == "Guest":
@@ -81,12 +95,13 @@ def require_director_access(*, allow_sales: bool = False) -> dict[str, Any]:
 		"ctv_sale",
 		"lead_sales",
 	}
+	approved_marketing_reader = allow_marketing and classification == "canonical_profile" and profile == "marketing"
 	allowed_system_roles = FRAMEWORK_ROLE_NAMES | frozenset(DESK_MANAGEMENT_ROLE_NAMES) | {"System Manager"}
 	approved_system_manager = classification == "system_manager" and not (roles - allowed_system_roles)
 	forbidden_business_roles = CANONICAL_PROFILE_ROLES | LEGACY_OVERLAY_ROLES | LEGACY_UNMAPPED_ROLES | ROLE_BACKFILL_SOURCES
 	if classification == "system_manager" and roles & (forbidden_business_roles - {"System Manager"}):
 		approved_system_manager = False
-	if not (approved_director or approved_sales_reader or approved_system_manager):
+	if not (approved_director or approved_sales_reader or approved_marketing_reader or approved_system_manager):
 		message = (
 			"Bạn không có quyền truy cập hàng đợi NBA."
 			if allow_sales
@@ -176,11 +191,31 @@ def _unique_visible(doctype: str, *, filters: dict[str, Any], fields: list[str])
 	return dict(rows[0])
 
 
+def _resolve_province(province_code: str) -> dict[str, Any]:
+	candidates = [province_code]
+	canonical_code = PROVINCE_SOURCE_CODE_BY_GEOMETRY_CODE.get(province_code)
+	if canonical_code:
+		candidates.insert(0, canonical_code)
+
+	for candidate in candidates:
+		rows = frappe.get_list(
+			"CRM Province",
+			filters={"province_code": candidate},
+			fields=["name"],
+			order_by="name asc",
+			limit_page_length=2,
+		)
+		if len(rows) > 1:
+			raise_api_error("SCHOOL_NOT_FOUND", "Không tìm thấy trường.", frappe.DoesNotExistError, 404)
+		if rows:
+			return dict(rows[0])
+
+	raise_api_error("SCHOOL_NOT_FOUND", "Không tìm thấy trường.", frappe.DoesNotExistError, 404)
+
+
 def resolve_school_id(school_id: Any) -> dict[str, Any]:
 	province_code, middle_code, school_code, mode = parse_school_id(school_id)
-	province = _unique_visible(
-		"CRM Province", filters={"province_code": province_code}, fields=["name"]
-	)
+	province = _resolve_province(province_code)
 	school_code_values = [school_code, school_code.lstrip("0") or "0"]
 	filters = {"province": province["name"], "school_code": ["in", list(dict.fromkeys(school_code_values))]}
 	if mode == "canonical":

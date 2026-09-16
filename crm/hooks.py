@@ -144,6 +144,9 @@ permission_query_conditions = {
 	"CRM Student SLA Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Student SLA Delivery": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Segment": "crm.fcrm.doctype.crm_segment.crm_segment.get_permission_query_conditions",
+	"CRM Message Template": "crm.fcrm.doctype.crm_message_template.crm_message_template.get_permission_query_conditions",
+	"CRM Message Template Library": "crm.fcrm.doctype.crm_message_template_library.crm_message_template_library.get_permission_query_conditions",
+	"CRM Snippet": "crm.fcrm.doctype.crm_snippet.crm_snippet.get_permission_query_conditions",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.get_permission_query_conditions",
 	"CRM Action": "crm.fcrm.doctype.crm_action.crm_action.get_permission_query_conditions",
 	"CRM Action Item": "crm.fcrm.doctype.crm_action_item.crm_action_item.get_permission_query_conditions",
@@ -189,6 +192,9 @@ has_permission = {
 	"CRM Student SLA Event": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Student SLA Delivery": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Segment": "crm.fcrm.doctype.crm_segment.crm_segment.has_permission",
+	"CRM Message Template": "crm.fcrm.doctype.crm_message_template.crm_message_template.has_permission",
+	"CRM Message Template Library": "crm.fcrm.doctype.crm_message_template_library.crm_message_template_library.has_permission",
+	"CRM Snippet": "crm.fcrm.doctype.crm_snippet.crm_snippet.has_permission",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.has_permission",
 	"CRM Action": "crm.fcrm.doctype.crm_action.crm_action.has_permission",
 	"CRM Action Item": "crm.fcrm.doctype.crm_action_item.crm_action_item.has_permission",
@@ -440,11 +446,12 @@ scheduler_events = {
 	],
 	"cron": {
 		"10 8 * * *": ["crm.api.agent_events.send_daily_sla_director_digests"],
-		"*/5 * * * *": ["crm.api.sla.recompute_sla_statuses"],
+		"*/5 * * * *": [
+			"crm.api.sla.recompute_sla_statuses",
+			"crm.api.lead_assignment_batch.run_scheduled_unassigned_lead_assignment",
+		],
 		"* * * * *": [
 			"crm.fcrm.master_data_governance.apply_effective_changes",
-			# Assignment runs explicitly from a Lead batch. Keep routing requests
-			# for audit/compatibility, but do not execute them in the background.
 			"crm.fcrm.student_sla.process_due_sla_attempts",
 			"crm.fcrm.student_sla.process_pending_sla_deliveries",
 			"crm.fcrm.student_lead_operations.recall_expired_ctv_batches",

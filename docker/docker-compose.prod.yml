@@ -242,6 +242,13 @@ services:
   queue-short:
     <<: *crm-service
     restart: unless-stopped
+    networks:
+      default:
+      ai-crm_backend:
+        aliases:
+          # Outbox delivery runs in the short worker and calls the internal
+          # crm-agents service configured as `http://app:7999`.
+          - queue-short
     command:
       - bash
       - /opt/frappe/scripts/prod-runtime.sh
@@ -302,6 +309,12 @@ services:
   scheduler:
     <<: *crm-service
     restart: unless-stopped
+    networks:
+      default:
+      ai-crm_backend:
+        aliases:
+          # Scheduled outbox replay also performs crm-agents egress.
+          - scheduler
     command:
       - bash
       - /opt/frappe/scripts/prod-runtime.sh

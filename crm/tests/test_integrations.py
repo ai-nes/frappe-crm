@@ -16,6 +16,7 @@ from crm.integrations.api import (
 	get_recording_url,
 	get_user_default_calling_medium,
 	is_call_integration_enabled,
+	_parse_byte_range,
 	_recording_url_allowed,
 	set_default_calling_medium,
 )
@@ -85,6 +86,12 @@ class TestIntegrations(FrappeTestCase):
 		self.assertFalse(_recording_url_allowed("https://example.com/recording.mp3", "Twilio", False))
 		self.assertFalse(_recording_url_allowed("http://api.twilio.com/recording.mp3", "Twilio", False))
 
+	def test_parse_recording_byte_ranges(self):
+		self.assertEqual(_parse_byte_range("bytes=100-199", 1000), (100, 199))
+		self.assertEqual(_parse_byte_range("bytes=900-", 1000), (900, 999))
+		self.assertEqual(_parse_byte_range("bytes=-100", 1000), (900, 999))
+		self.assertIsNone(_parse_byte_range("bytes=100-199,300-399", 1000))
+
 	def test_recording_proxy_requires_call_log_read_permission(self):
 		call_log = frappe._dict(
 			name="CALL-PRIVATE-1",
@@ -96,6 +103,50 @@ class TestIntegrations(FrappeTestCase):
 		):
 			with self.assertRaises(frappe.DoesNotExistError):
 				get_recording_url("CALL-PRIVATE-1")
+
+	def test_recording_proxy_preserves_http_range_response(self):
+		call_log = create_test_call_log(
+			id="1789999999.123456",
+			recording_url="https://apps.worldfone.cloud/externalcrm/playback2.php?calluuid=1789999999.123456",
+			telephony_medium="Manual",
+			medium="Worldfone",
+		)
+
+		class ProviderResponse:
+			status_code = 206
+			content = b"audio-segment"
+			headers = {
+				"Content-Type": "audio/mpeg",
+				"Content-Length": str(len(content)),
+				"Content-Range": "bytes 10-22/1000",
+				"Accept-Ranges": "bytes",
+			}
+
+			def __enter__(self):
+				return self
+
+			def __exit__(self, *_args):
+				return False
+
+			def raise_for_status(self):
+				raise AssertionError("provider response should not raise")
+
+		with (
+			patch("crm.integrations.api.requests.get", return_value=ProviderResponse()) as provider_get,
+			patch.object(
+				frappe,
+				"request",
+				frappe._dict(headers={"Range": "bytes=10-22"}),
+				create=True,
+			),
+		):
+			response = get_recording_url(call_log.name)
+
+		self.assertEqual(response.status_code, 206)
+		self.assertEqual(response.data, b"audio-segment")
+		self.assertEqual(response.headers["Accept-Ranges"], "bytes")
+		self.assertEqual(response.headers["Content-Range"], "bytes 10-22/1000")
+		self.assertEqual(provider_get.call_args.kwargs["headers"], {"Range": "bytes=10-22"})
 
 	def test_get_user_default_calling_medium_no_agent(self):
 		if frappe.db.exists("Telephony Agent", frappe.session.user):

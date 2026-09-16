@@ -73,6 +73,16 @@ def list_student_worklist(
 	page = candidates[:page_size]
 	has_more = len(candidates) > len(page)
 	evaluations = _recommendation_evaluation_lookup(page)
+	empty_reason = None
+	if not page and student_id:
+		# Only explain an empty page for a Student the caller can already see --
+		# get_list applies CRM Student's own row-level permission conditions, so
+		# an out-of-scope student_id stays silently empty, same as before.
+		visible = frappe.get_list(
+			"CRM Student", filters={"name": student_id}, fields=["name"], limit_page_length=1
+		)
+		if visible:
+			empty_reason = _empty_worklist_reason(student_id)
 	return {
 		"items": [_recommendation_dto(row, evaluations) for row in page],
 		"next_cursor": (
@@ -86,6 +96,7 @@ def list_student_worklist(
 			else None
 		),
 		"policy_version": _RECOMMENDATION_WORKLIST_POLICY_VERSION,
+		"empty_reason": empty_reason,
 	}
 
 
@@ -455,6 +466,67 @@ def list_my_actions(cursor: str | None = None, page_size: int | str = 20) -> dic
 
 def _action_transitions(status):
 	return {"planned": {"in_progress", "cancelled"}, "in_progress": {"completed", "failed", "cancelled"}}.get(status, set())
+
+
+def _empty_worklist_reason(student_id: str) -> str:
+	"""Best-effort, simple Vietnamese reason for one Student's empty worklist page.
+
+	Only call this after the caller's visibility into ``student_id`` is already
+	confirmed (see the ``get_list`` check at the call site). Reading the latest
+	``CRM NBA Evaluation`` with ``ignore_permissions=True`` is safe here because
+	that visibility check already gates it, and this returns only a summarized
+	reason -- never the evaluation document or its rule codes.
+	"""
+	latest = frappe.get_all(
+		"CRM NBA Evaluation",
+		filters={"student": student_id},
+		fields=["name", "status", "disposition", "terminal_reason", "rule_decision"],
+		order_by="creation desc",
+		limit_page_length=1,
+		ignore_permissions=True,
+	)
+	if not latest:
+		return "Học sinh này chưa được hệ thống AI đánh giá lần nào."
+
+	row = latest[0]
+	rule_decision = row.get("rule_decision")
+	if isinstance(rule_decision, str) and rule_decision.strip():
+		try:
+			rule_decision = json.loads(rule_decision)
+		except (TypeError, ValueError):
+			rule_decision = None
+
+	business_reason = None
+	matched_rule_ids = []
+	if isinstance(rule_decision, dict):
+		business_reason = rule_decision.get("business_reason")
+		matched_rule_ids = rule_decision.get("matched_rule_ids") or []
+
+	# Rule codes are diagnostic detail for engineers, never shown to Sales --
+	# server log only.
+	if matched_rule_ids:
+		frappe.logger("nba_worklist").info(
+			"empty worklist reason: student=%s evaluation=%s disposition=%s matched_rule_ids=%s",
+			student_id,
+			row.get("name"),
+			row.get("disposition"),
+			matched_rule_ids,
+		)
+
+	if isinstance(business_reason, str) and business_reason.strip():
+		return business_reason
+
+	if row.get("status") == "failed":
+		return "Lần đánh giá AI gần nhất bị lỗi, chưa có đề xuất mới."
+
+	disposition = row.get("disposition")
+	if disposition == "WAIT":
+		return "Học sinh đang trong thời gian chờ, chưa đến lúc đề xuất hành động mới."
+	if disposition == "ABSTAIN":
+		return "Hệ thống tạm dừng đề xuất cho học sinh này, cần nhân sự xem xét thủ công."
+	if disposition == "NO_ACTION":
+		return "Không có hành động nào phù hợp để đề xuất ở giai đoạn hiện tại của học sinh."
+	return "Chưa có đề xuất hành động mới cho học sinh này."
 
 
 def _ensure_visible_student(student_id: str) -> None:

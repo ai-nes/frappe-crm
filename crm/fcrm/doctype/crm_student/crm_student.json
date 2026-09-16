@@ -212,8 +212,7 @@
   {
    "fieldname": "religion",
    "fieldtype": "Data",
-   "label": "Religion",
-   "permlevel": 1
+   "label": "Religion"
   },
   {
    "fieldname": "nationality",

@@ -25,6 +25,7 @@
   "other_email",
   "gender",
   "date_of_birth",
+  "religion",
   "col_break_1",
   "assigned_to",
   "owner_staff",
@@ -229,6 +230,11 @@
    "fieldname": "date_of_birth",
    "fieldtype": "Date",
    "label": "Date of Birth"
+  },
+  {
+   "fieldname": "religion",
+   "fieldtype": "Data",
+   "label": "Religion"
   },
   {
    "fieldname": "col_break_1",

@@ -17,6 +17,7 @@ from crm.api.assignment_workspace import (
 )
 from crm.fcrm.role_policy import resolve_crm_profile
 from crm.fcrm.student_feature_flags import enabled as feature_enabled
+from crm.fcrm.team_routing import _capacity_snapshot, active_lead_count_by_staff
 
 RECIPIENT_FUNCTIONS = {"Sale", "CTV Sale"}
 CONTROL_DOCTYPE = "CRM Assignment Control"
@@ -408,3 +409,50 @@ def upsert_staff_capacity(
 	doc.source_reference = f"assignment-overview:{frappe.session.user}:{reason.strip()}"[:140]
 	doc.save(ignore_permissions=True)
 	return get_routing_control()
+
+
+@frappe.whitelist(methods=["GET"])
+def list_user_capacity():
+	"""Capacity snapshot (limit/active/remaining) keyed by User, for the Users admin screen.
+
+	Only Users with an active CRM Staff record are included — capacity is a
+	CRM Staff concept and a User without one has never joined a Sales Team.
+	Reads are batched (one query for limits, one for active counts) rather
+	than looping ``_staff_capacity`` per staff, since this runs once per page
+	load for the whole roster.
+	"""
+	_require_control_access()
+	staff_rows = frappe.get_all("CRM Staff", filters={"is_active": 1}, fields=["name", "user"])
+	staff_by_user = {row.name: row.user for row in staff_rows if row.user}
+	if not staff_by_user:
+		return {}
+	limits = _capacity_by_staff()
+	active_counts = active_lead_count_by_staff(list(staff_by_user.keys()))
+	return {
+		user: _capacity_snapshot(
+			int((limits.get(staff) or {}).get("max_active_students") or 0),
+			active_counts.get(staff, 0),
+			configured=staff in limits,
+		)
+		for staff, user in staff_by_user.items()
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def upsert_user_capacity(user: str, max_active_students: int | str, reason: str | None = None):
+	"""Set capacity by User email, resolving the underlying CRM Staff record.
+
+	Lets the Users admin screen set capacity without knowing about CRM Staff:
+	it only has a User row to work with.
+	"""
+	_require_control_access()
+	staff = frappe.db.get_value("CRM Staff", {"user": user, "is_active": 1}, "name")
+	if not staff:
+		frappe.throw(
+			_(
+				"User này chưa có hồ sơ nhân sự (CRM Staff) đang hoạt động trong một Team Sales nào. "
+				"Hãy thêm User vào một Team trước khi đặt capacity."
+			),
+			frappe.ValidationError,
+		)
+	return upsert_staff_capacity(staff=staff, max_active_students=max_active_students, reason=reason)

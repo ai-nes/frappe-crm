@@ -243,6 +243,15 @@ _PERMISSION_FLAGS = {
 	"x": "export",
 }
 
+# Public school detail is intentionally limited to directory/reference data.
+# Student, relationship, snapshot, and activity doctypes remain authenticated.
+PUBLIC_GUEST_READ_DOCTYPES = (
+	"CRM Admission Year",
+	"CRM High School",
+	"CRM Province",
+	"CRM Ward",
+)
+
 # DocPerm vocabulary is deliberately kept separate from Frappe's raw permission
 # dictionaries. Phase 2.2 is the only consumer allowed to translate this contract
 # into database records. The values below mirror the reviewed Phase 2 matrix:
@@ -363,7 +372,8 @@ CANONICAL_PERMISSION_MATRIX = {
 		"permissions": {
 			"system_manager": "rwcdx",
 			"sales": "-",
-			"lead_sales": "-",
+			# Lead Sale manages the submitted bank details from the Student profile.
+			"lead_sales": "rwc",
 			"marketing": "-",
 			"admissions_director": "rwc",
 		},
@@ -669,9 +679,7 @@ def managed_docperm_rows():
 			row = _docperm_row_from_flags(role, flags)
 			if row:
 				rows_by_doctype.setdefault(doctype, []).append(row)
-	for doctype, rows in rows_by_doctype.items():
-		rows_by_doctype[doctype] = sorted(rows, key=lambda row: row["role"])
-	return rows_by_doctype
+	return _add_public_guest_read_rows(rows_by_doctype)
 
 
 def _hardcoded_managed_docperm_rows():
@@ -695,6 +703,14 @@ def _hardcoded_managed_docperm_rows():
 				if row:
 					rows.append(row)
 			rows_by_doctype[doctype] = sorted(rows, key=lambda row: row["role"])
+	return _add_public_guest_read_rows(rows_by_doctype)
+
+
+def _add_public_guest_read_rows(rows_by_doctype):
+	for doctype in PUBLIC_GUEST_READ_DOCTYPES:
+		rows_by_doctype.setdefault(doctype, []).append({"role": "Guest", "read": 1})
+	for doctype, rows in rows_by_doctype.items():
+		rows_by_doctype[doctype] = sorted(rows, key=lambda row: row["role"])
 	return rows_by_doctype
 
 

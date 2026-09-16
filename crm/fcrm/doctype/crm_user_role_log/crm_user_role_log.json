@@ -1,0 +1,11 @@
+{
+ "actions": [], "allow_import": 0, "allow_rename": 0, "autoname": "hash", "creation": "2026-09-11 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["user", "action", "previous_role", "new_role"],
+ "fields": [
+  {"fieldname":"user","fieldtype":"Data","label":"User","read_only":1,"reqd":1,"in_list_view":1},
+  {"fieldname":"action","fieldtype":"Select","label":"Action","options":"role_changed\nremoved","read_only":1,"reqd":1,"in_list_view":1},
+  {"fieldname":"previous_role","fieldtype":"Data","label":"Previous Role","read_only":1},
+  {"fieldname":"new_role","fieldtype":"Data","label":"New Role","read_only":1}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM User Role Log", "permissions": [{"read":1,"role":"Business Admin"},{"read":1,"role":"Admissions Director"},{"read":1,"role":"System Manager"}], "quick_entry": 0, "sort_field": "creation", "sort_order": "DESC", "track_changes": 1
+}

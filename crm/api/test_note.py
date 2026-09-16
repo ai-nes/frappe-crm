@@ -144,6 +144,23 @@ class TestNoteApi(FrappeTestCase):
 		self.assertEqual(update_lead_note(created["name"], content="Đã cập nhật")["content"], "Đã cập nhật")
 		self.assertEqual(delete_lead_note(created["name"]), {"deleted": created["name"]})
 
+	def test_lead_alias_resolves_public_lead_id(self):
+		lead = frappe.get_doc(
+			{
+				"doctype": "CRM Lead",
+				"student_name": "Public Lead ID Note",
+				"phone": "0912345683",
+				"email": "public-lead-id-note@example.com",
+			}
+		).insert(ignore_permissions=True)
+
+		created = create_lead_note(lead.lead_id, content="Ghi chú theo public Lead ID")
+		listed = list_lead_notes(lead.lead_id)
+
+		self.assertEqual(created["reference_doctype"], "CRM Lead")
+		self.assertEqual(listed["total"], 1)
+		self.assertEqual(listed["notes"][0]["content"], "Ghi chú theo public Lead ID")
+
 	def test_display_student_reference_is_resolved_at_note_boundary(self):
 		student = frappe.get_doc(
 			{

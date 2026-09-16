@@ -151,6 +151,9 @@ class TestTaskApi(FrappeTestCase):
 		listed = list_tasks("CRM Segment", segment.name)
 		self.assertEqual(listed["total"], 1)
 		self.assertEqual(listed["tasks"][0]["name"], created["name"])
+		filtered = list_tasks("CRM Segment", segment.name, search="CREATE_NOTE")
+		self.assertEqual(filtered["total"], 1)
+		self.assertEqual(filtered["tasks"][0]["name"], created["name"])
 
 		updated = update_task(created["name"], title="Review updated segment")
 		self.assertEqual(updated["title"], "Review updated segment")

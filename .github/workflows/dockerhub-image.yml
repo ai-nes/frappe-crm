@@ -89,6 +89,26 @@ jobs:
           chmod 700 ~/.ssh
           ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
 
+      - name: Backup production site before migration
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          set -euo pipefail
+          ssh -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" 'bash -se' <<'REMOTE'
+            set -euo pipefail
+            cd /opt/frappe-crm
+            SITE_NAME="$(grep -E '^SITE_NAME=' docker/.env | head -1 | cut -d= -f2-)"
+            test -n "$SITE_NAME"
+            BACKEND_CONTAINER="$(sudo docker ps \
+              --filter label=com.docker.compose.project=crm-prod \
+              --filter label=com.docker.compose.service=backend \
+              --format "{{.ID}}" | head -1)"
+            test -n "$BACKEND_CONTAINER"
+            sudo docker exec -w /home/frappe/frappe-bench "$BACKEND_CONTAINER" \
+              bench --site "$SITE_NAME" backup --with-files
+          REMOTE
+
       - name: Upload production Compose file
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}

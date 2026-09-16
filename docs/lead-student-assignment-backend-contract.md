@@ -314,6 +314,8 @@ Tất cả API trả dữ liệu trong `response.message` theo chuẩn Frappe.
 | `crm.api.lead_assignment_batch.preview_lead_assignment_batch`     | POST | Kiểm tra điều kiện và routing context, chuyển batch sang `ready`.                                         |
 | `crm.api.lead_assignment_batch.run_lead_assignment_batch`         | POST | Phân công Lead đã `PROCESSED`, chỉ ghi Team và Sale/CTV phụ trách.                                         |
 | `crm.api.lead_assignment_batch.run_unassigned_lead_assignment`    | POST | Quét Lead đã `PROCESSED` mà chưa có owner rồi phân công. Không tạo Student và không lọc theo `source`.   |
+| `crm.api.lead_processing.list_lead_assignment_targets`            | GET  | Lấy Sale/CTV đang hoạt động, đủ điều kiện theo tỉnh/cơ sở của một Lead không ở `NEW`/`CLOSED`.            |
+| `crm.api.lead_processing.assign_lead`                             | POST | Phân công hoặc đổi Sale/CTV cho Lead không ở `NEW`/`CLOSED` theo `expected_revision`; yêu cầu quyền vận hành phân tuyến. |
 | `crm.api.lead_processing.process_new_leads`                       | POST | Quét toàn bộ Lead `NEW` (tuỳ chọn `admission_year`, `limit`) và chạy điều kiện dữ liệu cho từng Lead.     |
 | `crm.api.lead_assignment_batch.retry_lead_assignment_batch`       | POST | Chạy lại item lỗi/deferred/manual review.                                                                 |
 | `crm.api.lead_assignment_batch.get_lead_assignment_batch`         | GET  | Lấy chi tiết một batch và item.                                                                           |
@@ -337,6 +339,14 @@ có `batchId`, để người vận hành vẫn nhìn thấy đúng số hồ s�
 còn nằm trong một batch audit. Payload có thể truyền `lead_ids` (chuỗi phân tách bằng
 dấu phẩy hoặc mảng) để chỉ trả về một tập Lead cụ thể và mở trực tiếp hàng đợi đó trên
 giao diện.
+
+Chi tiết Lead dùng `list_lead_assignment_targets` để hiển thị danh sách Sale/CTV theo
+đúng tỉnh và cơ sở của Lead. Lead ở `NEW` hoặc `CLOSED` không được phân công; Lead ở
+`PROCESSING`, `PROCESSED` hoặc `ASSIGNED` được phân công hoặc đổi người phụ trách.
+API chỉ trả về người dùng đang hoạt động, có CRM Staff, đang là thành viên Team hợp lệ
+và chưa chạm giới hạn sức chứa. Lệnh `assign_lead` kiểm tra lại toàn bộ điều kiện cùng
+`expected_revision` ở backend để tránh phân công nhầm khi dữ liệu đã thay đổi trên một
+phiên khác.
 
 ### 5.4. Import batch
 

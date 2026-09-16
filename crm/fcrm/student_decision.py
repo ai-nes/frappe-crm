@@ -251,13 +251,16 @@ _RECEIPT_KIND_BUCKET = {
 
 def _new_receipt(kind, actor, student, key, fingerprint, scope, correlation_id):
 	command_key = _command_key(kind, actor, key)
-	canonical_student = frappe.db.get_value("CRM Student", student, "student") or student
 	return frappe.get_doc({"doctype": RECEIPT, "receipt_key": command_key, "command_key": command_key,
 		# The receipt DocType predates CRM Action and has no Action enum yet;
 		# reuse its governed student-decision bucket without exposing a legacy
 		# writer or creating a second receipt schema.
 		"command_kind": _RECEIPT_KIND_BUCKET.get(kind, "interaction_outcome"),
-		"request_fingerprint": fingerprint, "outcome": "pending", "target_student": canonical_student,
+		# `student` is already the canonical CRM Student here (validated by
+		# callers). The old `canonical_student` lookup fetched CRM Student.student,
+		# which is a back-link to the originating CRM Lead -- wrong doctype for
+		# this Link field.
+		"request_fingerprint": fingerprint, "outcome": "pending", "target_student": student,
 		"target_contact": student,
 		"actor": actor, "scope_snapshot": scope, "policy_version": POLICY_VERSION,
 		"schema_version": SCHEMA_VERSION, "correlation_token": correlation_id, "request_received_at": now_datetime()}).insert(ignore_permissions=True)

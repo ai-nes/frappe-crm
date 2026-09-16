@@ -103,6 +103,7 @@ crm.patches.v1_0.enforce_frappe_crm_workspace_access
 crm.patches.v1_0.set_sales_default_crm_app
 crm.patches.v1_0.admissions_erd_baseline
 crm.patches.v1_0.backfill_admission_applications
+crm.patches.v1_0.allow_lead_sale_student_payment_account_permissions
 crm.patches.v1_0.crm_action_current_slot_unique
 crm.patches.v1_0.crm_action_revision_unique
 crm.patches.v1_0.crm_action_execution_attempt_indexes
@@ -118,6 +119,7 @@ crm.patches.v1_0.seed_default_nba_decision_policy
 crm.patches.v1_0.add_nba_kernel_policy_snapshot
 crm.patches.v1_0.add_recommendation_first_fields
 crm.patches.v1_0.enforce_recommendation_task_boundary
+crm.patches.v1_0.migrate_rule_version_lifecycle
 crm.patches.v1_0.add_nba_evaluation_reevaluation_triggers
 crm.patches.v1_0.backfill_action_execution_task
 crm.patches.v1_0.backfill_placeholder_clusters_zones
@@ -162,6 +164,7 @@ crm.patches.v1_0.unify_student_hs_identifiers
 crm.patches.v1_0.repair_lead_edit_permissions
 crm.patches.v1_0.repair_lead_ownership_projections
 crm.patches.v1_0.backfill_province_region
+crm.patches.v1_0.normalize_province_codes
 crm.patches.v1_0.backfill_team_area_code
 crm.patches.v1_0.upgrade_student_segments
 crm.patches.v1_0.migrate_classification_groups
@@ -187,8 +190,19 @@ crm.patches.v1_0.update_admission_profile_document_labels
 crm.patches.v1_0.ensure_admission_profile_offerings
 crm.patches.v1_0.allow_ctv_sale_aspiration_read
 crm.patches.v1_0.allow_ctv_sale_school_area_read
+crm.patches.v1_0.allow_ctv_sale_campaign_read
 crm.patches.v1_0.move_student_operational_state
 crm.patches.v1_0.rename_ai_lead_insight_to_student_insight
 crm.patches.v1_0.cleanup_legacy_ai_insight_tables
 crm.patches.v1_0.create_business_admin_role
 crm.patches.v1_0.migrate_crm_rule_versions
+crm.patches.v1_0.bootstrap_rule_engine_catalog
+crm.patches.v1_0.migrate_college_graduation_admission_method
+crm.patches.v1_0.backfill_admission_document_type_conditions
+crm.patches.v1_0.seed_crm_message_templates
+crm.patches.v1_0.migrate_message_template_library
+crm.patches.v1_0.migrate_crm_snippet_fields
+crm.patches.v1_0.restore_ai_capability_gateway_fields
+crm.patches.v1_0.add_religion_to_lead
+crm.patches.v1_0.import_major_catalog_from_csv
+crm.patches.v1_0.allow_guest_school_detail_reference_reads

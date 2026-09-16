@@ -95,9 +95,11 @@ def _delete(kind, name, expected_revision):
 	return {"name": name, "deleted": True}
 
 
-def _list(kind, status="active", start=0, page_length=50):
+def _list(kind, status="active", start=0, page_length=50, group=None):
 	config = _config(kind)
 	filters = {"status": status} if status else {}
+	if group:
+		filters["group"] = group
 	rows = frappe.get_list(
 		config["doctype"],
 		filters=filters,
@@ -178,6 +180,30 @@ def _list_groups(kind, status="active", start=0, page_length=100):
 	)
 
 
+def _paged_catalog(kind, *, groups, status="active", start=0, page_length=50, group=None):
+	config = _group_config(kind) if groups else _config(kind)
+	filters = {"status": status} if status else {}
+	if group and not groups:
+		filters["group"] = group
+	rows = (
+		_list_groups(kind, status, start, page_length)
+		if groups
+		else _list(kind, status, start, page_length, group)
+	)
+	count_rows = frappe.get_list(
+		config["doctype"],
+		filters=filters,
+		fields=["count(name) as total"],
+		limit_page_length=0,
+	)
+	return {
+		"groups" if groups else CATALOG[kind]["field"]: rows,
+		"total": int((count_rows[0].get("total") if count_rows else 0) or 0),
+		"start": integer(start, "start"),
+		"page_length": integer(page_length, "page_length", maximum=100) or (100 if groups else 50),
+	}
+
+
 @frappe.whitelist()
 def create_need(data):
 	return _create("need", data)
@@ -229,6 +255,11 @@ def list_need_groups(status="active", start=0, page_length=100):
 
 
 @frappe.whitelist()
+def list_need_groups_page(status="active", start=0, page_length=20):
+	return _paged_catalog("need", groups=True, status=status, start=start, page_length=page_length)
+
+
+@frappe.whitelist()
 def create_tag(data):
 	return _create("tag", data)
 
@@ -254,6 +285,20 @@ def list_tags(status="active", start=0, page_length=50):
 
 
 @frappe.whitelist()
+def list_needs_page(status="active", group=None, start=0, page_length=20):
+	return _paged_catalog(
+		"need", groups=False, status=status, group=group, start=start, page_length=page_length
+	)
+
+
+@frappe.whitelist()
+def list_tags_page(status="active", group=None, start=0, page_length=20):
+	return _paged_catalog(
+		"tag", groups=False, status=status, group=group, start=start, page_length=page_length
+	)
+
+
+@frappe.whitelist()
 def create_tag_group(data):
 	return _create_group("tag", data)
 
@@ -276,6 +321,11 @@ def delete_tag_group(name, expected_revision):
 @frappe.whitelist()
 def list_tag_group_definitions(status="active", start=0, page_length=100):
 	return _list_groups("tag", status, start, page_length)
+
+
+@frappe.whitelist()
+def list_tag_groups_page(status="active", start=0, page_length=20):
+	return _paged_catalog("tag", groups=True, status=status, start=start, page_length=page_length)
 
 
 @frappe.whitelist()
