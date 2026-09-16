@@ -4,10 +4,11 @@ from __future__ import annotations
 import hashlib
 from datetime import timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import frappe
 from frappe import _
-from frappe.utils import get_datetime, now_datetime
+from frappe.utils import get_datetime, get_system_timezone, now_datetime
 
 from crm.fcrm.intelligence_runs import (
 	RUN_TYPES,
@@ -28,7 +29,13 @@ def _iso(value: Any) -> str | None:
 	if not value:
 		return None
 	try:
-		return get_datetime(value).replace(tzinfo=timezone.utc).isoformat()
+		parsed = get_datetime(value)
+		if parsed.tzinfo is None:
+			site_timezone = get_system_timezone()
+			if not site_timezone:
+				return None
+			parsed = parsed.replace(tzinfo=ZoneInfo(site_timezone))
+		return parsed.astimezone(timezone.utc).isoformat()
 	except Exception:
 		return str(value)
 

@@ -1,10 +1,27 @@
 """Contract tests for the Student 360 Sales dashboard reader."""
 
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api import analysis_run_read
+
+
+class TestStudent360DateSerialization(FrappeTestCase):
+	@patch("crm.api.analysis_run_read.get_system_timezone", return_value="Asia/Ho_Chi_Minh")
+	@patch("crm.api.analysis_run_read.get_datetime", return_value=datetime(2026, 9, 12, 8, 0, 0))
+	def test_naive_frappe_datetime_is_interpreted_in_the_site_timezone(self, _get_datetime, _timezone):
+		self.assertEqual(
+			analysis_run_read._iso("2026-09-12 08:00:00"),
+			"2026-09-12T01:00:00+00:00",
+		)
+
+	def test_aware_datetime_is_converted_without_replacing_its_offset(self):
+		value = datetime(2026, 9, 12, 8, 0, 0, tzinfo=timezone(timedelta(hours=2)))
+		with patch("crm.api.analysis_run_read.get_datetime", return_value=value) as get_datetime:
+			self.assertEqual(analysis_run_read._iso(value), "2026-09-12T06:00:00+00:00")
+		get_datetime.assert_called_once_with(value)
 
 
 class TestStudent360Dashboard(FrappeTestCase):
@@ -148,4 +165,3 @@ class TestStudent360PerSourcePermissions(FrappeTestCase):
 			self.assertEqual(score["omitted_reason"], "permission_denied")
 		finally:
 			frappe.set_user("Administrator")
-

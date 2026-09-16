@@ -1,12 +1,13 @@
+import frappe
 from unittest.mock import patch
 
-import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api.capability import (
 	_can_manage_ai_exposure,
 	_project_ai_fields,
 	_safe_student_filters,
+	resolve_ai_student,
 	validate_ai_exposed_change,
 )
 
@@ -29,6 +30,112 @@ class _FakeDoc:
 
 
 class TestAiExposureAuthority(FrappeTestCase):
+	@patch("crm.api.capability.get_session_role_flags")
+	@patch(
+		"crm.api.capability._student_readable_fields_for_current_user",
+		return_value={"name", "full_name", "phone", "email"},
+	)
+	@patch("crm.api.capability._find_observation_roots", return_value=[{"identity": "ID-1"}])
+	@patch(
+		"crm.api.capability.frappe.get_list",
+		return_value=[{"name": "STU-1", "full_name": "Nguyen A"}],
+	)
+	def test_student_resolver_returns_minimal_permission_checked_candidate(
+		self, get_list, _roots, _fields, _session
+	):
+		result = resolve_ai_student("+84 901 100 001", "phone")
+
+		self.assertEqual(
+			result,
+			{
+				"status": "matched",
+				"candidates": [{"student_id": "STU-1", "display_label": "Họ tên: Nguyen A"}],
+			},
+		)
+		filters = get_list.call_args.kwargs["filters"]
+		self.assertEqual(filters, [["student_identity", "in", ["ID-1"]]])
+		self.assertEqual(
+			get_list.call_args.kwargs["fields"], ["name", "full_name", "phone", "email"]
+		)
+
+	@patch("crm.api.capability.get_session_role_flags")
+	@patch(
+		"crm.api.capability._student_readable_fields_for_current_user",
+		return_value={"name", "full_name", "phone", "email", "id_number"},
+	)
+	@patch("crm.api.capability._find_observation_roots", return_value=[{"identity": "ID-1"}])
+	@patch(
+		"crm.api.capability.frappe.get_list",
+		return_value=[
+			{
+				"name": "STU-1",
+				"full_name": "Nguyen A",
+				"phone": "0901000001",
+				"email": "a@example.com",
+				"id_number": "079308031801",
+			},
+			{
+				"name": "STU-2",
+				"full_name": "Nguyen A",
+				"phone": "0901000002",
+				"email": "b@example.com",
+				"id_number": "079308072402",
+			},
+		],
+	)
+	def test_student_resolver_reports_ambiguity_without_match_counts(
+		self, get_list, _roots, _fields, _session
+	):
+		result = resolve_ai_student("student@example.com", "email")
+
+		self.assertEqual(result["status"], "ambiguous")
+		self.assertEqual(
+			result["candidates"],
+			[
+				{
+					"student_id": "STU-1",
+					"display_label": "CCCD: 079308031801 — SĐT: 0901000001 — Email: a@example.com — Họ tên: Nguyen A",
+				},
+				{
+					"student_id": "STU-2",
+					"display_label": "CCCD: 079308072402 — SĐT: 0901000002 — Email: b@example.com — Họ tên: Nguyen A",
+				},
+			],
+		)
+		self.assertNotIn("count", result)
+
+	@patch("crm.api.capability.get_session_role_flags")
+	@patch(
+		"crm.api.capability._student_readable_fields_for_current_user",
+		return_value={"name", "full_name", "id_number"},
+	)
+	@patch("crm.api.capability._find_observation_roots", return_value=[{"identity": "ID-DENIED"}])
+	@patch("crm.api.capability.frappe.get_list", return_value=[])
+	def test_student_resolver_hides_denied_identity_as_not_found(
+		self, get_list, _roots, _fields, _session
+	):
+		result = resolve_ai_student("012345678901", "national_id")
+
+		self.assertEqual(result, {"status": "not_found", "candidates": []})
+
+	@patch("crm.api.capability._find_observation_roots")
+	@patch("crm.api.capability.frappe.get_list")
+	def test_student_resolver_does_not_probe_identity_when_identifier_field_is_denied(self, get_list, roots):
+		from crm.api.capability import _student_resolution_rows
+
+		for reference, reference_kind in (
+			("0901100001", "phone"),
+			("012345678901", "national_id"),
+			("student@example.com", "email"),
+			("Nguyen A", "name"),
+		):
+			self.assertEqual(
+				_student_resolution_rows(reference, reference_kind, {"name"}),
+				[],
+			)
+		roots.assert_not_called()
+		get_list.assert_not_called()
+
 	def test_student_projection_includes_contact_pii_when_readable(self):
 		"""PII is gated only by real permlevel access (`fields` already reflects
 		that), not by a second role-identity check -- the same fields the role
@@ -115,8 +222,9 @@ class TestCanonicalRoleManifestIdentities(FrappeTestCase):
 		from crm.api.capability import get_capability_manifest
 
 		frappe.set_user(self._user("System Manager"))
-		with self.assertRaises(frappe.PermissionError):
-			get_capability_manifest()
+		with patch.dict(frappe.conf, {"crm_agents_demo_full_access": 0}):
+			with self.assertRaises(frappe.PermissionError):
+				get_capability_manifest()
 
 	def test_capability_revision_is_stable_for_an_unchanged_role_set(self):
 		from crm.api.capability import get_capability_revision
@@ -146,5 +254,6 @@ class TestCanonicalRoleManifestIdentities(FrappeTestCase):
 		from crm.api.capability import get_capability_revision
 
 		frappe.set_user(self._user("System Manager"))
-		with self.assertRaises(frappe.PermissionError):
-			get_capability_revision()
+		with patch.dict(frappe.conf, {"crm_agents_demo_full_access": 0}):
+			with self.assertRaises(frappe.PermissionError):
+				get_capability_revision()
