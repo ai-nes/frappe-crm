@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
 from crm.fcrm.utils.geo_hierarchy import block_delete_if_has_children, block_parent_change_if_has_children
@@ -29,6 +30,7 @@ class CRMWard(Document):
 
 	def validate(self):
 		block_parent_change_if_has_children(self, "CRM High School", "ward", "zone")
+		block_parent_change_if_has_children(self, "CRM High School", "ward", "province")
 
 	def _sync_canonical_province(self):
 		if not self.zone:
@@ -42,8 +44,15 @@ class CRMWard(Document):
 			""",
 			(self.zone,),
 		)
-		if province:
-			self.province = province[0][0]
+		if not province:
+			return
+		canonical_province = province[0][0]
+		if self.province and self.province != canonical_province:
+			frappe.throw(
+				_("Zone {0} does not belong to Province {1}.").format(self.zone, self.province),
+				frappe.ValidationError,
+			)
+		self.province = canonical_province
 
 	def on_trash(self):
 		block_delete_if_has_children(self, "CRM High School", "ward")

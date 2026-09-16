@@ -1,0 +1,6 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "commit_message": {
+    "prompt": "When generating Git commit messages:\n\n- Use Conventional Commits.\n- Keep the subject under 60 characters when possible.\n- Prefer a single-line commit message.\n- Do not explain implementation details.\n- Do not list every changed file.\n- Add a body only when the commit contains 2+ distinct changes.\n- If a body is needed, use at most 2 short bullet points.\n- Each bullet should be under 80 characters.\n- Focus on WHAT changed, not HOW it was implemented.\n- Avoid phrases like \"Introduce\", \"Refactor to allow\", \"This change\".\n- Do not repeat information already present in the subject.\n\nGood:\nfeat(api): add geography catalog CRUD\nfix(crm): allow wards without zones\nrefactor(auth): simplify permission checks\n\nBad:\nfeat(api): add geography catalog CRUD APIs\n\nIntroduce a new geography catalog API to provide\npermission-aware CRUD operations for admission..."
+  }
+}
