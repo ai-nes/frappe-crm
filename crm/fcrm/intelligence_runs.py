@@ -720,9 +720,18 @@ def _enforce_manual_quota(domain: str, target: str) -> None:
 	window_start = add_to_date(now_datetime(), minutes=-window_minutes)
 	run_type = RUN_TYPES[domain]
 	field = "student" if domain == "student" else "high_school"
+	# Active runs are serialized by _active_run above. Failed or abstained runs
+	# did not produce a usable analysis and must remain retryable after an
+	# upstream/contract failure; only completed runs consume the manual budget.
 	count = frappe.db.count(
 		run_type,
-		filters={field: target, "trigger": "manual", "requested_by": frappe.session.user, "creation": [">=", window_start]},
+		filters={
+			field: target,
+			"trigger": "manual",
+			"requested_by": frappe.session.user,
+			"status": "completed",
+			"creation": [">=", window_start],
+		},
 	)
 	if count >= limit:
 		frappe.throw("Manual Intelligence Run limit reached for this target; try again later.", frappe.ValidationError)
