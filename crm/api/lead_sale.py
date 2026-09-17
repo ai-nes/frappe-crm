@@ -33,6 +33,51 @@ STUDENT_STATUS_LABELS = {
 	"admission": "Chờ nhập học",
 	"new": "Mới nhận",
 }
+DASHBOARD_STAGE_ORDER = ("lead", "contacted", "qualified", "opportunity", "application", "enrollment")
+DASHBOARD_STAGE_LABELS = {
+	"lead": "Lead mới",
+	"contacted": "Đã liên hệ",
+	"qualified": "Đủ điều kiện",
+	"opportunity": "Cơ hội",
+	"application": "Làm hồ sơ",
+	"enrollment": "Nhập học",
+}
+DASHBOARD_STAGE_SLA_DAYS = {
+	"lead": 1,
+	"contacted": 2,
+	"qualified": 3,
+	"opportunity": 5,
+	"application": 7,
+	"enrollment": 0,
+}
+DASHBOARD_STAGE_PROBABILITY = {
+	"lead": 0.0,
+	"contacted": 0.25,
+	"qualified": 0.10,
+	"opportunity": 0.50,
+	"application": 0.75,
+	"enrollment": 0.95,
+}
+DASHBOARD_LIFECYCLE_STAGE_MAP = {
+	"lead": "lead",
+	"new": "lead",
+	"engaged": "contacted",
+	"attempting": "contacted",
+	"mql": "qualified",
+	"qualified": "qualified",
+	"prospect": "lead",
+	"counselling": "qualified",
+	"consultation": "qualified",
+	"consulted": "qualified",
+	"applicant": "application",
+	"application": "application",
+	"accepted": "application",
+	"enrolled": "enrollment",
+	"connected": "enrollment",
+}
+DASHBOARD_TREND_WEEKS = {"4w": 4, "3m": 12}
+DASHBOARD_AGING_BUCKETS = ("0-2-days", "3-5-days", "6-10-days", "over-10-days")
+DASHBOARD_LOST_STATUSES = {"lost", "withdrawn", "cancelled", "canceled"}
 INTERVENTION_ORDER = ("unassigned", "not-contacted", "at-risk", "blocked")
 TERMINAL_TASK_STATUSES = {"Done", "Canceled"}
 
@@ -86,7 +131,10 @@ ASSIGNMENT_WORKFLOW_DEFINITIONS = (
 		"Học sinh vào hệ thống",
 		"Tạo học sinh · hàng chờ theo cơ sở",
 		"Tiếp nhận học sinh, chống trùng và đưa vào hàng chờ theo cơ sở.",
-		("Kiểm tra học sinh trùng trước khi đưa vào đợt.", "Chỉ chạy khi người vận hành bấm Sắp xếp tự động."),
+		(
+			"Kiểm tra học sinh trùng trước khi đưa vào đợt.",
+			"Chỉ chạy khi người vận hành bấm Sắp xếp tự động.",
+		),
 	),
 	(
 		"validation",
@@ -114,14 +162,20 @@ ASSIGNMENT_WORKFLOW_DEFINITIONS = (
 		"Trường hợp cần kiểm tra",
 		"Thiếu dữ liệu · Hết chỗ · Chờ xử lý",
 		"Học sinh chưa thể gán sẽ được giữ lại để bổ sung dữ liệu hoặc xử lý sau.",
-		("Bổ sung trường, khu vực hoặc tỉnh còn thiếu.", "Chỉ chạy lại khi dữ liệu hoặc cấu hình đã được sửa."),
+		(
+			"Bổ sung trường, khu vực hoặc tỉnh còn thiếu.",
+			"Chỉ chạy lại khi dữ liệu hoặc cấu hình đã được sửa.",
+		),
 	),
 	(
 		"assignment",
 		"Ghi nhận kết quả",
 		"Người phụ trách · Nhóm · Lịch sử",
 		"Lưu người được gán, nhóm, khu vực và lý do để tra cứu về sau.",
-		("Không sửa trực tiếp dữ liệu phân công ngoài luồng này.", "Mỗi kết quả có lịch sử và mã đợt phân công."),
+		(
+			"Không sửa trực tiếp dữ liệu phân công ngoài luồng này.",
+			"Mỗi kết quả có lịch sử và mã đợt phân công.",
+		),
 	),
 )
 
@@ -132,11 +186,24 @@ STUDENT_FIELDS = [
 	"admission_year",
 	"owner_staff",
 	"assigned_to",
+	"owning_team",
+	"owning_pool",
 	"creation",
 	"enrollment_date",
 	"interest_level",
 	"fit_level",
+	"province",
+	"major",
+	"source",
+	"readiness_level",
+	"quality_bucket",
+	"first_contact_time",
+	"next_follow_up",
+	"sla_status",
+	"sla_started_at",
+	"modified",
 ]
+LIFECYCLE_EVENT_FIELDS = ["name", "student", "from_stage", "to_stage", "occurred_at"]
 
 
 @frappe.whitelist(methods=["GET"])
@@ -157,22 +224,43 @@ def get_lead_sale_overview(
 	as_of = _now(report_timezone)
 	warnings: list[str] = []
 
-	teams = _resolve_teams(access["user"], warnings)
-	students = _load_students(admission_year, warnings)
+	teams = _resolve_teams(access["user"], warnings, report_date)
+	students = _load_students(admission_year, warnings, teams, report_date, include_closed=True)
 	student_ids = [str(row.get("name")) for row in students if row.get("name")]
 	contacts = sale_overview._load_contacts(student_ids, warnings)
 	applications = sale_overview._load_applications(student_ids, admission_year, warnings)
 	interactions = sale_overview._load_interactions(student_ids, warnings)
 	tasks = sale_overview._load_tasks(student_ids, warnings)
+	lifecycle_events = _load_lifecycle_events(set(student_ids), warnings)
 
-	records = _build_records(students, contacts, applications, interactions)
-	active_records = [row for row in records if _is_assigned(row)]
-	missing_document_ids = sale_overview._missing_document_ids(applications)
+	records = _build_records(students, contacts, applications, interactions, lifecycle_events)
+	compact_records = [row for row in records if _is_active_pipeline_record(row)]
+	active_records = [row for row in compact_records if _is_assigned(row)]
+	compact_student_ids = {row["id"] for row in compact_records}
+	missing_document_ids = sale_overview._missing_document_ids(
+		[row for row in applications if str(row.get("student")) in compact_student_ids]
+	)
 	annotated_tasks = _annotate_tasks(tasks, as_of, report_timezone)
 
 	status = "available"
 	if warnings:
 		status = "unavailable" if _has_warning(warnings, "students") else "partial"
+	dashboard = _build_dashboard_payload(
+		admission_year,
+		records,
+		applications,
+		contacts,
+		interactions,
+		annotated_tasks,
+		teams,
+		report_date,
+		trend_range,
+		as_of,
+		report_timezone,
+		warnings,
+	)
+	if dashboard.get("status") == "partial" and status == "available":
+		status = "partial"
 
 	return {
 		"meta": {
@@ -185,9 +273,11 @@ def get_lead_sale_overview(
 			"status": status,
 			"warnings": sorted(set(warnings)),
 		},
-		"kpis": _build_kpis(records, active_records, missing_document_ids, annotated_tasks, report_date),
+		"kpis": _build_kpis(
+			compact_records, active_records, missing_document_ids, annotated_tasks, report_date
+		),
 		"interventions": _build_interventions(
-			records,
+			compact_records,
 			contacts,
 			interactions,
 			missing_document_ids,
@@ -196,10 +286,11 @@ def get_lead_sale_overview(
 			report_timezone,
 		),
 		"teamPerformance": {
-			"items": _build_team_performance(teams, records, member_limit),
+			"items": _build_team_performance(teams, compact_records, member_limit),
 		},
 		"studentStatus": _build_student_status(active_records),
 		"resultTrend": _build_result_trend(records, report_date, trend_range, report_timezone),
+		"dashboard": dashboard,
 	}
 
 
@@ -228,11 +319,15 @@ def _require_access() -> dict[str, str]:
 def _parse_timezone(value: Any) -> ZoneInfo:
 	text = str(value or DEFAULT_TIMEZONE).strip()
 	if not text or len(text) > 64:
-		raise_api_error("INVALID_QUERY", "Tham số timezone phải là IANA timezone hợp lệ.", frappe.ValidationError, 400)
+		raise_api_error(
+			"INVALID_QUERY", "Tham số timezone phải là IANA timezone hợp lệ.", frappe.ValidationError, 400
+		)
 	try:
 		return ZoneInfo(text)
 	except ZoneInfoNotFoundError:
-		raise_api_error("INVALID_QUERY", "Tham số timezone phải là IANA timezone hợp lệ.", frappe.ValidationError, 400)
+		raise_api_error(
+			"INVALID_QUERY", "Tham số timezone phải là IANA timezone hợp lệ.", frappe.ValidationError, 400
+		)
 	raise AssertionError("raise_api_error always raises")
 
 
@@ -243,16 +338,22 @@ def _parse_report_date(value: Any, timezone: ZoneInfo) -> date:
 	try:
 		parsed = datetime.strptime(text, "%Y-%m-%d").date()
 	except (TypeError, ValueError):
-		raise_api_error("INVALID_QUERY", "Tham số date phải có định dạng YYYY-MM-DD.", frappe.ValidationError, 400)
+		raise_api_error(
+			"INVALID_QUERY", "Tham số date phải có định dạng YYYY-MM-DD.", frappe.ValidationError, 400
+		)
 	if parsed.isoformat() != text:
-		raise_api_error("INVALID_QUERY", "Tham số date phải có định dạng YYYY-MM-DD.", frappe.ValidationError, 400)
+		raise_api_error(
+			"INVALID_QUERY", "Tham số date phải có định dạng YYYY-MM-DD.", frappe.ValidationError, 400
+		)
 	return parsed
 
 
 def _parse_range(value: Any) -> str:
 	text = str(value or "4w").strip().lower()
 	if text not in TREND_RANGES:
-		raise_api_error("INVALID_QUERY", "Tham số trendRange phải là 4w hoặc 3m.", frappe.ValidationError, 400)
+		raise_api_error(
+			"INVALID_QUERY", "Tham số trendRange phải là 4w hoặc 3m.", frappe.ValidationError, 400
+		)
 	return text
 
 
@@ -260,7 +361,9 @@ def _resolve_admission_year(value: Any) -> str:
 	if value not in (None, ""):
 		text = str(value).strip()
 		if not re.fullmatch(r"\d{4}", text) or not 2000 <= int(text) <= 2100:
-			raise_api_error("INVALID_QUERY", "Tham số admissionYear không hợp lệ.", frappe.ValidationError, 400)
+			raise_api_error(
+				"INVALID_QUERY", "Tham số admissionYear không hợp lệ.", frappe.ValidationError, 400
+			)
 		rows = _get_list(
 			"CRM Admission Year",
 			filters={"name": text},
@@ -278,7 +381,9 @@ def _resolve_admission_year(value: Any) -> str:
 			)
 		if rows:
 			return str(rows[0].get("name") or rows[0].get("year_name") or text)
-		raise_api_error("ADMISSION_YEAR_NOT_FOUND", "Không tìm thấy kỳ tuyển sinh.", frappe.DoesNotExistError, 404)
+		raise_api_error(
+			"ADMISSION_YEAR_NOT_FOUND", "Không tìm thấy kỳ tuyển sinh.", frappe.DoesNotExistError, 404
+		)
 
 	rows = _get_list(
 		"CRM Admission Year",
@@ -308,7 +413,7 @@ def _resolve_admission_year(value: Any) -> str:
 	)
 
 
-def _resolve_teams(user: str, warnings: list[str]) -> list[dict[str, Any]]:
+def _resolve_teams(user: str, warnings: list[str], report_date: date | None = None) -> list[dict[str, Any]]:
 	staff_rows = _get_list(
 		"CRM Staff",
 		filters={"user": user, "is_active": 1},
@@ -324,12 +429,16 @@ def _resolve_teams(user: str, warnings: list[str]) -> list[dict[str, Any]]:
 	memberships = _get_all(
 		"CRM Team Membership",
 		filters={"parent": staff_name, "parenttype": "CRM Staff"},
-		fields=["team", "function", "is_primary"],
+		fields=["team", "function", "is_primary", "effective_from", "effective_until"],
 		limit_page_length=0,
 		warnings=warnings,
 		warning_key="team",
 	)
-	team_ids = [str(row.get("team")) for row in memberships if row.get("team")]
+	team_ids = [
+		str(row.get("team"))
+		for row in memberships
+		if row.get("team") and _assignment_date_active(row, report_date)
+	]
 	if not team_ids:
 		warnings.append("team.membership_not_found")
 		return []
@@ -342,23 +451,63 @@ def _resolve_teams(user: str, warnings: list[str]) -> list[dict[str, Any]]:
 		warning_key="team",
 	)
 	primary = {str(row.get("team")) for row in memberships if row.get("is_primary")}
-	return sorted(teams, key=lambda row: (0 if str(row.get("name")) in primary else 1, str(row.get("name") or "")))
+	return sorted(
+		teams, key=lambda row: (0 if str(row.get("name")) in primary else 1, str(row.get("name") or ""))
+	)
 
 
-def _load_students(admission_year: str, warnings: list[str]) -> list[dict[str, Any]]:
+def _load_students(
+	admission_year: str,
+	warnings: list[str],
+	teams: list[dict[str, Any]] | None = None,
+	report_date: date | None = None,
+	include_closed: bool = False,
+) -> list[dict[str, Any]]:
+	filters: dict[str, Any] = {
+		"admission_year": admission_year,
+	}
+	if not include_closed:
+		filters["student_stage"] = ["not in", ["Connected", "Disqualified"]]
+	else:
+		filters["student_stage"] = ["!=", "Disqualified"]
+	or_filters = None
+	if teams is not None:
+		team_ids = sorted({str(team.get("name")) for team in teams if team.get("name")})
+		if not team_ids:
+			return []
+		staff_ids = _team_staff_ids(team_ids, warnings, report_date)
+		or_filters = [
+			["owner_staff", "in", staff_ids or ["__no_staff__"]],
+			["owning_team", "in", team_ids],
+		]
 	return [
 		_normalize_assignment_student(row)
 		for row in _get_list(
 			"CRM Student",
-			filters={
-				"admission_year": admission_year,
-				"student_stage": ["not in", ["Connected", "Disqualified"]],
-			},
+			filters=filters,
 			fields=STUDENT_FIELDS,
 			limit_page_length=0,
 			warnings=warnings,
 			warning_key="students",
 			order_by="name asc",
+			or_filters=or_filters,
+		)
+	]
+
+
+def _load_lifecycle_events(student_ids: set[str], warnings: list[str]) -> list[dict[str, Any]]:
+	if not student_ids:
+		return []
+	return [
+		dict(row)
+		for row in _get_list(
+			"CRM Student Lifecycle Event",
+			filters={"student": ["in", sorted(student_ids)]},
+			fields=LIFECYCLE_EVENT_FIELDS,
+			limit_page_length=0,
+			warnings=warnings,
+			warning_key="lifecycle_events",
+			order_by="occurred_at asc, name asc",
 		)
 	]
 
@@ -382,6 +531,7 @@ def _get_list(
 	warnings: list[str] | None,
 	warning_key: str | None = None,
 	order_by: str | None = None,
+	or_filters: list[list[Any]] | None = None,
 ) -> list[Any]:
 	try:
 		if not frappe.db.table_exists(doctype):
@@ -395,6 +545,8 @@ def _get_list(
 		}
 		if order_by:
 			kwargs["order_by"] = order_by
+		if or_filters:
+			kwargs["or_filters"] = or_filters
 		return list(frappe.get_list(doctype, **kwargs))
 	except Exception:
 		if warnings is not None and warning_key:
@@ -437,14 +589,120 @@ def _build_records(
 	contacts: list[dict[str, Any]],
 	applications: list[dict[str, Any]],
 	interactions: list[dict[str, Any]],
+	lifecycle_events: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
 	records = sale_overview._build_student_records(students, contacts, applications, interactions)
 	by_id = {str(row.get("name")): row for row in students if row.get("name")}
+	contacts_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	applications_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	interactions_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	events_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	for row in contacts:
+		if row.get("student"):
+			contacts_by_student[str(row["student"])].append(row)
+	for row in applications:
+		if row.get("student"):
+			applications_by_student[str(row["student"])].append(row)
+	for row in interactions:
+		if row.get("student"):
+			interactions_by_student[str(row["student"])].append(row)
+	for row in lifecycle_events or []:
+		if row.get("student"):
+			events_by_student[str(row["student"])].append(row)
 	for record in records:
 		student = by_id.get(record["id"], {})
 		record["owner_staff"] = student.get("owner_staff") or student.get("assigned_to")
 		record["creation"] = student.get("creation")
+		for field in (
+			"full_name",
+			"owning_team",
+			"province",
+			"major",
+			"source",
+			"readiness_level",
+			"quality_bucket",
+			"first_contact_time",
+			"next_follow_up",
+			"sla_status",
+			"sla_started_at",
+			"modified",
+			"enrollment_date",
+			"student_stage",
+		):
+			record[field] = student.get(field)
+		record["stage_history"], record["stage_entered_at"] = _build_stage_history(
+			record,
+			student,
+			contacts_by_student.get(record["id"], []),
+			applications_by_student.get(record["id"], []),
+			interactions_by_student.get(record["id"], []),
+			events_by_student.get(record["id"], []),
+		)
 	return records
+
+
+def _build_stage_history(
+	record: dict[str, Any],
+	student: dict[str, Any],
+	contacts: list[dict[str, Any]],
+	applications: list[dict[str, Any]],
+	interactions: list[dict[str, Any]],
+	lifecycle_events: list[dict[str, Any]],
+) -> tuple[list[dict[str, str]], dict[str, datetime]]:
+	entries: list[tuple[str, datetime]] = []
+	lifecycle_entry_times: dict[str, list[datetime]] = defaultdict(list)
+
+	def add(stage: str, value: Any) -> None:
+		when = sale_overview._coerce_datetime(value)
+		if stage in DASHBOARD_STAGE_ORDER and when:
+			entries.append((stage, when))
+
+	add("lead", student.get("creation"))
+	for event in lifecycle_events:
+		stage = DASHBOARD_LIFECYCLE_STAGE_MAP.get(_dashboard_status(event.get("to_stage")))
+		when = sale_overview._coerce_datetime(event.get("occurred_at"))
+		add(stage or "", when)
+		if stage and when:
+			lifecycle_entry_times[stage].append(when)
+	for contact in contacts:
+		add("contacted", contact.get("first_contact_time"))
+	for interaction in interactions:
+		if sale_overview._is_consulted_interaction(interaction):
+			add("qualified", interaction.get("interaction_datetime"))
+	if "interested" in (record.get("stages") or set()):
+		latest_interaction = sale_overview._latest_interaction(interactions)
+		add("opportunity", (latest_interaction or {}).get("interaction_datetime"))
+	for application in applications:
+		status = _dashboard_status(application.get("status"))
+		if application.get("submitted_at") or status in {"submitted", "under_review", "accepted", "enrolled"}:
+			add("application", application.get("submitted_at") or application.get("modified"))
+		if application.get("enrolled_at") or status == "enrolled":
+			add("enrollment", application.get("enrolled_at") or application.get("modified"))
+	if "admitted" in (record.get("stages") or set()):
+		add("enrollment", record.get("enrollment_date") or student.get("modified"))
+
+	current_stage = _dashboard_stage_id(record)
+	if not entries:
+		add(current_stage, student.get("modified") or student.get("creation"))
+	else:
+		entered_stages = {stage for stage, _ in entries}
+		if current_stage not in entered_stages:
+			add(current_stage, student.get("modified") or student.get("creation"))
+
+	entries.sort(key=lambda item: item[1])
+	stage_entered_at: dict[str, datetime] = {}
+	for stage, when in entries:
+		stage_entered_at.setdefault(stage, when)
+	for stage, values in lifecycle_entry_times.items():
+		stage_entered_at[stage] = max(values)
+	return (
+		[{"stage": stage, "enteredAt": when.isoformat(timespec="seconds")} for stage, when in entries],
+		stage_entered_at,
+	)
+
+
+def _is_active_pipeline_record(record: dict[str, Any]) -> bool:
+	return _dashboard_status(record.get("student_stage")) not in {"connected", "disqualified"}
 
 
 def _build_kpis(
@@ -490,7 +748,9 @@ def _build_interventions(
 	blocked_ids = set(missing_document_ids)
 	for record in records:
 		student_id = record["id"]
-		created_at = sale_overview._as_timezone(sale_overview._coerce_datetime(record.get("creation")), timezone)
+		created_at = sale_overview._as_timezone(
+			sale_overview._coerce_datetime(record.get("creation")), timezone
+		)
 		if (
 			created_at
 			and as_of - created_at > timedelta(hours=24)
@@ -516,7 +776,11 @@ def _build_interventions(
 		"at-risk": at_risk,
 		"blocked": sum(record["id"] in blocked_ids for record in records),
 	}
-	return {"items": [{"id": identifier, "count": max(0, int(counts[identifier]))} for identifier in INTERVENTION_ORDER]}
+	return {
+		"items": [
+			{"id": identifier, "count": max(0, int(counts[identifier]))} for identifier in INTERVENTION_ORDER
+		]
+	}
 
 
 def _build_team_performance(
@@ -565,12 +829,12 @@ def _build_team_performance(
 				"activeStudents": len(owned),
 				"consulted": consulted,
 				"admitted": admitted,
-				"status": "needs-support"
-				if consulted == 0 or (admitted / consulted) < 0.2
-				else "on-track",
+				"status": "needs-support" if consulted == 0 or (admitted / consulted) < 0.2 else "on-track",
 			}
 		)
-	result.sort(key=lambda row: (0 if row["status"] == "needs-support" else 1, -row["activeStudents"], row["id"]))
+	result.sort(
+		key=lambda row: (0 if row["status"] == "needs-support" else 1, -row["activeStudents"], row["id"])
+	)
 	return result[:member_limit]
 
 
@@ -632,8 +896,12 @@ def _trend_point(
 		"label": label,
 		"periodStart": start.isoformat(),
 		"periodEnd": end.isoformat(),
-		"consulted": sum(sale_overview._date_inclusive(row.get("consulted_at"), start, end, timezone) for row in records),
-		"admitted": sum(sale_overview._date_inclusive(row.get("admitted_at"), start, end, timezone) for row in records),
+		"consulted": sum(
+			sale_overview._date_inclusive(row.get("consulted_at"), start, end, timezone) for row in records
+		),
+		"admitted": sum(
+			sale_overview._date_inclusive(row.get("admitted_at"), start, end, timezone) for row in records
+		),
 	}
 
 
@@ -657,7 +925,10 @@ def _team_meta(teams: list[dict[str, Any]]) -> dict[str, str]:
 	if not teams:
 		return {"id": "", "name": "Đội Sale hiện tại"}
 	if len(teams) == 1:
-		return {"id": str(teams[0].get("name") or ""), "name": str(teams[0].get("team_name") or teams[0].get("name") or "")}
+		return {
+			"id": str(teams[0].get("name") or ""),
+			"name": str(teams[0].get("team_name") or teams[0].get("name") or ""),
+		}
 	return {"id": ",".join(str(team.get("name")) for team in teams), "name": "Các đội Sale hiện tại"}
 
 
@@ -702,6 +973,624 @@ def _year_number(value: Any) -> int:
 
 def _has_warning(warnings: list[str], key: str) -> bool:
 	return any(item.startswith(f"{key}.") for item in warnings)
+
+
+# Rich dashboard read model --------------------------------------------------
+#
+# The compact KPI contract above is consumed by existing integrations.  The
+# current Lead Sale screen needs the same permission-scoped snapshot plus
+# funnel, aging, actions and representative measures.  Keep that projection
+# in the backend so every widget is calculated from one dataset.
+
+
+def _build_dashboard_payload(
+	admission_year: str,
+	records: list[dict[str, Any]],
+	applications: list[dict[str, Any]],
+	contacts: list[dict[str, Any]],
+	interactions: list[dict[str, Any]],
+	tasks: list[dict[str, Any]],
+	teams: list[dict[str, Any]],
+	report_date: date,
+	trend_range: str,
+	as_of: datetime,
+	timezone: ZoneInfo,
+	warnings: list[str],
+) -> dict[str, Any]:
+	applications_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	for application in applications:
+		if application.get("student"):
+			applications_by_student[str(application["student"])].append(application)
+
+	contacts_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	interactions_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	for contact in contacts:
+		if contact.get("student"):
+			contacts_by_student[str(contact["student"])].append(contact)
+	for interaction in interactions:
+		if interaction.get("student"):
+			interactions_by_student[str(interaction["student"])].append(interaction)
+
+	stage_by_record = {record["id"]: _dashboard_stage_id(record) for record in records}
+	owner_by_student = {record["id"]: str(record.get("owner_staff") or "") for record in records}
+	age_by_record = {
+		record["id"]: _dashboard_age_days(record, stage_by_record[record["id"]], as_of, timezone)
+		for record in records
+	}
+	lost_ids = {
+		student_id
+		for student_id, rows in applications_by_student.items()
+		if any(_dashboard_status(row.get("status")) in DASHBOARD_LOST_STATUSES for row in rows)
+	}
+	enrollment_ids = {record["id"] for record in records if stage_by_record[record["id"]] == "enrollment"}
+	lost_ids -= enrollment_ids
+	pipeline_records = [record for record in records if record["id"] not in lost_ids]
+	active_records = [record for record in pipeline_records if stage_by_record[record["id"]] != "enrollment"]
+	active_ids = {record["id"] for record in active_records}
+	active_tasks = [task for task in tasks if task.get("student_id") in active_ids]
+	deadline_by_student = _dashboard_follow_up_deadlines(
+		active_records, contacts_by_student, active_tasks, timezone
+	)
+	period_start = _dashboard_period_start(report_date, trend_range)
+	team_ids = sorted({str(team.get("name")) for team in teams if team.get("name")})
+	members = _dashboard_members(
+		teams,
+		pipeline_records,
+		stage_by_record,
+		age_by_record,
+		deadline_by_student,
+		period_start,
+		report_date,
+		as_of,
+		timezone,
+		owner_by_student,
+		lost_ids,
+	)
+	member_names = {member["id"]: member["displayName"] for member in members}
+
+	target = _dashboard_target(admission_year, team_ids, report_date)
+	enrollment = len(enrollment_ids)
+	closed_won = enrollment
+	closed_lost = len(lost_ids)
+	remaining = max(target - enrollment, 0)
+	stage_stats = _dashboard_stage_stats(pipeline_records, stage_by_record, age_by_record)
+	open_records = active_records
+	expected = round(
+		sum(DASHBOARD_STAGE_PROBABILITY[stage_by_record[record["id"]]] for record in open_records)
+	)
+	open_opportunities = sum(
+		stage_by_record[record["id"]] in {"qualified", "opportunity", "application"}
+		for record in open_records
+	)
+	new_opportunities = sum(
+		_dashboard_stage_in_period(record, "opportunity", period_start, report_date, timezone)
+		for record in pipeline_records
+	)
+	follow_up_due = sum(deadline.date() == report_date for deadline in deadline_by_student.values())
+	overdue = sum(deadline < as_of for deadline in deadline_by_student.values())
+	aging_over_sla = sum(
+		stage_stats[stage]["stalledCount"] for stage in DASHBOARD_STAGE_ORDER if stage != "enrollment"
+	)
+	priority_queue = _dashboard_priority_queue(
+		pipeline_records,
+		stage_by_record,
+		age_by_record,
+		contacts_by_student,
+		interactions_by_student,
+		active_tasks,
+		member_names,
+		deadline_by_student,
+		as_of,
+	)
+	status = "available"
+	if target <= 0:
+		status = "partial"
+		warnings.append("target.not_configured")
+
+	return {
+		"summary": {
+			"enrollment": enrollment,
+			"target": target,
+			"achievement": round(enrollment / target * 100) if target else 0,
+			"remaining": remaining,
+			"expected": expected,
+			"coverage": round(expected / remaining, 2) if remaining else 0,
+			"openOpportunities": open_opportunities,
+			"newOpportunities": new_opportunities,
+			"winRate": round(closed_won / (closed_won + closed_lost) * 100)
+			if closed_won + closed_lost
+			else 0,
+			"followUpDue": follow_up_due,
+			"overdue": overdue,
+			"agingOverSla": aging_over_sla,
+		},
+		"actions": [
+			{
+				"id": "overdue",
+				"value": overdue,
+				"longestAgeDays": _dashboard_longest_follow_up_age(deadline_by_student, as_of),
+			},
+			{
+				"id": "unassigned",
+				"value": sum(not _is_assigned(record) for record in active_records),
+				"longestAgeDays": max(
+					(age_by_record[record["id"]] for record in active_records if not _is_assigned(record)),
+					default=0,
+				),
+			},
+			{
+				"id": "due-today",
+				"value": follow_up_due,
+				"longestAgeDays": 0,
+			},
+			{
+				"id": "aging",
+				"value": aging_over_sla,
+				"longestAgeDays": max((age_by_record[record["id"]] for record in active_records), default=0),
+			},
+		],
+		"priorityQueue": priority_queue,
+		"stages": [stage_stats[stage] for stage in DASHBOARD_STAGE_ORDER],
+		"reps": members,
+		"trend": _dashboard_trend(
+			pipeline_records, stage_by_record, report_date, target, trend_range, timezone
+		),
+		"agingBuckets": _dashboard_aging_buckets(
+			{record["id"]: age_by_record[record["id"]] for record in active_records}
+		),
+		"status": status,
+	}
+
+
+def _team_staff_ids(team_ids: list[str], warnings: list[str], report_date: date | None = None) -> list[str]:
+	if not team_ids:
+		return []
+	rows = _get_all(
+		"CRM Team Membership",
+		filters={"team": ["in", team_ids], "parenttype": "CRM Staff"},
+		fields=["parent as staff", "team", "function", "effective_from", "effective_until"],
+		limit_page_length=0,
+		warnings=warnings,
+		warning_key="team",
+	)
+	return sorted(
+		{
+			str(row.get("staff"))
+			for row in rows
+			if row.get("staff")
+			and row.get("function") in {"Sale", "CTV Sale"}
+			and _assignment_date_active(row, report_date)
+		}
+	)
+
+
+def _dashboard_target(admission_year: str, team_ids: list[str], report_date: date) -> int:
+	if not team_ids or not frappe.db.table_exists("CRM Target"):
+		return 0
+	scope_ids = set(team_ids)
+	if frappe.db.table_exists("CRM Planning Scope"):
+		scope_rows = _get_list(
+			"CRM Planning Scope",
+			filters={"team": ["in", team_ids], "status": "Approved"},
+			fields=["name", "team", "effective_from", "effective_until"],
+			limit_page_length=0,
+			warnings=None,
+		)
+		for row in scope_rows:
+			if not _dashboard_effective_on(row, report_date):
+				continue
+			for fieldname in ("name", "team"):
+				if row.get(fieldname):
+					scope_ids.add(str(row[fieldname]))
+	rows = _get_list(
+		"CRM Target",
+		filters={"admission_year": admission_year, "period_type": "Annual", "status": "Approved"},
+		fields=[
+			"metric_key",
+			"target_value",
+			"planning_scope",
+			"version",
+			"modified",
+			"effective_from",
+			"effective_until",
+		],
+		limit_page_length=0,
+		warnings=None,
+		order_by="version desc, modified desc, name desc",
+	)
+	metric_names = {"enrollment", "enrollments", "admission", "admissions", "student_enrollment"}
+	selected: dict[tuple[str, str], float] = {}
+	for row in rows:
+		metric = _dashboard_status(row.get("metric_key"))
+		scope = str(row.get("planning_scope") or "")
+		if (
+			metric not in metric_names
+			or scope not in scope_ids
+			or not _dashboard_effective_on(row, report_date)
+		):
+			continue
+		key = (metric, scope)
+		if key not in selected:
+			try:
+				selected[key] = max(0, float(row.get("target_value") or 0))
+			except (TypeError, ValueError):
+				continue
+	return round(sum(selected.values()))
+
+
+def _dashboard_effective_on(row: dict[str, Any], report_date: date) -> bool:
+	start = _date_of(row.get("effective_from"))
+	end = _date_of(row.get("effective_until"))
+	return (not start or start <= report_date) and (not end or report_date <= end)
+
+
+def _dashboard_members(
+	teams: list[dict[str, Any]],
+	records: list[dict[str, Any]],
+	stage_by_record: dict[str, str],
+	age_by_record: dict[str, int],
+	deadline_by_student: dict[str, datetime],
+	period_start: date,
+	report_date: date,
+	as_of: datetime,
+	timezone: ZoneInfo,
+	owner_by_student: dict[str, str],
+	lost_ids: set[str],
+) -> list[dict[str, Any]]:
+	team_ids = sorted({str(team.get("name")) for team in teams if team.get("name")})
+	staff_ids = _team_staff_ids(team_ids, [], report_date)
+	staff_rows = _get_list(
+		"CRM Staff",
+		filters={
+			"name": [
+				"in",
+				staff_ids or ["__no_staff__"],
+			],
+			"is_active": 1,
+		},
+		fields=["name", "full_name", "user"],
+		limit_page_length=0,
+		warnings=None,
+	)
+	if not staff_rows:
+		staff_rows = [
+			{"name": owner, "full_name": owner}
+			for owner in sorted(
+				{str(record.get("owner_staff")) for record in records if record.get("owner_staff")}
+			)
+		]
+	records_by_owner: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	for record in records:
+		if record.get("owner_staff"):
+			records_by_owner[str(record["owner_staff"])].append(record)
+	result = []
+	for staff in staff_rows:
+		staff_id = str(staff.get("name") or "")
+		owned = records_by_owner.get(staff_id, [])
+		owned_ids = {record["id"] for record in owned}
+		member_deadlines = {
+			student_id: deadline
+			for student_id, deadline in deadline_by_student.items()
+			if student_id in owned_ids
+		}
+		owned_lost_ids = {
+			student_id for student_id in lost_ids if owner_by_student.get(student_id) == staff_id
+		}
+		won = sum(stage_by_record[record["id"]] == "enrollment" for record in owned)
+		lost = len(owned_lost_ids)
+		stage_volumes = {
+			stage: sum(stage_by_record[record["id"]] == stage for record in owned)
+			for stage in DASHBOARD_STAGE_ORDER
+		}
+		stage_stalled = {
+			stage: sum(
+				stage_by_record[record["id"]] == stage
+				and DASHBOARD_STAGE_SLA_DAYS[stage] > 0
+				and age_by_record[record["id"]] > DASHBOARD_STAGE_SLA_DAYS[stage]
+				for record in owned
+			)
+			for stage in DASHBOARD_STAGE_ORDER
+		}
+		avg_age = round(sum(age_by_record[record["id"]] for record in owned) / len(owned), 1) if owned else 0
+		target = 0
+		enrollment = won
+		remaining = max(target - enrollment, 0)
+		expected = round(
+			sum(
+				DASHBOARD_STAGE_PROBABILITY[stage_by_record[record["id"]]]
+				for record in owned
+				if stage_by_record[record["id"]] != "enrollment"
+			)
+		)
+		result.append(
+			{
+				"id": staff_id,
+				"displayName": str(staff.get("full_name") or staff.get("user") or staff_id),
+				"target": target,
+				"enrollment": enrollment,
+				"achievement": round(enrollment / target * 100) if target else 0,
+				"remaining": remaining,
+				"expected": expected,
+				"coverage": round(expected / remaining, 2) if remaining else 0,
+				"winRate": round(won / (won + lost) * 100) if won + lost else 0,
+				"closedOpportunities": won + lost,
+				"wonOpportunities": won,
+				"openOpportunities": sum(
+					stage_volumes[stage] for stage in ("qualified", "opportunity", "application")
+				),
+				"overdue": sum(deadline < as_of for deadline in member_deadlines.values()),
+				"avgStageAgeDays": avg_age,
+				"agingOverSlaCount": sum(stage_stalled.values()),
+				"pipeline": {
+					"newOpportunities": sum(
+						_dashboard_stage_in_period(record, "opportunity", period_start, report_date, timezone)
+						for record in owned
+					),
+					"followUpDue": sum(
+						deadline.date() == report_date for deadline in member_deadlines.values()
+					),
+					"stageVolumes": stage_volumes,
+					"stageStalledCounts": stage_stalled,
+					"agingBuckets": _dashboard_aging_buckets(
+						{record["id"]: age_by_record[record["id"]] for record in owned}, raw=True
+					),
+					"trend": [],
+				},
+			}
+		)
+	result.sort(key=lambda row: (-row["overdue"], -row["agingOverSlaCount"], row["id"]))
+	return result
+
+
+def _dashboard_stage_stats(
+	records: list[dict[str, Any]], stage_by_record: dict[str, str], age_by_record: dict[str, int]
+) -> dict[str, dict[str, Any]]:
+	stats: dict[str, dict[str, Any]] = {}
+	for index, stage in enumerate(DASHBOARD_STAGE_ORDER):
+		owned = [record for record in records if stage_by_record[record["id"]] == stage]
+		next_stage = DASHBOARD_STAGE_ORDER[index + 1] if index + 1 < len(DASHBOARD_STAGE_ORDER) else None
+		entered_count = sum(_dashboard_reached_stage(record, stage, stage_by_record) for record in records)
+		next_count = (
+			sum(_dashboard_reached_stage(record, next_stage, stage_by_record) for record in records)
+			if next_stage
+			else 0
+		)
+		average = round(sum(age_by_record[record["id"]] for record in owned) / len(owned), 1) if owned else 0
+		stalled = sum(
+			DASHBOARD_STAGE_SLA_DAYS[stage] > 0
+			and age_by_record[record["id"]] > DASHBOARD_STAGE_SLA_DAYS[stage]
+			for record in owned
+		)
+		stats[stage] = {
+			"id": stage,
+			"label": DASHBOARD_STAGE_LABELS[stage],
+			"volume": len(owned),
+			"nextStepConversion": (
+				round(next_count / entered_count * 100) if entered_count and next_stage else None
+			),
+			"averageDays": average,
+			"slaDays": DASHBOARD_STAGE_SLA_DAYS[stage],
+			"stalledCount": stalled,
+		}
+	return stats
+
+
+def _dashboard_reached_stage(record: dict[str, Any], stage: str, stage_by_record: dict[str, str]) -> bool:
+	history = {
+		str(entry.get("stage"))
+		for entry in record.get("stage_history", [])
+		if isinstance(entry, dict) and entry.get("stage")
+	}
+	if stage in history:
+		return True
+	current_stage = stage_by_record[record["id"]]
+	return (
+		current_stage in DASHBOARD_STAGE_ORDER
+		and stage in DASHBOARD_STAGE_ORDER
+		and DASHBOARD_STAGE_ORDER.index(current_stage) >= DASHBOARD_STAGE_ORDER.index(stage)
+	)
+
+
+def _dashboard_priority_queue(
+	records: list[dict[str, Any]],
+	stage_by_record: dict[str, str],
+	age_by_record: dict[str, int],
+	contacts_by_student: dict[str, list[dict[str, Any]]],
+	interactions_by_student: dict[str, list[dict[str, Any]]],
+	tasks: list[dict[str, Any]],
+	member_names: dict[str, str],
+	deadline_by_student: dict[str, datetime],
+	as_of: datetime,
+) -> list[dict[str, Any]]:
+	tasks_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	for task in tasks:
+		if task.get("student_id"):
+			tasks_by_student[str(task["student_id"])].append(task)
+	rows = []
+	for record in records:
+		student_id = record["id"]
+		stage = stage_by_record[student_id]
+		if stage == "enrollment":
+			continue
+		open_tasks = [task for task in tasks_by_student.get(student_id, []) if not _task_is_terminal(task)]
+		age = age_by_record[student_id]
+		missing_documents = bool(record.get("missing_documents"))
+		uncontacted = not (record.get("stages") or set()) & {"contacted", "consulted"}
+		deadline = deadline_by_student.get(student_id)
+		overdue = bool(deadline and deadline < as_of) or any(
+			bool(task.get("is_overdue")) for task in open_tasks
+		)
+		follow_up_age = max(0, (as_of.date() - deadline.date()).days) if deadline and deadline < as_of else 0
+		stalled = (
+			stage != "enrollment"
+			and DASHBOARD_STAGE_SLA_DAYS[stage] > 0
+			and age > DASHBOARD_STAGE_SLA_DAYS[stage]
+		)
+		if not any((overdue, missing_documents, uncontacted and age > 1, stalled)):
+			continue
+		if overdue:
+			issue_code, next_action, rank = "overdue", "Xử lý công việc quá hạn", 0
+		elif missing_documents:
+			issue_code, next_action, rank = "missing-documents", "Nhắc bổ sung hồ sơ", 1
+		elif uncontacted:
+			issue_code, next_action, rank = "uncontacted", "Gọi lần đầu", 2
+		else:
+			issue_code, next_action, rank = "aging", "Rà soát và chốt bước tiếp theo", 3
+		latest = sale_overview._latest_interaction(interactions_by_student.get(student_id, []))
+		rows.append(
+			{
+				"id": student_id,
+				"name": record.get("name") or "Hồ sơ chưa đặt tên",
+				"owner": member_names.get(str(record.get("owner_staff")), "Chưa phân công"),
+				"stageId": stage,
+				"stageLabel": DASHBOARD_STAGE_LABELS[stage],
+				"issueCode": issue_code,
+				"ageDays": age,
+				"nextAction": next_action,
+				"followUpAgeDays": follow_up_age,
+				"lastActivityAt": str(
+					(latest or {}).get("interaction_datetime") or record.get("creation") or ""
+				),
+				"priority": rank,
+			}
+		)
+	rows.sort(key=lambda row: (row["priority"], -row["followUpAgeDays"], -row["ageDays"], row["id"]))
+	return rows[:3]
+
+
+def _dashboard_trend(
+	records: list[dict[str, Any]],
+	stage_by_record: dict[str, str],
+	report_date: date,
+	target: int,
+	trend_range: str,
+	timezone: ZoneInfo,
+) -> list[dict[str, Any]]:
+	weeks = DASHBOARD_TREND_WEEKS[trend_range]
+	start = report_date - timedelta(days=report_date.weekday() + (weeks - 1) * 7)
+	points = []
+	for index in range(weeks):
+		period_start = start + timedelta(days=index * 7)
+		period_end = min(period_start + timedelta(days=6), report_date)
+		points.append(
+			{
+				"period": f"Tuần {index + 1}",
+				"enrollment": sum(
+					stage_by_record[record["id"]] == "enrollment"
+					and sale_overview._date_inclusive(
+						record.get("admitted_at"), period_start, period_end, timezone
+					)
+					for record in records
+				),
+				"target": round(target * (index + 1) / weeks) if target else 0,
+				"newOpportunities": sum(
+					_dashboard_stage_in_period(record, "opportunity", period_start, period_end, timezone)
+					for record in records
+				),
+			}
+		)
+	return points
+
+
+def _dashboard_period_start(report_date: date, trend_range: str) -> date:
+	if trend_range == "3m":
+		return _add_months(report_date, -3)
+	return report_date - timedelta(days=27)
+
+
+def _dashboard_stage_in_period(
+	record: dict[str, Any], stage: str, start: date, end: date, timezone: ZoneInfo
+) -> bool:
+	current_stage = _dashboard_stage_id(record)
+	if (
+		current_stage not in DASHBOARD_STAGE_ORDER
+		or stage not in DASHBOARD_STAGE_ORDER
+		or DASHBOARD_STAGE_ORDER.index(current_stage) < DASHBOARD_STAGE_ORDER.index(stage)
+	):
+		return False
+	entered_at = (record.get("stage_entered_at") or {}).get(stage) or record.get("creation")
+	return _date_inclusive_value(entered_at, start, end, timezone)
+
+
+def _dashboard_aging_buckets(age_by_record: dict[str, int], raw: bool = False) -> Any:
+	counts = {
+		"0-2-days": sum(age <= 2 for age in age_by_record.values()),
+		"3-5-days": sum(3 <= age <= 5 for age in age_by_record.values()),
+		"6-10-days": sum(6 <= age <= 10 for age in age_by_record.values()),
+		"over-10-days": sum(age > 10 for age in age_by_record.values()),
+	}
+	if raw:
+		return counts
+	return [{"id": key, "count": counts[key]} for key in DASHBOARD_AGING_BUCKETS]
+
+
+def _dashboard_stage_id(record: dict[str, Any]) -> str:
+	canonical_stage = DASHBOARD_LIFECYCLE_STAGE_MAP.get(_dashboard_status(record.get("student_stage")))
+	if canonical_stage:
+		return canonical_stage
+	if record.get("admitted_at") or "admitted" in (record.get("stages") or set()):
+		return "enrollment"
+	if record.get("missing_documents") or "documents" in (record.get("stages") or set()):
+		return "application"
+	if "interested" in (record.get("stages") or set()):
+		return "opportunity"
+	if "consulted" in (record.get("stages") or set()):
+		return "qualified"
+	if "contacted" in (record.get("stages") or set()):
+		return "contacted"
+	return "lead"
+
+
+def _dashboard_age_days(record: dict[str, Any], stage: str, as_of: datetime, timezone: ZoneInfo) -> int:
+	entered_at = (record.get("stage_entered_at") or {}).get(stage)
+	started = sale_overview._as_timezone(
+		sale_overview._coerce_datetime(entered_at or record.get("creation")), timezone
+	)
+	if not started:
+		return 0
+	return max(0, int((as_of - started).total_seconds() // 86400))
+
+
+def _dashboard_follow_up_deadlines(
+	records: list[dict[str, Any]],
+	contacts_by_student: dict[str, list[dict[str, Any]]],
+	tasks: list[dict[str, Any]],
+	timezone: ZoneInfo,
+) -> dict[str, datetime]:
+	deadlines: dict[str, list[datetime]] = defaultdict(list)
+	active_ids = {record["id"] for record in records}
+	for task in tasks:
+		student_id = str(task.get("student_id") or "")
+		if student_id not in active_ids or _task_is_terminal(task):
+			continue
+		due_at = sale_overview._as_timezone(sale_overview._coerce_datetime(task.get("due_at")), timezone)
+		if due_at:
+			deadlines[student_id].append(due_at)
+	for record in records:
+		student_id = record["id"]
+		values = [record.get("next_follow_up")]
+		values.extend(contact.get("next_follow_up") for contact in contacts_by_student.get(student_id, []))
+		for value in values:
+			due_at = sale_overview._as_timezone(sale_overview._coerce_datetime(value), timezone)
+			if due_at:
+				deadlines[student_id].append(due_at)
+	return {student_id: min(values) for student_id, values in deadlines.items() if values}
+
+
+def _dashboard_longest_follow_up_age(deadlines: dict[str, datetime], as_of: datetime) -> int:
+	ages = []
+	for due in deadlines.values():
+		if due < as_of:
+			ages.append(max(0, (as_of.date() - due.date()).days))
+	return max(ages, default=0)
+
+
+def _date_inclusive_value(value: Any, start: date, end: date, timezone: ZoneInfo) -> bool:
+	return sale_overview._date_inclusive(value, start, end, timezone)
+
+
+def _dashboard_status(value: Any) -> str:
+	return str(value or "").strip().lower().replace(" ", "_").replace("-", "_")
 
 
 # Student assignment workspace -------------------------------------------------
@@ -828,7 +1717,9 @@ def _assignment_lookup(
 		warnings=warnings,
 		warning_key=f"lookup.{doctype.lower().replace(' ', '_')}",
 	)
-	return {str(row.get("name")): str(row.get(label_field) or row.get("name")) for row in rows if row.get("name")}
+	return {
+		str(row.get("name")): str(row.get(label_field) or row.get("name")) for row in rows if row.get("name")
+	}
 
 
 def _assignment_metadata(student_ids: list[str], warnings: list[str]) -> dict[str, Any]:
@@ -927,7 +1818,9 @@ def _assignment_reason(
 ) -> str | None:
 	if event and event.get("reason"):
 		reason = str(event["reason"])
-		return ASSIGNMENT_REASON_LABELS.get(reason, UNKNOWN_ASSIGNMENT_REASON if re.fullmatch(r"[A-Z][A-Z0-9_]+", reason) else reason)
+		return ASSIGNMENT_REASON_LABELS.get(
+			reason, UNKNOWN_ASSIGNMENT_REASON if re.fullmatch(r"[A-Z][A-Z0-9_]+", reason) else reason
+		)
 	if status == "missing_data":
 		return "Thiếu khu vực để xác định người phụ trách."
 	if status == "error":
@@ -970,9 +1863,15 @@ def _assignment_item(
 	return {
 		"studentId": student_id,
 		"name": str(row.get("student_name") or student_id),
-		"school": lookups.get("schools", {}).get(str(row.get("high_school") or ""), row.get("high_school") or ""),
-		"region": lookups.get("provinces", {}).get(str(row.get("province") or ""), row.get("province")) or None,
-		"interest": lookups.get("majors", {}).get(str(row.get("major") or ""), row.get("major") or row.get("aspiration")) or None,
+		"school": lookups.get("schools", {}).get(
+			str(row.get("high_school") or ""), row.get("high_school") or ""
+		),
+		"region": lookups.get("provinces", {}).get(str(row.get("province") or ""), row.get("province"))
+		or None,
+		"interest": lookups.get("majors", {}).get(
+			str(row.get("major") or ""), row.get("major") or row.get("aspiration")
+		)
+		or None,
 		"source": lookups.get("sources", {}).get(str(row.get("source") or ""), row.get("source")) or None,
 		"receivedAt": received_at.isoformat(timespec="seconds"),
 		"status": status,
@@ -1000,10 +1899,7 @@ def _assignment_matches(item: dict[str, Any], query: str) -> bool:
 	needle = _assignment_fold(query)
 	owner = item.get("owner") or {}
 	return needle in _assignment_fold(
-		" ".join(
-			str(item.get(field) or "")
-			for field in ("studentId", "name", "school")
-		)
+		" ".join(str(item.get(field) or "") for field in ("studentId", "name", "school"))
 		+ " "
 		+ str(owner.get("displayName") or "")
 	)
@@ -1066,7 +1962,9 @@ def _assignment_workflow(summary: dict[str, Any], health: dict[str, Any]) -> dic
 		"assignment": "error" if error else "warning" if pending else "success",
 	}
 	steps = []
-	for order, (step_id, title, description, detail, rules) in enumerate(ASSIGNMENT_WORKFLOW_DEFINITIONS, start=1):
+	for order, (step_id, title, description, detail, rules) in enumerate(
+		ASSIGNMENT_WORKFLOW_DEFINITIONS, start=1
+	):
 		processed, success, warning, step_error = metrics[step_id]
 		steps.append(
 			{
@@ -1108,7 +2006,12 @@ def _assignment_pipeline_candidates(
 	candidates = []
 	for student in students:
 		student_id = str(student.get("name") or "")
-		if not student_id or student.get("owner_staff") or student.get("assigned_to") or not student.get("owning_pool"):
+		if (
+			not student_id
+			or student.get("owner_staff")
+			or student.get("assigned_to")
+			or not student.get("owning_pool")
+		):
 			continue
 		request = latest_request_by_student.get(student_id)
 		if request and request.get("status") not in ASSIGNMENT_PIPELINE_REQUEST_STATUSES:
@@ -1317,7 +2220,11 @@ def _assignment_base_response(
 			"date": report_date.isoformat(),
 			"asOf": as_of.isoformat(timespec="seconds"),
 			"timezone": getattr(timezone, "key", str(timezone)),
-			"status": "unavailable" if _has_warning(warnings, "students") else "partial" if warnings else "available",
+			"status": "unavailable"
+			if _has_warning(warnings, "students")
+			else "partial"
+			if warnings
+			else "available",
 			"warnings": sorted(set(warnings)),
 		},
 		"summary": summary,
@@ -1351,11 +2258,24 @@ def get_student_assignment_workspace(
 	students = _assignment_load_students(scope, admission_year, warnings)
 	student_ids = [str(row.get("name")) for row in students if row.get("name")]
 	lookups = {
-		"schools": _assignment_lookup("CRM High School", {str(row.get("high_school")) for row in students}, "school_name", warnings),
-		"provinces": _assignment_lookup("CRM Province", {str(row.get("province")) for row in students}, "province_name", warnings),
-		"majors": _assignment_lookup("CRM Major", {str(row.get("major")) for row in students}, "major_name", warnings),
-		"sources": _assignment_lookup("CRM Lead Source", {str(row.get("source")) for row in students}, "source_name", warnings),
-		"owners": _assignment_lookup("CRM Staff", {str(row.get("owner_staff") or row.get("assigned_to")) for row in students}, "full_name", warnings),
+		"schools": _assignment_lookup(
+			"CRM High School", {str(row.get("high_school")) for row in students}, "school_name", warnings
+		),
+		"provinces": _assignment_lookup(
+			"CRM Province", {str(row.get("province")) for row in students}, "province_name", warnings
+		),
+		"majors": _assignment_lookup(
+			"CRM Major", {str(row.get("major")) for row in students}, "major_name", warnings
+		),
+		"sources": _assignment_lookup(
+			"CRM Lead Source", {str(row.get("source")) for row in students}, "source_name", warnings
+		),
+		"owners": _assignment_lookup(
+			"CRM Staff",
+			{str(row.get("owner_staff") or row.get("assigned_to")) for row in students},
+			"full_name",
+			warnings,
+		),
 	}
 	metadata = _assignment_metadata(student_ids, warnings)
 	all_items = [
@@ -1367,7 +2287,9 @@ def get_student_assignment_workspace(
 		for item in all_items
 		if _assignment_filter_matches(item, query["filter"]) and _assignment_matches(item, query["q"])
 	]
-	filtered.sort(key=cmp_to_key(lambda left, right: _assignment_compare(left, right, query["sort"], query["order"])))
+	filtered.sort(
+		key=cmp_to_key(lambda left, right: _assignment_compare(left, right, query["sort"], query["order"]))
+	)
 	start = (query["page"] - 1) * query["page_size"]
 	page_items = filtered[start : start + query["page_size"]]
 	response = _assignment_base_response(
@@ -1471,8 +2393,12 @@ def _assignment_owner_candidates(
 	)
 	capacity_by_staff: dict[str, dict[str, Any]] = {}
 	for row in capacity_rows:
-		if not row.get("staff") or not row.get("approved") or not _assignment_date_active(
-			{"effective_from": row.get("period_start"), "effective_until": row.get("period_end")}
+		if (
+			not row.get("staff")
+			or not row.get("approved")
+			or not _assignment_date_active(
+				{"effective_from": row.get("period_start"), "effective_until": row.get("period_end")}
+			)
 		):
 			continue
 		if row.get("max_active_students") is None:
@@ -1536,8 +2462,12 @@ def _assignment_detail_events(
 				"eventId": str(event.get("event_id") or event.get("name") or ""),
 				"type": str(event.get("event_type") or "assignment"),
 				"actor": {"id": actor_id, "displayName": actor_id} if actor_id else None,
-				"fromOwner": {"id": from_owner, "displayName": owner_lookup.get(from_owner, from_owner)} if from_owner else None,
-				"toOwner": {"id": to_owner, "displayName": owner_lookup.get(to_owner, to_owner)} if to_owner else None,
+				"fromOwner": {"id": from_owner, "displayName": owner_lookup.get(from_owner, from_owner)}
+				if from_owner
+				else None,
+				"toOwner": {"id": to_owner, "displayName": owner_lookup.get(to_owner, to_owner)}
+				if to_owner
+				else None,
 				"reason": event.get("reason"),
 				"occurredAt": str(event.get("occurred_at") or event.get("event_at") or ""),
 			}
@@ -1563,12 +2493,20 @@ def get_student_assignment_detail(
 	metadata = _assignment_metadata([student_id], warnings)
 	owner_ids = {str(student.get("owner_staff") or student.get("assigned_to"))}
 	for event in metadata.get("events", {}).get(student_id) or []:
-		owner_ids.update(str(event.get(field)) for field in ("prior_owner_staff", "next_owner_staff") if event.get(field))
+		owner_ids.update(
+			str(event.get(field)) for field in ("prior_owner_staff", "next_owner_staff") if event.get(field)
+		)
 	lookups = {
-		"schools": _assignment_lookup("CRM High School", {str(student.get("high_school"))}, "school_name", warnings),
-		"provinces": _assignment_lookup("CRM Province", {str(student.get("province"))}, "province_name", warnings),
+		"schools": _assignment_lookup(
+			"CRM High School", {str(student.get("high_school"))}, "school_name", warnings
+		),
+		"provinces": _assignment_lookup(
+			"CRM Province", {str(student.get("province"))}, "province_name", warnings
+		),
 		"majors": _assignment_lookup("CRM Major", {str(student.get("major"))}, "major_name", warnings),
-		"sources": _assignment_lookup("CRM Lead Source", {str(student.get("source"))}, "source_name", warnings),
+		"sources": _assignment_lookup(
+			"CRM Lead Source", {str(student.get("source"))}, "source_name", warnings
+		),
 		"owners": _assignment_lookup("CRM Staff", owner_ids, "full_name", warnings),
 	}
 	item = _assignment_item(student, lookups, metadata, access["user"], report_timezone, as_of, warnings)
@@ -1580,7 +2518,9 @@ def get_student_assignment_detail(
 			"code": "region",
 			"label": "Khu vực",
 			"result": "matched" if student.get("province") else "missing_data",
-			"detail": "Đã xác định khu vực canonical." if student.get("province") else "Chưa tìm thấy khu vực canonical.",
+			"detail": "Đã xác định khu vực canonical."
+			if student.get("province")
+			else "Chưa tìm thấy khu vực canonical.",
 		}
 	]
 	if item["status"] != "missing_data":
@@ -1589,7 +2529,9 @@ def get_student_assignment_detail(
 				"code": "capacity",
 				"label": "Khả năng tiếp nhận",
 				"result": "matched" if any(candidate["eligible"] for candidate in candidates) else "no_match",
-				"detail": "Có nhân sự còn khả năng tiếp nhận." if any(candidate["eligible"] for candidate in candidates) else "Chưa có nhân sự đạt điều kiện.",
+				"detail": "Có nhân sự còn khả năng tiếp nhận."
+				if any(candidate["eligible"] for candidate in candidates)
+				else "Chưa có nhân sự đạt điều kiện.",
 			}
 		)
 	return {
@@ -1635,7 +2577,9 @@ def _assignment_idempotency_key(value: Any) -> str:
 	header_key = frappe.get_request_header("Idempotency-Key")
 	key = str(header_key or "").strip()
 	if value not in (None, "") and str(value).strip() != key:
-		raise_api_error("INVALID_PAYLOAD", "Idempotency-Key phải được truyền qua header.", frappe.ValidationError, 400)
+		raise_api_error(
+			"INVALID_PAYLOAD", "Idempotency-Key phải được truyền qua header.", frappe.ValidationError, 400
+		)
 	if not 8 <= len(key) <= 140 or not re.fullmatch(r"[A-Za-z0-9._:-]+", key):
 		raise_api_error("INVALID_PAYLOAD", "Idempotency-Key không hợp lệ.", frappe.ValidationError, 400)
 	return key
@@ -1654,7 +2598,9 @@ def _assignment_region_name(value: str) -> str:
 		)
 		matches.update(str(row.get("name")) for row in rows if row.get("name"))
 	if len(matches) != 1:
-		raise_api_error("INVALID_ASSIGNMENT", "Region không phải địa bàn hợp lệ.", frappe.ValidationError, 422)
+		raise_api_error(
+			"INVALID_ASSIGNMENT", "Region không phải địa bàn hợp lệ.", frappe.ValidationError, 422
+		)
 	return next(iter(matches))
 
 
@@ -1673,16 +2619,14 @@ def _assignment_receipt_exists(actor: str, idempotency_key: str) -> bool:
 		from crm.fcrm.student_ownership import ownership_command_keys
 
 		keys = ownership_command_keys(actor, idempotency_key)
-		return bool(
-			frappe.db.exists(
-				"CRM Student Command Receipt", {"command_key": ["in", keys]}
-			)
-		)
+		return bool(frappe.db.exists("CRM Student Command Receipt", {"command_key": ["in", keys]}))
 	except Exception:
 		return False
 
 
-def _assignment_command_result(result: dict[str, Any], student_id: str, owner_id: str, reason: str) -> dict[str, Any]:
+def _assignment_command_result(
+	result: dict[str, Any], student_id: str, owner_id: str, reason: str
+) -> dict[str, Any]:
 	event_name = result.get("event")
 	event_id = str(event_name or "")
 	applied_at = str(result.get("applied_at") or "")
@@ -1744,7 +2688,12 @@ def resolve_student_assignment(
 	# reused key with a different fingerprint.
 	team_id = _assignment_owner_team(owner_id, scope)
 	if not team_id:
-		raise_api_error("ASSIGNMENT_OWNER_NOT_FOUND", "ownerId không thuộc team Sale hiện tại.", frappe.DoesNotExistError, 404)
+		raise_api_error(
+			"ASSIGNMENT_OWNER_NOT_FOUND",
+			"ownerId không thuộc team Sale hiện tại.",
+			frappe.DoesNotExistError,
+			404,
+		)
 	if student.get("owner_staff") or student.get("assigned_to"):
 		if _assignment_receipt_exists(access["user"], idempotency_key):
 			from crm.fcrm.student_ownership import change_student_ownership
@@ -1766,11 +2715,23 @@ def resolve_student_assignment(
 					raise_api_error(_code, str(exc), frappe.ValidationError, 409)
 				raise
 			return _assignment_command_result(result, student_id, owner_id, manual_reason)
-		raise_api_error("ALREADY_ASSIGNED", "Hồ sơ đã có người phụ trách; không thể ghi đè.", frappe.ValidationError, 409)
+		raise_api_error(
+			"ALREADY_ASSIGNED", "Hồ sơ đã có người phụ trách; không thể ghi đè.", frappe.ValidationError, 409
+		)
 	if current_revision != expected_revision:
-		raise_api_error("STALE_REVISION", "Hồ sơ đã được cập nhật bởi người dùng khác. Vui lòng tải lại.", frappe.ValidationError, 409)
+		raise_api_error(
+			"STALE_REVISION",
+			"Hồ sơ đã được cập nhật bởi người dùng khác. Vui lòng tải lại.",
+			frappe.ValidationError,
+			409,
+		)
 	if not region_value and not student.get("province"):
-		raise_api_error("INVALID_ASSIGNMENT", "Khu vực là bắt buộc với học sinh đang thiếu khu vực.", frappe.ValidationError, 422)
+		raise_api_error(
+			"INVALID_ASSIGNMENT",
+			"Khu vực là bắt buộc với học sinh đang thiếu khu vực.",
+			frappe.ValidationError,
+			422,
+		)
 	if region_value:
 		province = _assignment_region_name(region_value)
 	if region_value and not student.get("province"):
@@ -1781,6 +2742,7 @@ def resolve_student_assignment(
 		locked.province = province
 		locked.save(ignore_permissions=True)
 	from crm.fcrm.student_ownership import StudentOwnershipError, change_student_ownership
+
 	try:
 		result = change_student_ownership(
 			student=student_id,
