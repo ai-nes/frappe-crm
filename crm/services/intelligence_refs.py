@@ -9,8 +9,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from typing import Any, Literal, Mapping, NotRequired, TypedDict
+from collections.abc import Mapping
+from typing import Any, Literal, TypedDict
 
+from typing_extensions import NotRequired
 
 INTELLIGENCE_REFERENCE_CONTRACT_VERSION = "intelligence-reference-v1"
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/ -]{0,179}$")
