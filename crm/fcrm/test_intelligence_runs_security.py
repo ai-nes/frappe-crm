@@ -31,6 +31,21 @@ class TestIntelligenceRunSecurity(unittest.TestCase):
 			revision, _digest = intelligence_runs._source("school", "SCH-1")
 		self.assertEqual(revision, "17")
 
+	def test_manual_quota_counts_only_completed_runs(self):
+		def count(_doctype, filters):
+			self.assertEqual(filters["status"], "completed")
+			return 3
+
+		with (
+			patch("crm.fcrm.intelligence_runs._manual_request_limit", return_value=(3, 60)),
+			patch("crm.fcrm.intelligence_runs.add_to_date", return_value="WINDOW_START"),
+			patch("crm.fcrm.intelligence_runs.now_datetime", return_value="NOW"),
+			patch("crm.fcrm.intelligence_runs.frappe.db.count", side_effect=count),
+			patch("crm.fcrm.intelligence_runs.frappe.throw", side_effect=ValueError),
+		):
+			with self.assertRaises(ValueError):
+				intelligence_runs._enforce_manual_quota("student", "STU-1")
+
 	def test_student_source_digest_binds_bounded_analysis_input(self):
 		first = {"signals": {"score": 70, "interaction_history": []}, "provenance_ids": ["student:STU-1"]}
 		second = {"signals": {"score": 71, "interaction_history": []}, "provenance_ids": ["student:STU-1"]}
