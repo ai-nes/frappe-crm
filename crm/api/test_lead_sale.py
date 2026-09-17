@@ -107,9 +107,9 @@ class TestLeadSaleOverview(FrappeTestCase):
 	def test_student_status_is_exhaustive_and_matches_active_kpi(self):
 		status = lead_sale._build_student_status(
 			[
-				{"id": "STU-1", "status": "consulting"},
-				{"id": "STU-2", "status": "waiting"},
-				{"id": "STU-3", "status": "documents"},
+				{"id": "STU-1", "student_stage": "Attempting"},
+				{"id": "STU-2", "student_stage": "Connected"},
+				{"id": "STU-3", "student_stage": "Qualified"},
 			]
 		)
 
@@ -132,11 +132,11 @@ class TestLeadSaleOverview(FrappeTestCase):
 		record = {
 			"id": "STU-1",
 			"creation": "2026-08-01 08:00:00",
-			"stage_entered_at": {"opportunity": datetime(2026, 9, 3, 8, 0)},
+			"stage_entered_at": {"qualified": datetime(2026, 9, 3, 8, 0)},
 		}
 
 		age = lead_sale._dashboard_age_days(
-			record, "opportunity", datetime(2026, 9, 5, 10, 0, tzinfo=timezone), timezone
+			record, "qualified", datetime(2026, 9, 5, 10, 0, tzinfo=timezone), timezone
 		)
 
 		self.assertEqual(age, 2)
@@ -146,25 +146,77 @@ class TestLeadSaleOverview(FrappeTestCase):
 			{
 				"id": "STU-1",
 				"stage_history": [
-					{"stage": "lead"},
-					{"stage": "qualified"},
-					{"stage": "opportunity"},
+					{"stage": "new"},
+					{"stage": "attempting"},
+					{"stage": "connected"},
 				],
 			},
-			{"id": "STU-2", "stage_history": [{"stage": "lead"}, {"stage": "qualified"}]},
+			{"id": "STU-2", "stage_history": [{"stage": "new"}, {"stage": "attempting"}]},
 		]
-		stage_by_record = {"STU-1": "opportunity", "STU-2": "qualified"}
-		stats = lead_sale._dashboard_stage_stats(records, stage_by_record, {"STU-1": 1, "STU-2": 1})
+		stage_by_record = {"STU-1": "connected", "STU-2": "attempting"}
+		stats = lead_sale._dashboard_stage_stats(
+			records, stage_by_record, {"STU-1": 1, "STU-2": 1}, set()
+		)
 
-		self.assertEqual(stats["qualified"]["nextStepConversion"], 50)
+		self.assertEqual(stats["attempting"]["nextStepConversion"], 50)
+
+	def test_dashboard_stage_conversion_only_counts_ordered_transitions(self):
+		records = [
+			{"id": "STU-1", "stage_history": [{"stage": "new"}, {"stage": "attempting"}]},
+			{
+				"id": "STU-2",
+				"stage_history": [{"stage": "new"}, {"stage": "attempting"}, {"stage": "connected"}],
+			},
+			{"id": "STU-3", "stage_history": [{"stage": "new"}, {"stage": "connected"}]},
+		]
+		stage_by_record = {"STU-1": "attempting", "STU-2": "connected", "STU-3": "connected"}
+		stats = lead_sale._dashboard_stage_stats(
+			records,
+			stage_by_record,
+			{"STU-1": 1, "STU-2": 1, "STU-3": 1},
+			set(),
+		)
+
+		self.assertEqual(stats["attempting"]["nextStepConversion"], 50)
 
 	def test_dashboard_stage_conversion_does_not_infer_unrecorded_previous_stages(self):
 		record = {
 			"id": "STU-1",
-			"stage_history": [{"stage": "lead"}, {"stage": "application"}],
+			"stage_history": [{"stage": "new"}, {"stage": "qualified"}],
 		}
 
-		self.assertFalse(lead_sale._dashboard_reached_stage(record, "qualified", {"STU-1": "application"}))
+		self.assertFalse(lead_sale._dashboard_reached_stage(record, "connected", {"STU-1": "qualified"}))
+
+	def test_dashboard_trend_uses_canonical_stage_counts(self):
+		timezone = ZoneInfo("Asia/Ho_Chi_Minh")
+		records = [
+			{
+				"id": "STU-1",
+				"student_stage": "Attempting",
+				"creation": "2026-09-08 08:00:00",
+				"stage_entered_at": {
+					"new": datetime(2026, 9, 8, 8, 0),
+					"attempting": datetime(2026, 9, 9, 8, 0),
+				},
+			},
+			{
+				"id": "STU-2",
+				"student_stage": "Connected",
+				"creation": "2026-09-08 08:00:00",
+				"stage_entered_at": {
+					"new": datetime(2026, 9, 8, 8, 0),
+					"attempting": datetime(2026, 9, 9, 8, 0),
+					"connected": datetime(2026, 9, 10, 8, 0),
+				},
+			},
+		]
+
+		trend = lead_sale._dashboard_trend(records, datetime(2026, 9, 17).date(), "4w", timezone)
+
+		self.assertEqual(
+			trend[2]["stageCounts"],
+			{"new": 2, "attempting": 2, "connected": 1, "qualified": 0},
+		)
 
 	def test_dashboard_target_is_unavailable_without_an_approved_team_scope(self):
 		with (
