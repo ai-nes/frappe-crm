@@ -29,14 +29,12 @@ _EVENT_PATHS = {
 	"recommendation.decided.v1": "/api/v1/insight/recommendation-decision",
 	"action.outcome_recorded.v1": "/api/v1/insight/action-outcome",
 	"student.score_input_changed.v1": "/api/v1/insight/score-input-v1",
-	"scoring.policy_changed.v1": "/api/v1/insight/scoring-policy-changed",
 	"interaction.analysis.requested.v1": "/api/v1/interaction-analysis/run",
 }
 _EXPECTED_CONTRACT_VERSIONS = {
 	"recommendation.decided.v1": 1,
 	"action.outcome_recorded.v1": 1,
 	"student.score_input_changed.v1": 1,
-	"scoring.policy_changed.v1": 1,
 	"interaction.analysis.requested.v1": 1,
 }
 _MAX_DELIVERY_ATTEMPTS = 10
@@ -542,6 +540,16 @@ def _check_agent_contract_version(event) -> bool:
 	the BFF is unavailable or during older deployments that predate the
 	manifest endpoint.
 	"""
+	if event.event_type not in _EVENT_PATHS:
+		# A retired event type (rows enqueued before its emitter was removed)
+		# has no route to deliver to; quiesce instead of retrying to dead-letter.
+		frappe.logger("crm.api.agent_events").warning(
+			"AGENT_CONTRACT_VERSION_MISMATCH event=%s event_type=%s expected=unsupported actual=%s",
+			event.name,
+			event.event_type,
+			event.contract_version,
+		)
+		return False
 	expected = _EXPECTED_CONTRACT_VERSIONS.get(event.event_type)
 	manifest = _fetch_agent_contract_manifest()
 	if manifest is not None:

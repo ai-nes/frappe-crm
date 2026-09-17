@@ -39,3 +39,28 @@ class TestCRMWard(FrappeTestCase):
 		zone.delete()
 		cluster.delete()
 		province.delete()
+
+	def test_create_ward_without_zone(self):
+		province = frappe.get_doc(
+			{
+				"doctype": "CRM Province",
+				"province_name": "_Test Ward Province Without Zone",
+				"province_code": "_TWPWZ",
+				"city_type": "Province",
+			}
+		).insert(ignore_permissions=True)
+		ward = frappe.get_doc(
+			{
+				"doctype": "CRM Ward",
+				"ward_code": "_TWWZ",
+				"ward_name": "_Test Ward Without Zone",
+				"province": province.name,
+				"ward_type": "Commune",
+			}
+		).insert(ignore_permissions=True)
+
+		self.assertEqual(ward.province, province.name)
+		self.assertIsNone(ward.zone)
+
+		ward.delete()
+		province.delete()

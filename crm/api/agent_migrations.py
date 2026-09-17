@@ -44,17 +44,19 @@ def _grant_sales_worklist_capability() -> None:
 		if not frappe.db.exists("Role", role_name):
 			continue
 		role = frappe.get_doc("Role", role_name)
-		if any(
-			row.grant_type == "semantic_capability" and row.value == "sales_intelligence.worklist.read"
-			for row in role.custom_ai_capability_grants
-		):
-			continue
-		role.append(
-			"custom_ai_capability_grants",
-			{"grant_type": "semantic_capability", "value": "sales_intelligence.worklist.read"},
-		)
-		role.save(ignore_permissions=True)
-		changed = True
+		granted = {row.value for row in role.custom_ai_capability_grants if row.grant_type == "semantic_capability"}
+		role_changed = False
+		for capability_id in ("sales_intelligence.worklist.read", "sales_intelligence.actions.read"):
+			if capability_id in granted:
+				continue
+			role.append(
+				"custom_ai_capability_grants",
+				{"grant_type": "semantic_capability", "value": capability_id},
+			)
+			role_changed = True
+		if role_changed:
+			role.save(ignore_permissions=True)
+			changed = True
 	for role_name in ("Promoter", "Lead Promoter", "Admissions Director"):
 		if not frappe.db.exists("Role", role_name):
 			continue

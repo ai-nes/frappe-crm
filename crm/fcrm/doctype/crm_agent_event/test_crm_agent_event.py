@@ -36,6 +36,20 @@ class TestCRMAgentEvent(FrappeTestCase):
 			event_name=event_name,
 		)
 
+	def test_retired_event_type_is_quiesced_not_delivered(self):
+		"""A row enqueued before its emitter was retired has no route; the
+		delivery loop must quiesce it instead of retrying it to dead-letter."""
+		from crm.api.agent_events import _check_agent_contract_version
+
+		event = SimpleNamespace(
+			name="_Test Retired Event",
+			event_type="scoring.policy_changed.v1",
+			contract_version=1,
+		)
+		with patch("crm.api.agent_events._fetch_agent_contract_manifest") as manifest:
+			self.assertFalse(_check_agent_contract_version(event))
+		manifest.assert_not_called()
+
 	def test_shared_outbox_schema_has_recipient_and_redacted_payload_fields(self):
 		fields = {field.fieldname for field in frappe.get_meta("CRM Agent Event").fields}
 		self.assertTrue({"delivery_key", "channel", "recipient_user", "payload", "retention_until", "legal_hold"}.issubset(fields))

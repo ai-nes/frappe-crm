@@ -9,7 +9,7 @@
  "fields": [
   {"default": "APP-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "APP-.YYYY.-"},
   {"fieldname": "application_attempt_key", "fieldtype": "Data", "hidden": 1, "label": "Application Attempt Key", "read_only": 1, "reqd": 1, "unique": 1},
-  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "reqd": 1},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "reqd": 1, "search_index": 1},
   {"fieldname": "crm_student", "fieldtype": "Link", "in_list_view": 1, "label": "Canonical Student", "options": "CRM Student", "read_only": 1},
   {"fieldname": "source_lead", "fieldtype": "Link", "hidden": 1, "label": "Source Lead", "options": "CRM Lead", "read_only": 1},
   {"fieldname": "offering", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Admission Offering", "options": "CRM Admission Offering", "reqd": 1},

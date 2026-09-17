@@ -425,11 +425,9 @@ def list_lead_assignment_targets(lead: str) -> dict[str, Any]:
 	_assert_assignable_status(lead_doc)
 
 	province = str(lead_doc.get("province") or "").strip()
-	branch = str(lead_doc.get("branch") or "").strip()
+	branch = str(lead_doc.get("branch") or "").strip() or None
 	if not province:
 		_fail("MISSING_PROVINCE", "Lead chưa có tỉnh để phân công.")
-	if not branch:
-		_fail("MISSING_CAMPUS", "Lead chưa có cơ sở để phân công.")
 
 	return {
 		"lead": lead_doc.name,

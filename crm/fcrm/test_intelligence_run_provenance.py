@@ -135,3 +135,106 @@ class TestIntelligenceRunProvenance(FrappeTestCase):
 		frappe.conf.pop(intelligence_runs.SERVICE_USER_KEY, None)
 		with self.assertRaises(frappe.PermissionError):
 			intelligence_runs.execution(_RUN_TYPE, run.name)
+
+
+class TestStudentEvidenceHistoryProvenance(FrappeTestCase):
+	"""Interaction history rows must carry only what belongs to that
+	interaction: the newest intent analysed for it, no student-level barrier."""
+
+	def _evidence(self, intents):
+		from unittest.mock import patch
+
+		row = {
+			"student_stage": "Connected",
+			"primary_barrier": "Học phí",
+			"score_input_revision": 9,
+			"applied_score_input_revision": 9,
+		}
+		rows_by_doctype = {
+			"CRM Score History": [],
+			"CRM Interaction": [
+				{"name": "I-NEW", "interaction_datetime": "2026-02-01", "source_verified": 1, "actor": "staff@example.com"},
+				{"name": "I-OLD", "interaction_datetime": "2026-01-01", "source_verified": 1, "actor": None},
+			],
+			"CRM Intent": intents,
+			"CRM Admission Application": [],
+			"CRM Student Guardian": [],
+		}
+		calls = []
+
+		def fake_get_all(doctype, **kwargs):
+			calls.append((doctype, kwargs))
+			return rows_by_doctype[doctype]
+
+		with (
+			patch("crm.fcrm.intelligence_runs.frappe.db.get_value", return_value=row),
+			patch("crm.fcrm.intelligence_runs.frappe.get_all", side_effect=fake_get_all),
+			patch("crm.fcrm.intelligence_runs.frappe.db.count", return_value=37),
+			patch("crm.fcrm.intelligence_runs.frappe.db.table_exists", return_value=True),
+		):
+			payload = intelligence_runs._student_stage_evidence("STU-1", "9")["student_360"]
+		return payload, calls
+
+	def test_newest_intent_per_interaction_wins_and_is_queried_by_interaction_set(self):
+		# Rows arrive newest-first, as the producer orders them.
+		payload, calls = self._evidence([
+			{"name": "INT-3", "interaction": "I-NEW", "intent_type": "Amended", "polarity": "Positive", "intent_role": "Dominant", "confidence": 80},
+			{"name": "INT-2", "interaction": "I-NEW", "intent_type": "Superseded", "polarity": "Negative", "intent_role": "Support", "confidence": 40},
+			{"name": "INT-1", "interaction": "I-OLD", "intent_type": "Initial", "polarity": "Positive", "intent_role": "Dominant", "confidence": 60},
+		])
+		history = {item["provenance_ids"][0]: item for item in payload["signals"]["interaction_history"]}
+		self.assertEqual(history["interaction:I-NEW"]["intent_type"], "Amended")
+		self.assertEqual(history["interaction:I-NEW"]["intent_role"], "Dominant")
+		self.assertEqual(history["interaction:I-OLD"]["intent_type"], "Initial")
+		self.assertEqual(payload["signals"]["intent_type"], "Amended")
+		intent_query = next(kwargs for doctype, kwargs in calls if doctype == "CRM Intent")
+		self.assertEqual(intent_query["filters"]["interaction"], ["in", ["I-NEW", "I-OLD"]])
+		# The interaction set is the only bound: a row cap would let a heavily
+		# re-analysed interaction crowd an older one out of the window again.
+		self.assertEqual(intent_query["limit_page_length"], 0)
+
+	def test_history_rows_carry_no_barrier_but_actor_kind_while_current_block_keeps_barrier(self):
+		payload, _ = self._evidence([])
+		rows = payload["signals"]["interaction_history"]
+		self.assertEqual([item["barriers"] for item in rows], [[], []])
+		self.assertEqual([item["actor_kind"] for item in rows], ["staff", "system"])
+		self.assertTrue(all(item["intent_type"] is None for item in rows))
+		self.assertEqual(payload["signals"]["primary_barrier"], "Học phí")
+		self.assertNotIn("staff@example.com", str(payload))
+
+	def test_source_coverage_discloses_the_producer_row_cap(self):
+		payload, _ = self._evidence([])
+		self.assertEqual(payload["source_coverage"]["interaction_history"], {"source_total": 37, "producer_limit": 20})
+		interaction_coverage = next(item for item in payload["coverage"] if item["coverage_id"].endswith(":interaction_history"))
+		self.assertEqual(interaction_coverage["state"], "truncated")
+		self.assertEqual(interaction_coverage["included_count"], 2)
+		self.assertEqual(interaction_coverage["omitted_count"], 35)
+		self.assertEqual(interaction_coverage["reason"], "student_evidence_source_limit")
+
+	def test_failed_source_count_fails_the_evidence_read_instead_of_publishing_zero(self):
+		# A count query that raises must not be swallowed into a source_total
+		# of 0 -- that would publish a card claiming "2 of 0" (complete) when
+		# the true total is simply unknown.
+		from unittest.mock import patch
+
+		row = {
+			"student_stage": "Connected",
+			"primary_barrier": "Học phí",
+			"score_input_revision": 9,
+			"applied_score_input_revision": 9,
+		}
+		rows_by_doctype = {
+			"CRM Score History": [],
+			"CRM Interaction": [],
+			"CRM Intent": [],
+			"CRM Admission Application": [],
+			"CRM Student Guardian": [],
+		}
+		with (
+			patch("crm.fcrm.intelligence_runs.frappe.db.get_value", return_value=row),
+			patch("crm.fcrm.intelligence_runs.frappe.get_all", side_effect=lambda doctype, **kwargs: rows_by_doctype[doctype]),
+			patch("crm.fcrm.intelligence_runs.frappe.db.count", side_effect=Exception("count backend unavailable")),
+			patch("crm.fcrm.intelligence_runs.frappe.db.table_exists", return_value=True),
+		):
+			with self.assertRaises(Exception):
+				intelligence_runs._student_stage_evidence("STU-1", "9")

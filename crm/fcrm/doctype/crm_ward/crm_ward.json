@@ -39,16 +39,16 @@
    "in_standard_filter": 1,
    "label": "Zone",
    "options": "CRM Zone",
-   "reqd": 1
+   "reqd": 0
   },
   {
-   "description": "Derived from Zone → Cluster → Province. Not directly editable.",
+   "description": "Primary province link. Zone is optional and used for assignment routing when available.",
    "fieldname": "province",
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Province",
    "options": "CRM Province",
-   "read_only": 1,
+   "read_only": 0,
    "reqd": 1
   },
   {

@@ -9,6 +9,12 @@ from frappe import _
 
 from crm.api.session import _get_policy_roles, get_session_role_flags, resolve_copilot_profile
 from crm.fcrm.doctype.fields_layout.fields_layout import get_permlevel_access
+from crm.fcrm.student_intake import (
+	_find_observation_roots,
+	normalize_email,
+	normalize_national_id,
+	normalize_phone,
+)
 
 OPERATIONS = ("read", "write", "create", "delete")
 CAPABILITY_CONTRACT_VERSION = "v1"
@@ -94,6 +100,9 @@ _STUDENT_OPERATIONAL_FIELDS = frozenset(
 	}
 )
 _STUDENT_SALES_APPROVED_PII_FIELDS = frozenset({"full_name", "phone", "email"})
+_STUDENT_RESOLUTION_KINDS = frozenset({"national_id", "phone", "email", "name"})
+_STUDENT_RESOLUTION_MAX_REFERENCE = 140
+_STUDENT_RESOLUTION_MAX_CANDIDATES = 20
 
 # The session contract is the sole authority for Copilot eligibility. Do not
 # add a broader local allowlist here: that would let an unsupported role obtain
@@ -377,18 +386,30 @@ def _project_ai_fields(doctype: str, fields: list[str]) -> list[str]:
 	return sorted(set(fields) & allowed)
 
 
-def _student_projection_for_current_user() -> list[str]:
+def _student_readable_fields_for_current_user() -> set[str]:
+	"""Return CRM Student fields the current principal may actually read.
+
+	This is deliberately separate from the Copilot DTO projection.  A natural
+	identity reference may be used only when the corresponding Student field is
+	permitted, but the field still must not be added to the generic AI DTO (in
+	particular ``id_number`` remains outside that projection and the private
+	Identity DocType is never queried through generic permissions).
+	"""
 	roles = _get_policy_roles()
 	if resolve_copilot_profile(roles) is None:
 		frappe.throw(_("You are not permitted to access CRM Student data."), frappe.PermissionError)
 	meta = frappe.get_meta("CRM Student")
 	allowed_permlevels = set(get_permlevel_access("read", "CRM Student")) | {0}
 	permlevel_by_field = {df.fieldname: df.permlevel for df in meta.fields}
-	readable_columns = [
+	return {
 		fieldname
 		for fieldname in _doctype_columns(meta)
 		if permlevel_by_field.get(fieldname, 0) in allowed_permlevels
-	]
+	}
+
+
+def _student_projection_for_current_user() -> list[str]:
+	readable_columns = _student_readable_fields_for_current_user()
 	return _project_ai_fields("CRM Student", readable_columns)
 
 
@@ -416,6 +437,122 @@ def _safe_student_filters(raw_filters, allowed_fields: set[str]):
 	return validated
 
 
+def _normalize_student_resolution_reference(reference: str, reference_kind: str) -> str:
+	"""Validate and normalize one natural Student reference.
+
+	The resolver is deliberately separate from generic Student filters.  It
+	accepts only the four bounded identity kinds and delegates the business
+	normalization rules to the canonical intake helpers; callers cannot submit a
+	query fragment or a fuzzy search pattern.
+	"""
+	if not isinstance(reference_kind, str) or reference_kind not in _STUDENT_RESOLUTION_KINDS:
+		frappe.throw(_("Student reference kind is invalid."), frappe.ValidationError)
+	if not isinstance(reference, str):
+		frappe.throw(_("Student reference is invalid."), frappe.ValidationError)
+	reference = " ".join(reference.strip().split())
+	if not reference or len(reference) > _STUDENT_RESOLUTION_MAX_REFERENCE:
+		frappe.throw(_("Student reference is invalid."), frappe.ValidationError)
+	if reference_kind == "national_id":
+		normalized = normalize_national_id(reference)
+	elif reference_kind == "phone":
+		normalized = normalize_phone(reference)
+	elif reference_kind == "email":
+		normalized = normalize_email(reference)
+	else:
+		normalized = reference
+	if not normalized:
+		frappe.throw(_("Student reference is invalid."), frappe.ValidationError)
+	return normalized
+
+
+def _student_resolution_rows(reference: str, reference_kind: str, readable_fields: set[str]) -> list[dict]:
+	"""Resolve through identity roots, then apply CRM Student permissions.
+
+	``CRM Student Identity`` is intentionally not exposed through this API.  The
+	private identity index is used only to derive candidate Student links; the
+	final read is a normal ``frappe.get_list`` so row scope and field permissions
+	remain authoritative.  A denied identity therefore looks exactly like no
+	match to the caller.
+	"""
+	identifier_fields = {
+		"national_id": "id_number",
+		"phone": "phone",
+		"email": "email",
+		"name": "full_name",
+	}
+	# Never probe the private identity index when the caller cannot read the
+	# corresponding canonical Student field.  Returning not_found is deliberate:
+	# it avoids an existence oracle for restricted identifiers.
+	if identifier_fields.get(reference_kind) not in readable_fields:
+		return []
+	if reference_kind == "name":
+		# A natural-name lookup must not become an existence oracle for a field
+		# the current principal cannot read.  Internal docname context remains an
+		# exact, permission-scoped fallback.
+		filters = []
+		or_filters = [["name", "=", reference]]
+		or_filters.insert(0, ["full_name", "=", reference])
+	else:
+		roots = set()
+		for root in _find_observation_roots(reference_kind, reference):
+			if not isinstance(root, dict) or not root.get("identity"):
+				continue
+			lifecycle = str(
+				root.get("lifecycle") or root.get("identity_status") or "active"
+			).strip().casefold()
+			if lifecycle == "active":
+				roots.add(str(root["identity"]))
+		if not roots:
+			return []
+		filters = [["student_identity", "in", sorted(roots)]]
+		or_filters = None
+	# Only permission-checked human display fields are projected.  ``id_number``
+	# is an allowed human identifier when the caller may read it; it is never
+	# used as an internal Student reference or exposed through generic DTOs.
+	fields = ["name"]
+	for fieldname in ("id_number", "full_name", "phone", "email"):
+		if fieldname in readable_fields:
+			fields.append(fieldname)
+	rows = frappe.get_list(
+		"CRM Student",
+		filters=filters,
+		or_filters=or_filters,
+		fields=fields,
+		page_length=_STUDENT_RESOLUTION_MAX_CANDIDATES + 1,
+		order_by="name asc",
+	)
+	return [dict(row) for row in rows[:_STUDENT_RESOLUTION_MAX_CANDIDATES]]
+
+
+def _student_resolution_candidates(rows: list[dict], readable_fields: set[str]) -> list[dict[str, str]]:
+	candidates: list[dict[str, str]] = []
+	for row in rows:
+		if not isinstance(row, dict) or not isinstance(row.get("name"), str) or not row["name"]:
+			continue
+		# Names alone cannot disambiguate duplicate students. Add every
+		# permission-checked human reference in the business priority order
+		# CCCD -> phone -> email -> name. Restricted fields are omitted rather
+		# than replaced with raw IDs.
+		parts: list[str] = []
+		id_number = str(row.get("id_number") or "").strip()
+		if "id_number" in readable_fields and id_number:
+			parts.append(f"CCCD: {id_number}")
+		full_name = str(row.get("full_name") or "").strip()
+		phone = str(row.get("phone") or "").strip()
+		if "phone" in readable_fields and phone:
+			parts.append(f"SĐT: {phone}")
+		email = str(row.get("email") or "").strip()
+		if "email" in readable_fields and email:
+			parts.append(f"Email: {email}")
+		if "full_name" in readable_fields and full_name:
+			parts.append(f"Họ tên: {full_name}")
+		candidates.append({
+			"student_id": str(row["name"]),
+			"display_label": " — ".join(parts)[:300] or "Student",
+		})
+	return candidates
+
+
 @frappe.whitelist()
 @_session_rate_limit(limit=60, seconds=60)
 def get_ai_student(name: str):
@@ -428,6 +565,25 @@ def get_ai_student(name: str):
 	if not frappe.has_permission("CRM Student", ptype="read", doc=doc):
 		frappe.throw(_("You are not permitted to access this CRM Student."), frappe.PermissionError)
 	return {fieldname: doc.get(fieldname) for fieldname in fields}
+
+
+@frappe.whitelist()
+@_session_rate_limit(limit=60, seconds=60)
+def resolve_ai_student(reference: str, reference_kind: str):
+	"""Resolve one natural Student reference without exposing identity storage.
+
+	The result intentionally contains only a permission-checked internal Student
+	docname and a human display label.  A permitted CCCD may appear in that
+	label for disambiguation; the endpoint never returns identity hashes, denied
+	rows, match counts, or private identity-table fields.
+	"""
+	get_session_role_flags()
+	normalized = _normalize_student_resolution_reference(reference, reference_kind)
+	readable_fields = _student_readable_fields_for_current_user()
+	rows = _student_resolution_rows(normalized, reference_kind, readable_fields)
+	candidates = _student_resolution_candidates(rows, readable_fields)
+	status = "not_found" if not candidates else "matched" if len(candidates) == 1 else "ambiguous"
+	return {"status": status, "candidates": candidates}
 
 
 @frappe.whitelist()
