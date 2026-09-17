@@ -368,10 +368,14 @@ name = "crm"
 source = { editable = "." }
 dependencies = [
     { name = "twilio" },
+    { name = "typing-extensions" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "twilio", specifier = "==8.5.0" }]
+requires-dist = [
+    { name = "twilio", specifier = "==8.5.0" },
+    { name = "typing-extensions", specifier = ">=4.5.0" },
+]
 
 [[package]]
 name = "frozenlist"

@@ -18,9 +18,7 @@ class TestLeadSaleOverview(FrappeTestCase):
 		self.assertNotIn("TEAM_NOT_FOUND_FOR_PROVINCE", reason)
 
 	def test_assignment_reason_hides_unknown_routing_code(self):
-		reason = lead_sale._assignment_reason(
-			{}, "error", None, {"last_error_code": "UNKNOWN_ROUTING_CODE"}
-		)
+		reason = lead_sale._assignment_reason({}, "error", None, {"last_error_code": "UNKNOWN_ROUTING_CODE"})
 
 		self.assertNotIn("UNKNOWN_ROUTING_CODE", reason)
 		self.assertIn("kiểm tra cấu hình Team", reason)
@@ -93,7 +91,11 @@ class TestLeadSaleOverview(FrappeTestCase):
 			patch.object(lead_sale, "_resolve_admission_year", return_value="2026"),
 			patch.object(lead_sale, "_assignment_scope", return_value={"team_ids": ["TEAM-1"]}),
 			patch.object(lead_sale, "_assignment_load_students", return_value=students),
-			patch.object(lead_sale, "_now", return_value=datetime(2026, 9, 5, 10, 0, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))),
+			patch.object(
+				lead_sale,
+				"_now",
+				return_value=datetime(2026, 9, 5, 10, 0, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh")),
+			),
 		):
 			response = lead_sale.run_student_assignment_pipeline(admissionYear="2026", limit=10)
 
@@ -125,6 +127,72 @@ class TestLeadSaleOverview(FrappeTestCase):
 		self.assertEqual(len(trend["ranges"]["3m"]["points"]), 3)
 		self.assertEqual(trend["ranges"]["3m"]["from"], "2026-06-05")
 
+	def test_dashboard_age_uses_current_stage_entry_time(self):
+		timezone = ZoneInfo("Asia/Ho_Chi_Minh")
+		record = {
+			"id": "STU-1",
+			"creation": "2026-08-01 08:00:00",
+			"stage_entered_at": {"opportunity": datetime(2026, 9, 3, 8, 0)},
+		}
+
+		age = lead_sale._dashboard_age_days(
+			record, "opportunity", datetime(2026, 9, 5, 10, 0, tzinfo=timezone), timezone
+		)
+
+		self.assertEqual(age, 2)
+
+	def test_dashboard_stage_conversion_uses_stage_history(self):
+		records = [
+			{
+				"id": "STU-1",
+				"stage_history": [
+					{"stage": "lead"},
+					{"stage": "qualified"},
+					{"stage": "opportunity"},
+				],
+			},
+			{"id": "STU-2", "stage_history": [{"stage": "lead"}, {"stage": "qualified"}]},
+		]
+		stage_by_record = {"STU-1": "opportunity", "STU-2": "qualified"}
+		stats = lead_sale._dashboard_stage_stats(records, stage_by_record, {"STU-1": 1, "STU-2": 1})
+
+		self.assertEqual(stats["qualified"]["nextStepConversion"], 50)
+
+	def test_dashboard_stage_conversion_does_not_infer_unrecorded_previous_stages(self):
+		record = {
+			"id": "STU-1",
+			"stage_history": [{"stage": "lead"}, {"stage": "application"}],
+		}
+
+		self.assertFalse(lead_sale._dashboard_reached_stage(record, "qualified", {"STU-1": "application"}))
+
+	def test_dashboard_target_is_unavailable_without_an_approved_team_scope(self):
+		with (
+			patch.object(lead_sale.frappe.db, "table_exists", return_value=True),
+			patch.object(lead_sale, "_get_list", return_value=[]),
+		):
+			target = lead_sale._dashboard_target("2026", ["TEAM-1"], datetime(2026, 9, 5).date())
+
+		self.assertIsNone(target)
+
+	def test_dashboard_follow_up_counts_one_deadline_per_student(self):
+		timezone = ZoneInfo("Asia/Ho_Chi_Minh")
+		records = [{"id": "STU-1", "next_follow_up": "2026-09-02 08:00:00"}]
+		tasks = [
+			{"student_id": "STU-1", "due_at": "2026-09-01 08:00:00", "status": "Open"},
+			{"student_id": "STU-1", "due_at": "2026-09-04 08:00:00", "status": "Open"},
+		]
+
+		deadlines = lead_sale._dashboard_follow_up_deadlines(
+			records,
+			{"STU-1": [{"next_follow_up": "2026-09-03 08:00:00"}]},
+			tasks,
+			timezone,
+		)
+
+		self.assertEqual(len(deadlines), 1)
+		self.assertEqual(deadlines["STU-1"].date().isoformat(), "2026-09-01")
+
 	def test_endpoint_uses_one_scoped_snapshot_for_kpis_status_and_trends(self):
 		timezone = ZoneInfo("Asia/Ho_Chi_Minh")
 		students = [
@@ -154,11 +222,19 @@ class TestLeadSaleOverview(FrappeTestCase):
 			}
 		]
 		with (
-			patch.object(lead_sale, "_require_access", return_value={"user": "lead@example.com", "profile": "lead_sales"}),
+			patch.object(
+				lead_sale,
+				"_require_access",
+				return_value={"user": "lead@example.com", "profile": "lead_sales"},
+			),
 			patch.object(lead_sale, "_resolve_admission_year", return_value="2026"),
-			patch.object(lead_sale, "_resolve_teams", return_value=[{"name": "TEAM-1", "team_name": "Đội Sale"}]),
+			patch.object(
+				lead_sale, "_resolve_teams", return_value=[{"name": "TEAM-1", "team_name": "Đội Sale"}]
+			),
 			patch.object(lead_sale, "_now", return_value=datetime(2026, 9, 5, 10, 0, tzinfo=timezone)),
-			patch.object(lead_sale, "_viewer", return_value={"id": "lead@example.com", "displayName": "Lead Sale"}),
+			patch.object(
+				lead_sale, "_viewer", return_value={"id": "lead@example.com", "displayName": "Lead Sale"}
+			),
 			patch.object(lead_sale, "_load_students", return_value=students),
 			patch.object(lead_sale.sale_overview, "_load_contacts", return_value=[]),
 			patch.object(lead_sale.sale_overview, "_load_applications", return_value=[]),
@@ -168,14 +244,17 @@ class TestLeadSaleOverview(FrappeTestCase):
 		):
 			response = lead_sale.get_lead_sale_overview(admissionYear="2026", date="2026-09-05")
 
-		self.assertEqual({item["id"]: item["value"] for item in response["kpis"]}, {
-			"active": 1,
-			"new": 1,
-			"unassigned": 1,
-			"needs-action": 0,
-			"overdue": 0,
-			"documents": 0,
-		})
+		self.assertEqual(
+			{item["id"]: item["value"] for item in response["kpis"]},
+			{
+				"active": 1,
+				"new": 1,
+				"unassigned": 1,
+				"needs-action": 0,
+				"overdue": 0,
+				"documents": 0,
+			},
+		)
 		self.assertEqual(response["studentStatus"]["total"], 1)
 		self.assertEqual(response["studentStatus"]["total"], response["kpis"][0]["value"])
 		self.assertEqual(len(response["resultTrend"]["ranges"]["4w"]["points"]), 4)
