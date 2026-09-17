@@ -158,6 +158,23 @@ class TestLeadSaleOverview(FrappeTestCase):
 
 		self.assertEqual(stats["qualified"]["nextStepConversion"], 50)
 
+	def test_dashboard_stage_conversion_does_not_infer_unrecorded_previous_stages(self):
+		record = {
+			"id": "STU-1",
+			"stage_history": [{"stage": "lead"}, {"stage": "application"}],
+		}
+
+		self.assertFalse(lead_sale._dashboard_reached_stage(record, "qualified", {"STU-1": "application"}))
+
+	def test_dashboard_target_is_unavailable_without_an_approved_team_scope(self):
+		with (
+			patch.object(lead_sale.frappe.db, "table_exists", return_value=True),
+			patch.object(lead_sale, "_get_list", return_value=[]),
+		):
+			target = lead_sale._dashboard_target("2026", ["TEAM-1"], datetime(2026, 9, 5).date())
+
+		self.assertIsNone(target)
+
 	def test_dashboard_follow_up_counts_one_deadline_per_student(self):
 		timezone = ZoneInfo("Asia/Ho_Chi_Minh")
 		records = [{"id": "STU-1", "next_follow_up": "2026-09-02 08:00:00"}]

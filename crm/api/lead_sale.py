@@ -21,6 +21,7 @@ import frappe
 
 from crm.api import sale as sale_overview
 from crm.api.director_school_common import parse_limit, raise_api_error
+from crm.api.sla import BREACH as STUDENT_SLA_BREACH
 from crm.fcrm.role_policy import resolve_crm_profile
 
 DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh"
@@ -42,14 +43,6 @@ DASHBOARD_STAGE_LABELS = {
 	"application": "Làm hồ sơ",
 	"enrollment": "Nhập học",
 }
-DASHBOARD_STAGE_SLA_DAYS = {
-	"lead": 1,
-	"contacted": 2,
-	"qualified": 3,
-	"opportunity": 5,
-	"application": 7,
-	"enrollment": 0,
-}
 DASHBOARD_STAGE_PROBABILITY = {
 	"lead": 0.0,
 	"contacted": 0.25,
@@ -64,7 +57,10 @@ DASHBOARD_LIFECYCLE_STAGE_MAP = {
 	"engaged": "contacted",
 	"attempting": "contacted",
 	"mql": "qualified",
-	"qualified": "qualified",
+	# CRM Student.Qualified is the canonical Applicant lifecycle state. The
+	# dashboard keeps its six-column presentation without inventing a second
+	# qualification state for the same Student.
+	"qualified": "application",
 	"prospect": "lead",
 	"counselling": "qualified",
 	"consultation": "qualified",
@@ -748,9 +744,10 @@ def _build_interventions(
 	blocked_ids = set(missing_document_ids)
 	for record in records:
 		student_id = record["id"]
-		created_at = sale_overview._as_timezone(
-			sale_overview._coerce_datetime(record.get("creation")), timezone
-		)
+		if not _is_assigned(record):
+			continue
+		clock_started_at = record.get("sla_started_at") or record.get("creation")
+		created_at = sale_overview._as_timezone(sale_overview._coerce_datetime(clock_started_at), timezone)
 		if (
 			created_at
 			and as_of - created_at > timedelta(hours=24)
@@ -1052,25 +1049,22 @@ def _build_dashboard_payload(
 	enrollment = len(enrollment_ids)
 	closed_won = enrollment
 	closed_lost = len(lost_ids)
-	remaining = max(target - enrollment, 0)
+	remaining = max(target - enrollment, 0) if target is not None else None
 	stage_stats = _dashboard_stage_stats(pipeline_records, stage_by_record, age_by_record)
 	open_records = active_records
 	expected = round(
 		sum(DASHBOARD_STAGE_PROBABILITY[stage_by_record[record["id"]]] for record in open_records)
 	)
-	open_opportunities = sum(
-		stage_by_record[record["id"]] in {"qualified", "opportunity", "application"}
-		for record in open_records
-	)
+	open_opportunities = sum(_dashboard_is_open_opportunity(record) for record in open_records)
 	new_opportunities = sum(
 		_dashboard_stage_in_period(record, "opportunity", period_start, report_date, timezone)
 		for record in pipeline_records
 	)
 	follow_up_due = sum(deadline.date() == report_date for deadline in deadline_by_student.values())
 	overdue = sum(deadline < as_of for deadline in deadline_by_student.values())
-	aging_over_sla = sum(
-		stage_stats[stage]["stalledCount"] for stage in DASHBOARD_STAGE_ORDER if stage != "enrollment"
-	)
+	# Stage aging is an operational projection. The canonical SLA breach is
+	# owned by crm.api.sla and materialized on CRM Student.sla_status.
+	aging_over_sla = sum(_dashboard_is_sla_breached(record) for record in active_records)
 	priority_queue = _dashboard_priority_queue(
 		pipeline_records,
 		stage_by_record,
@@ -1083,7 +1077,7 @@ def _build_dashboard_payload(
 		as_of,
 	)
 	status = "available"
-	if target <= 0:
+	if target is None or target <= 0:
 		status = "partial"
 		warnings.append("target.not_configured")
 
@@ -1091,10 +1085,10 @@ def _build_dashboard_payload(
 		"summary": {
 			"enrollment": enrollment,
 			"target": target,
-			"achievement": round(enrollment / target * 100) if target else 0,
+			"achievement": round(enrollment / target * 100) if target and target > 0 else None,
 			"remaining": remaining,
 			"expected": expected,
-			"coverage": round(expected / remaining, 2) if remaining else 0,
+			"coverage": round(expected / remaining, 2) if remaining else None,
 			"openOpportunities": open_opportunities,
 			"newOpportunities": new_opportunities,
 			"winRate": round(closed_won / (closed_won + closed_lost) * 100)
@@ -1164,24 +1158,26 @@ def _team_staff_ids(team_ids: list[str], warnings: list[str], report_date: date 
 	)
 
 
-def _dashboard_target(admission_year: str, team_ids: list[str], report_date: date) -> int:
-	if not team_ids or not frappe.db.table_exists("CRM Target"):
-		return 0
-	scope_ids = set(team_ids)
-	if frappe.db.table_exists("CRM Planning Scope"):
-		scope_rows = _get_list(
+def _dashboard_target(admission_year: str, team_ids: list[str], report_date: date) -> int | None:
+	if (
+		not team_ids
+		or not frappe.db.table_exists("CRM Target")
+		or not frappe.db.table_exists("CRM Planning Scope")
+	):
+		return None
+	scope_ids = {
+		str(row.get("name"))
+		for row in _get_list(
 			"CRM Planning Scope",
 			filters={"team": ["in", team_ids], "status": "Approved"},
-			fields=["name", "team", "effective_from", "effective_until"],
+			fields=["name", "effective_from", "effective_until"],
 			limit_page_length=0,
 			warnings=None,
 		)
-		for row in scope_rows:
-			if not _dashboard_effective_on(row, report_date):
-				continue
-			for fieldname in ("name", "team"):
-				if row.get(fieldname):
-					scope_ids.add(str(row[fieldname]))
+		if row.get("name") and _dashboard_effective_on(row, report_date)
+	}
+	if not scope_ids:
+		return None
 	rows = _get_list(
 		"CRM Target",
 		filters={"admission_year": admission_year, "period_type": "Annual", "status": "Approved"},
@@ -1215,7 +1211,7 @@ def _dashboard_target(admission_year: str, team_ids: list[str], report_date: dat
 				selected[key] = max(0, float(row.get("target_value") or 0))
 			except (TypeError, ValueError):
 				continue
-	return round(sum(selected.values()))
+	return round(sum(selected.values())) if selected else None
 
 
 def _dashboard_effective_on(row: dict[str, Any], report_date: date) -> bool:
@@ -1284,17 +1280,18 @@ def _dashboard_members(
 		}
 		stage_stalled = {
 			stage: sum(
-				stage_by_record[record["id"]] == stage
-				and DASHBOARD_STAGE_SLA_DAYS[stage] > 0
-				and age_by_record[record["id"]] > DASHBOARD_STAGE_SLA_DAYS[stage]
+				stage_by_record[record["id"]] == stage and _dashboard_is_sla_breached(record)
 				for record in owned
 			)
 			for stage in DASHBOARD_STAGE_ORDER
 		}
 		avg_age = round(sum(age_by_record[record["id"]] for record in owned) / len(owned), 1) if owned else 0
-		target = 0
+		# CRM Target is scoped to CRM Planning Scope, not CRM Staff. Until the
+		# canonical model has an individual target scope, do not fabricate a
+		# per-rep target from the team total.
+		target = None
 		enrollment = won
-		remaining = max(target - enrollment, 0)
+		remaining = None
 		expected = round(
 			sum(
 				DASHBOARD_STAGE_PROBABILITY[stage_by_record[record["id"]]]
@@ -1308,16 +1305,14 @@ def _dashboard_members(
 				"displayName": str(staff.get("full_name") or staff.get("user") or staff_id),
 				"target": target,
 				"enrollment": enrollment,
-				"achievement": round(enrollment / target * 100) if target else 0,
+				"achievement": None,
 				"remaining": remaining,
 				"expected": expected,
-				"coverage": round(expected / remaining, 2) if remaining else 0,
+				"coverage": None,
 				"winRate": round(won / (won + lost) * 100) if won + lost else 0,
 				"closedOpportunities": won + lost,
 				"wonOpportunities": won,
-				"openOpportunities": sum(
-					stage_volumes[stage] for stage in ("qualified", "opportunity", "application")
-				),
+				"openOpportunities": sum(_dashboard_is_open_opportunity(record) for record in owned),
 				"overdue": sum(deadline < as_of for deadline in member_deadlines.values()),
 				"avgStageAgeDays": avg_age,
 				"agingOverSlaCount": sum(stage_stalled.values()),
@@ -1356,11 +1351,7 @@ def _dashboard_stage_stats(
 			else 0
 		)
 		average = round(sum(age_by_record[record["id"]] for record in owned) / len(owned), 1) if owned else 0
-		stalled = sum(
-			DASHBOARD_STAGE_SLA_DAYS[stage] > 0
-			and age_by_record[record["id"]] > DASHBOARD_STAGE_SLA_DAYS[stage]
-			for record in owned
-		)
+		stalled = sum(_dashboard_is_sla_breached(record) for record in owned)
 		stats[stage] = {
 			"id": stage,
 			"label": DASHBOARD_STAGE_LABELS[stage],
@@ -1369,7 +1360,7 @@ def _dashboard_stage_stats(
 				round(next_count / entered_count * 100) if entered_count and next_stage else None
 			),
 			"averageDays": average,
-			"slaDays": DASHBOARD_STAGE_SLA_DAYS[stage],
+			"slaDays": None,
 			"stalledCount": stalled,
 		}
 	return stats
@@ -1383,12 +1374,9 @@ def _dashboard_reached_stage(record: dict[str, Any], stage: str, stage_by_record
 	}
 	if stage in history:
 		return True
-	current_stage = stage_by_record[record["id"]]
-	return (
-		current_stage in DASHBOARD_STAGE_ORDER
-		and stage in DASHBOARD_STAGE_ORDER
-		and DASHBOARD_STAGE_ORDER.index(current_stage) >= DASHBOARD_STAGE_ORDER.index(stage)
-	)
+	# A current stage does not prove that every previous stage was reached.
+	# Conversion must be based on lifecycle/activity evidence in the snapshot.
+	return False
 
 
 def _dashboard_priority_queue(
@@ -1421,11 +1409,7 @@ def _dashboard_priority_queue(
 			bool(task.get("is_overdue")) for task in open_tasks
 		)
 		follow_up_age = max(0, (as_of.date() - deadline.date()).days) if deadline and deadline < as_of else 0
-		stalled = (
-			stage != "enrollment"
-			and DASHBOARD_STAGE_SLA_DAYS[stage] > 0
-			and age > DASHBOARD_STAGE_SLA_DAYS[stage]
-		)
+		stalled = _dashboard_is_sla_breached(record)
 		if not any((overdue, missing_documents, uncontacted and age > 1, stalled)):
 			continue
 		if overdue:
@@ -1462,7 +1446,7 @@ def _dashboard_trend(
 	records: list[dict[str, Any]],
 	stage_by_record: dict[str, str],
 	report_date: date,
-	target: int,
+	target: int | None,
 	trend_range: str,
 	timezone: ZoneInfo,
 ) -> list[dict[str, Any]]:
@@ -1482,7 +1466,7 @@ def _dashboard_trend(
 					)
 					for record in records
 				),
-				"target": round(target * (index + 1) / weeks) if target else 0,
+				"target": round(target * (index + 1) / weeks) if target is not None else None,
 				"newOpportunities": sum(
 					_dashboard_stage_in_period(record, "opportunity", period_start, period_end, timezone)
 					for record in records
@@ -1591,6 +1575,16 @@ def _date_inclusive_value(value: Any, start: date, end: date, timezone: ZoneInfo
 
 def _dashboard_status(value: Any) -> str:
 	return str(value or "").strip().lower().replace(" ", "_").replace("-", "_")
+
+
+def _dashboard_is_open_opportunity(record: dict[str, Any]) -> bool:
+	"""Use the core high-intent signal instead of treating every later stage as an opportunity."""
+	stages = record.get("stages") or set()
+	return bool(record.get("qualification")) and not stages & {"confirmed", "admitted"}
+
+
+def _dashboard_is_sla_breached(record: dict[str, Any]) -> bool:
+	return _dashboard_status(record.get("sla_status")) == _dashboard_status(STUDENT_SLA_BREACH)
 
 
 # Student assignment workspace -------------------------------------------------
