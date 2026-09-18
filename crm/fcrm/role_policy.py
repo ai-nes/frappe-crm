@@ -825,6 +825,47 @@ def _cached_permission_profile(role):
 	return value
 
 
+def doctype_permissions_for_roles(roles, *, administrator=False):
+	"""Return the effective managed DocType permissions for a role set.
+
+	The CRM Permission Profile catalog is the source of truth after cutover. The
+	hardcoded matrix branch mirrors the active rollback switch so the session
+	contract remains truthful during an emergency rollback.
+	"""
+	role = ADMINISTRATOR_ROLE if administrator else _profile_role_for_role_set(roles)
+	if role is None:
+		return {}
+
+	if _use_hardcoded_permission_matrix():
+		role = SYSTEM_MANAGER_ROLE if administrator else role
+		permissions = {}
+		for doctype, rows in _hardcoded_managed_docperm_rows().items():
+			row = next((item for item in rows if item.get("role") == role), None)
+			if row is None:
+				continue
+			permissions[doctype] = {
+				"row_scope": "all" if administrator else _hardcoded_case_scope_for_roles(roles, doctype),
+				**{field: bool(row.get(field)) for field in _PERMISSION_FLAGS.values()},
+			}
+		return permissions
+
+	profile = _cached_permission_profile(role)
+	if profile is None and administrator and role != SYSTEM_MANAGER_ROLE:
+		role = SYSTEM_MANAGER_ROLE
+		profile = _cached_permission_profile(role)
+	if profile is None:
+		_warn_missing_permission_profile(role)
+		return {}
+
+	return {
+		doctype: {
+			"row_scope": profile["row_scope"],
+			**{field: bool(flags.get(field)) for field in _PERMISSION_FLAGS.values()},
+		}
+		for doctype, flags in profile["doctypes"].items()
+	}
+
+
 def _profile_role_for_role_set(roles):
 	"""Return the single literal Role name identity resolution would key on.
 

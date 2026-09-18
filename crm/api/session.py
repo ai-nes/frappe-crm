@@ -12,6 +12,7 @@ from crm.fcrm.role_policy import (
 	capabilities_for_roles,
 	capability_details,
 	classify_role_set,
+	doctype_permissions_for_roles,
 	is_crm_user,
 )
 from crm.fcrm.role_policy import (
@@ -96,6 +97,22 @@ def _crm_feature_flags(profile):
 	}
 
 
+def _session_doctype_permissions(roles, *, administrator=False):
+	"""Return DocType flags exposed to the SPA for the authenticated user."""
+	permissions = doctype_permissions_for_roles(roles, administrator=administrator)
+	if frappe.db.exists("DocType", "Task"):
+		permissions["Task"] = {
+			"row_scope": "assigned",
+			**{
+				permission: bool(
+					frappe.has_permission("Task", ptype=permission, user=frappe.session.user)
+				)
+				for permission in ("read", "write", "create", "delete", "export")
+			},
+		}
+	return permissions
+
+
 def _session_role_flags(roles):
 	"""Build flags from server-derived roles; shared with focused contract tests."""
 	role_names = frozenset(roles)
@@ -106,6 +123,7 @@ def _session_role_flags(roles):
 	if not is_crm_user(role_names):
 		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
 	capabilities = sorted(capabilities_for_roles(role_names))
+	doctype_permissions = _session_doctype_permissions(role_names)
 
 	# Keep the legacy booleans stable for older SPA callers, while mapping them
 	# to the canonical Sale / Lead Sale profiles.
@@ -120,6 +138,7 @@ def _session_role_flags(roles):
 		"crm_role_state": role_state,
 		"crm_capabilities": capabilities,
 		"crm_capability_details": capability_details(capabilities),
+		"crm_doctype_permissions": doctype_permissions,
 		"crm_policy_version": POLICY_VERSION,
 		"crm_feature_flags": _crm_feature_flags(profile),
 	}
@@ -354,6 +373,7 @@ def get_session_role_flags():
 			"crm_role_state": "platform_superuser",
 			"crm_capabilities": sorted(capabilities_for_roles(set(), administrator=True)),
 			"crm_capability_details": capability_details(capabilities_for_roles(set(), administrator=True)),
+			"crm_doctype_permissions": _session_doctype_permissions(set(), administrator=True),
 			"crm_policy_version": POLICY_VERSION,
 			"crm_feature_flags": _crm_feature_flags(None),
 		}
@@ -414,6 +434,7 @@ def me():
 		"crm_role": flags["crm_role"],
 		"crm_capabilities": flags["crm_capabilities"],
 		"crm_capability_details": flags["crm_capability_details"],
+		"crm_doctype_permissions": flags["crm_doctype_permissions"],
 		"permission": flags["crm_capabilities"],
 		"permission_details": flags["crm_capability_details"],
 		"crm_team_memberships": _get_my_team_memberships(),
