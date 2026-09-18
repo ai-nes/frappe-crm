@@ -126,6 +126,23 @@ def _scope(actor):
 	return {"actor": actor, "roles": sorted(roles), "capabilities": sorted(caps)}
 
 
+def _can_assign_global_executor(actor, scope):
+	"""Whether the actor may assign an approved executor across Student scopes."""
+	if actor == "Administrator":
+		return True
+	return bool({"team.oversee", "admissions.oversee"} & set(scope["capabilities"]))
+
+
+def _validate_decision_executor(actor, scope, student, assignee_staff):
+	"""Validate the executor selected by a recommendation or Action decision."""
+	if not assignee_staff:
+		_fail("INVALID_INPUT", "A mapped Sales executor is required.")
+	can_assign_global = _can_assign_global_executor(actor, scope)
+	if assignee_staff != _staff_for_user(actor) and not can_assign_global:
+		_fail("FORBIDDEN", "You may only assign yourself.")
+	_valid_executor(student, assignee_staff, allow_global=can_assign_global)
+
+
 def _can_decide(actor, doc):
 	scope = _scope(actor)
 	if actor != "Administrator" and not ({"student.execute", "recommendation.decide"} & set(scope["capabilities"])):
@@ -167,7 +184,7 @@ def _active_staff_teams(staff):
 
 
 def _valid_executor(student, staff, *, allow_global=False):
-	"""Keep assignment inside the live Student owner/team scope."""
+	"""Validate an executor and enforce the Student scope unless globally allowed."""
 	staff_row = frappe.db.get_value("CRM Staff", staff, ["user", "is_active"], as_dict=True)
 	if not staff_row:
 		_fail("INVALID_INPUT", "The selected executor does not exist.")
@@ -507,11 +524,7 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 		if not due_at:
 			due_at = doc.recommended_at or now_datetime()
 		assignee_staff = assignee_staff or doc.owner or _staff_for_user(actor)
-		if not assignee_staff:
-			_fail("INVALID_INPUT", "A mapped Sales executor is required.")
-		if assignee_staff != _staff_for_user(actor) and not ({"team.oversee", "admissions.oversee"} & set(scope["capabilities"])) and actor != "Administrator":
-			_fail("FORBIDDEN", "You may only assign yourself.")
-		_valid_executor(student_name, assignee_staff, allow_global=actor == "Administrator")
+		_validate_decision_executor(actor, scope, student_name, assignee_staff)
 	if operation == "REJECT":
 		_required(decision_reason, "decision_reason")
 	if operation == "DEFER" and not revisit_at:
@@ -649,9 +662,7 @@ def decide_student_task(name: str, expected_revision: Any, status: str, idempote
 	if status == "accepted":
 		if not due_at: _fail("INVALID_INPUT", "due_at is required when accepting.")
 		assignee_staff = assignee_staff or _staff_for_user(actor)
-		if not assignee_staff: _fail("INVALID_INPUT", "A mapped Sales executor is required.")
-		if assignee_staff != _staff_for_user(actor) and not ({"team.oversee", "admissions.oversee"} & set(scope["capabilities"])) and actor != "Administrator": _fail("FORBIDDEN", "You may only assign yourself.")
-		_valid_executor(doc.student, assignee_staff, allow_global=actor == "Administrator")
+		_validate_decision_executor(actor, scope, doc.student, assignee_staff)
 	if status == "rejected":
 		_required(decision_reason, "decision_reason")
 	if status == "deferred" and not revisit_at:

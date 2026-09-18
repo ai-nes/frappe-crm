@@ -38,6 +38,15 @@ Các command tạo/cập nhật `CRM Admission Application` của Lead Sale dùn
 full-case tương ứng với Student mà Lead Sale được xem. Đây là quyền trên
 application service, không mở rộng quyền sửa trực tiếp các trường Student.
 
+### Student NBA decision
+
+`crm.api.student_decision.decide_recommendation` và command quyết định
+`CRM Action Item` cho phép Lead Sale (`team.oversee`) hoặc Admissions Director
+(`admissions.oversee`) xử lý recommendation/action trên mọi Student mà họ có
+quyền đọc, kể cả khi Student đang thuộc owner/team khác.
+Executor được chọn vẫn phải là CRM Staff hoạt động, User đang bật và có capability
+thực thi Action. Sale/CTV Sale tiếp tục bị giới hạn bởi owner/team scope.
+
 ### StudentList
 
 `crm.api.director_students.get_director_students` tiếp tục lấy scope từ Lead
