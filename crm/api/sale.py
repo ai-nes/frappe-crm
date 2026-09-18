@@ -52,6 +52,26 @@ STUDENT_FIELDS = [
 	"first_contact_time",
 	"next_follow_up",
 ]
+CONTACT_FIELDS = [
+	"name",
+	"student",
+	"student_stage",
+	"readiness_level",
+	"quality_bucket",
+	"is_verified_lead",
+	"first_contact_time",
+	"next_follow_up",
+]
+APPLICATION_FIELDS = [
+	"name",
+	"student",
+	"status",
+	"document_total",
+	"document_completed",
+	"submitted_at",
+	"enrolled_at",
+	"modified",
+]
 INTERACTION_FIELDS = [
 	"name",
 	"student",
@@ -325,6 +345,42 @@ def _load_students(
 	]
 
 
+def _load_contacts(student_ids: list[str], warnings: list[str]) -> list[dict[str, Any]]:
+	if not student_ids:
+		return []
+	return [
+		dict(row)
+		for row in _get_list(
+			"CRM Student",
+			filters={"student": ["in", student_ids]},
+			fields=CONTACT_FIELDS,
+			order_by="name asc",
+			limit_page_length=0,
+			warnings=warnings,
+			warning_key="contacts",
+		)
+	]
+
+
+def _load_applications(
+	student_ids: list[str], admission_year: str, warnings: list[str]
+) -> list[dict[str, Any]]:
+	if not student_ids:
+		return []
+	return [
+		dict(row)
+		for row in _get_list(
+			"CRM Admission Application",
+			filters={"student": ["in", student_ids], "admission_year": admission_year},
+			fields=APPLICATION_FIELDS,
+			order_by="modified desc, name desc",
+			limit_page_length=0,
+			warnings=warnings,
+			warning_key="applications",
+		)
+	]
+
+
 def _load_leads(
 	staff: dict[str, Any] | None, admission_year: str, warnings: list[str]
 ) -> list[dict[str, Any]]:
@@ -414,7 +470,22 @@ def _get_list(
 
 def _build_student_records(
 	students: list[dict[str, Any]],
-	interactions: list[dict[str, Any]],
+	contacts_or_interactions: list[dict[str, Any]],
+	applications: list[dict[str, Any]] | None = None,
+	interactions: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+	"""Build Sale records while preserving the Lead Sale compatibility contract."""
+	if applications is not None or interactions is not None:
+		if applications is None or interactions is None:
+			raise TypeError("applications and interactions must be provided together")
+		return _build_legacy_student_records(
+			students, contacts_or_interactions, applications, interactions
+		)
+	return _build_current_student_records(students, contacts_or_interactions)
+
+
+def _build_current_student_records(
+	students: list[dict[str, Any]], interactions: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
 	interactions_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
 	for row in interactions:
@@ -443,6 +514,69 @@ def _build_student_records(
 				"created_at": _coerce_datetime(student.get("creation")),
 				"last_activity_at": last_activity_at,
 				"has_activity": bool(latest_interaction or student.get("first_contact_time")),
+			}
+		)
+	return records
+
+
+def _build_legacy_student_records(
+	students: list[dict[str, Any]],
+	contacts: list[dict[str, Any]],
+	applications: list[dict[str, Any]],
+	interactions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+	contacts_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	applications_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	interactions_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	for row in contacts:
+		if row.get("student"):
+			contacts_by_student[str(row["student"])].append(row)
+	for row in applications:
+		if row.get("student"):
+			applications_by_student[str(row["student"])].append(row)
+	for row in interactions:
+		if row.get("student"):
+			interactions_by_student[str(row["student"])].append(row)
+
+	records = []
+	for student in students:
+		student_id = str(student.get("name") or "")
+		if not student_id:
+			continue
+		student_contacts = contacts_by_student.get(student_id, [])
+		student_applications = applications_by_student.get(student_id, [])
+		student_interactions = interactions_by_student.get(student_id, [])
+		stages = {"assigned"}
+		if _has_contact_attempt(student_contacts, student_interactions):
+			stages.add("contacted")
+		if _is_consulted(student, student_contacts, student_applications, student_interactions):
+			stages.add("consulted")
+		if _is_interested(student, student_contacts, student_interactions):
+			stages.add("interested")
+		if _has_documents_stage(student, student_applications):
+			stages.add("documents")
+		if _is_confirmed(student, student_applications):
+			stages.add("confirmed")
+		if _is_admitted(student, student_applications):
+			stages.update({"confirmed", "admitted"})
+
+		consulted_at = _first_datetime(
+			row.get("interaction_datetime") for row in student_interactions if _is_consulted_interaction(row)
+		)
+		admitted_at = _first_datetime(
+			[row.get("enrolled_at") for row in student_applications] + [student.get("enrollment_date")]
+		)
+		records.append(
+			{
+				"id": student_id,
+				"name": str(student.get("student_name") or "Hồ sơ chưa đặt tên"),
+				"stages": stages,
+				"status": _student_status(stages),
+				"consulted_at": consulted_at,
+				"admitted_at": admitted_at,
+				"last_interaction": _latest_interaction(student_interactions),
+				"missing_documents": _student_has_missing_documents(student_applications),
+				"qualification": "interested" in stages,
 			}
 		)
 	return records
@@ -806,6 +940,94 @@ def _task_is_canceled(task: dict[str, Any]) -> bool:
 
 def _task_is_done(task: dict[str, Any]) -> bool:
 	return task.get("status") == "Done"
+
+
+def _has_contact_attempt(contacts: list[dict[str, Any]], interactions: list[dict[str, Any]]) -> bool:
+	return bool(interactions) or any(row.get("first_contact_time") for row in contacts)
+
+
+def _is_consulted(
+	student: dict[str, Any],
+	contacts: list[dict[str, Any]],
+	applications: list[dict[str, Any]],
+	interactions: list[dict[str, Any]],
+) -> bool:
+	if any(_is_consulted_interaction(row) for row in interactions):
+		return True
+	if str(student.get("student_stage") or "") in {"Connected", "Qualified"}:
+		return True
+	if any(str(row.get("student_stage") or "") in {"Connected", "Qualified"} for row in contacts):
+		return True
+	return str(student.get("resolution") or "") == "CREATED" or any(
+		_fold(row.get("status")) in {"submitted", "under review", "accepted", "enrolled"}
+		for row in applications
+	)
+
+
+def _is_interested(
+	student: dict[str, Any], contacts: list[dict[str, Any]], interactions: list[dict[str, Any]]
+) -> bool:
+	if any(str(row.get("student_stage") or "") in {"Attempting", "Connected", "Qualified"} for row in contacts):
+		return True
+	if _fold(student.get("interest_level")) in {"high", "medium"}:
+		return True
+	if _fold(student.get("fit_level")) == "high":
+		return True
+	for row in contacts:
+		text = " ".join(
+			_fold(row.get(field)) for field in ("readiness_level", "quality_bucket", "student_stage")
+		)
+		if any(
+			token in text
+			for token in ("qualified", "high intent", "hot", "level 2", "level 3", "level 4", "co trien vong")
+		):
+			return True
+	return any(_outcome_id(row.get("outcome")) == "qualified" for row in interactions)
+
+
+def _has_documents_stage(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
+	return any(
+		_fold(row.get("status")) in {"submitted", "under review"} or _student_has_missing_documents([row])
+		for row in applications
+	)
+
+
+def _is_confirmed(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
+	if str(student.get("student_stage") or "") == "Connected":
+		return True
+	return any(_fold(row.get("status")) == "accepted" for row in applications)
+
+
+def _is_admitted(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
+	if str(student.get("student_stage") or "") == "Connected":
+		return True
+	return any(_fold(row.get("status")) == "enrolled" for row in applications)
+
+
+def _student_status(stages: set[str]) -> str:
+	if stages & {"confirmed", "admitted"}:
+		return "admission"
+	if "documents" in stages:
+		return "documents"
+	if stages & {"consulted", "interested"}:
+		return "consulting"
+	if "contacted" in stages:
+		return "waiting"
+	return "new"
+
+
+def _student_has_missing_documents(applications: list[dict[str, Any]]) -> bool:
+	return any(
+		int(row.get("document_total") or 0) > int(row.get("document_completed") or 0) for row in applications
+	)
+
+
+def _missing_document_ids(applications: list[dict[str, Any]]) -> set[str]:
+	return {
+		str(row.get("student"))
+		for row in applications
+		if row.get("student") and _student_has_missing_documents([row])
+	}
 
 
 def _is_consulted_interaction(row: dict[str, Any]) -> bool:
