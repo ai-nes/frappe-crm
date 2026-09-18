@@ -312,3 +312,59 @@ class TestLeadSaleOverview(FrappeTestCase):
 		self.assertEqual(len(response["resultTrend"]["ranges"]["4w"]["points"]), 4)
 		self.assertEqual(len(response["resultTrend"]["ranges"]["3m"]["points"]), 3)
 		self.assertEqual(response["meta"]["team"]["id"], "TEAM-1")
+
+	def test_full_board_lead_sale_does_not_require_team_membership(self):
+		timezone = ZoneInfo("Asia/Ho_Chi_Minh")
+		students = [
+			{
+				"name": "STU-GLOBAL",
+				"student_name": "Hồ sơ toàn hệ thống",
+				"processing_status": "PROCESSING",
+				"resolution": "PENDING",
+				"owner_staff": None,
+				"assigned_to": None,
+				"creation": "2026-09-05 08:00:00",
+			}
+		]
+		with (
+			patch.object(
+				lead_sale,
+				"_require_access",
+				return_value={"user": "leadsale@gmail.com", "profile": "lead_sales"},
+			),
+			patch.object(lead_sale, "can_read_full_lead_board", return_value=True),
+			patch.object(lead_sale, "_resolve_all_sales_teams", return_value=[]),
+			patch.object(lead_sale, "_resolve_teams", side_effect=AssertionError("team scope must be skipped")),
+			patch.object(lead_sale, "_resolve_admission_year", return_value="2026"),
+			patch.object(lead_sale, "_now", return_value=datetime(2026, 9, 5, 10, 0, tzinfo=timezone)),
+			patch.object(
+				lead_sale, "_viewer", return_value={"id": "leadsale@gmail.com", "displayName": "Lead Sale"}
+			),
+			patch.object(lead_sale, "_load_students", return_value=students) as load_students,
+			patch.object(lead_sale.sale_overview, "_load_contacts", return_value=[]),
+			patch.object(lead_sale.sale_overview, "_load_applications", return_value=[]),
+			patch.object(lead_sale.sale_overview, "_load_interactions", return_value=[]),
+			patch.object(lead_sale.sale_overview, "_load_tasks", return_value=[]),
+			patch.object(lead_sale, "_build_team_performance", return_value=[]),
+		):
+			response = lead_sale.get_lead_sale_overview(admissionYear="2026", date="2026-09-05")
+
+		self.assertIsNone(load_students.call_args.args[2])
+		self.assertTrue(load_students.call_args.kwargs["unrestricted"])
+		self.assertEqual(response["meta"]["team"], {"id": "all", "name": "Toàn bộ đội Sale"})
+		self.assertNotIn("team.membership_not_found", response["meta"]["warnings"])
+		self.assertEqual(response["kpis"][2]["value"], 1)
+
+	def test_unrestricted_student_reader_bypasses_team_query_scope(self):
+		with (
+			patch.object(lead_sale.frappe.db, "table_exists", return_value=True),
+			patch.object(lead_sale.frappe, "get_all", return_value=[{"name": "STU-GLOBAL"}]) as get_all,
+			patch.object(lead_sale.frappe, "get_list") as get_list,
+		):
+			rows = lead_sale._load_students(
+				"2026", [], teams=None, include_closed=True, unrestricted=True
+			)
+
+		self.assertEqual([row["name"] for row in rows], ["STU-GLOBAL"])
+		get_all.assert_called_once()
+		get_list.assert_not_called()

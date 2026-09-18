@@ -26,13 +26,14 @@ class CRMAdmissionOffering(Document):
 
 	def validate(self):
 		validate_offering(self.as_dict())
+		auto_activation = getattr(frappe.flags, "offering_auto_activation", False)
 		if self.status == "Active":
-			if not getattr(frappe.flags, "offering_approval_writer", False):
+			if not auto_activation and not getattr(frappe.flags, "offering_approval_writer", False):
 				frappe.throw(
 					_("Offerings may only be activated by the approval command."),
 					frappe.PermissionError,
 				)
-			if not (
+			if not auto_activation and not (
 				{"Administrator", "System Manager", "Admissions Director"}
 				& set(frappe.get_roles(frappe.session.user))
 			):
@@ -40,7 +41,7 @@ class CRMAdmissionOffering(Document):
 					_("Only an Admissions Director can activate an offering."), frappe.PermissionError
 				)
 			self._validate_active_overlap()
-		if self.status == "Active" and not self.approved_by:
+		if self.status == "Active" and not self.approved_by and not auto_activation:
 			frappe.throw(_("An active offering requires an approver."), frappe.ValidationError)
 		if self.status == "Active" and not self.approved_at:
 			self.approved_at = frappe.utils.now_datetime()

@@ -77,10 +77,7 @@ def _resolve_template_name(reference: str) -> str:
 	value = str(reference or "").strip()
 	if not value:
 		return ""
-	return (
-		frappe.db.get_value("CRM Admission Profile Template", {"template_code": value}, "name")
-		or value
-	)
+	return frappe.db.get_value("CRM Admission Profile Template", {"template_code": value}, "name") or value
 
 
 def _active_special_profile_templates(application) -> list[Any]:
@@ -177,6 +174,71 @@ def _next_profile_attempt_number(student: str, admission_year: str, template: st
 	return max((int(row.attempt_number or 0) for row in rows), default=0) + 1
 
 
+def _offering_effective_dates(admission_year: str) -> tuple[str, str]:
+	"""Use the admission-year dates, falling back to its calendar year."""
+	year_row = frappe.db.get_value(
+		"CRM Admission Year", admission_year, ["start_date", "end_date"], as_dict=True
+	)
+	if year_row and year_row.start_date and year_row.end_date:
+		return str(year_row.start_date), str(year_row.end_date)
+
+	year = str(admission_year or "").strip()
+	if len(year) == 4 and year.isdigit():
+		return f"{year}-01-01", f"{year}-12-31"
+	frappe.throw(
+		_("Admission Year {0} must define valid effective dates before an Offering can be created.").format(
+			year
+		),
+		frappe.ValidationError,
+	)
+
+
+def _create_active_offering(*, admission_year: str, admission_method: str, campus: str, major: str) -> str:
+	"""Create the default active offering when the catalog has no matching row."""
+	effective_from, effective_until = _offering_effective_dates(admission_year)
+	doc = frappe.get_doc(
+		{
+			"doctype": "CRM Admission Offering",
+			"admission_year": admission_year,
+			"campus": campus,
+			"major": major,
+			"admission_method": admission_method,
+			"quota": 0,
+			"effective_from": effective_from,
+			"effective_until": effective_until,
+			"status": "Active",
+			"source_reference": (
+				f"application:auto-offering:{admission_year}:{admission_method}:{campus}:{major}"
+			),
+		}
+	)
+	previous = getattr(frappe.flags, "offering_auto_activation", False)
+	frappe.flags.offering_auto_activation = True
+	try:
+		doc.insert(ignore_permissions=True)
+	except frappe.DuplicateEntryError:
+		# A concurrent request may have created the same offering after the lookup.
+		rows = frappe.get_all(
+			"CRM Admission Offering",
+			filters={
+				"admission_year": admission_year,
+				"admission_method": admission_method,
+				"campus": campus,
+				"major": major,
+				"status": "Active",
+			},
+			fields=["name"],
+			limit_page_length=0,
+			ignore_permissions=True,
+		)
+		if len(rows) == 1:
+			return rows[0].name
+		raise
+	finally:
+		frappe.flags.offering_auto_activation = previous
+	return doc.name
+
+
 def _resolve_offering(student_doc, application_values: dict[str, Any]) -> None:
 	"""Resolve the unique active offering from the Student's admission context."""
 	if application_values.get("offering"):
@@ -213,6 +275,23 @@ def _resolve_offering(student_doc, application_values: dict[str, Any]) -> None:
 		limit_page_length=0,
 		ignore_permissions=True,
 	)
+	if not offerings and not student_doc.branch:
+		frappe.throw(
+			_("The Student's Campus is required to create an Admission Offering."), frappe.ValidationError
+		)
+	if not offerings and not student_doc.major:
+		frappe.throw(
+			_("The Student's Major is required to create an Admission Offering."), frappe.ValidationError
+		)
+	if not offerings:
+		application_values["offering"] = _create_active_offering(
+			admission_year=admission_year,
+			admission_method=admission_method,
+			campus=student_doc.branch,
+			major=student_doc.major,
+		)
+		application_values.setdefault("admission_year", admission_year)
+		return
 	if len(offerings) != 1:
 		frappe.throw(
 			_(
@@ -336,7 +415,9 @@ def create_application(*, student: str, values: dict[str, Any], expected_revisio
 		frappe.throw(_("Student is required."), frappe.ValidationError)
 	_resolve_offering(student_doc, application_values)
 	if application_values.get("profile_template"):
-		application_values["profile_template"] = _resolve_template_name(application_values["profile_template"])
+		application_values["profile_template"] = _resolve_template_name(
+			application_values["profile_template"]
+		)
 	if "special_profile_options" in application_values:
 		application_values["special_profile_options"] = _normalize_special_profile_options(
 			application_values["special_profile_options"]
