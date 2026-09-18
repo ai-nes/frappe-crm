@@ -21,55 +21,52 @@ import frappe
 
 from crm.api import sale as sale_overview
 from crm.api.director_school_common import parse_limit, raise_api_error
-from crm.api.sla import BREACH as STUDENT_SLA_BREACH
 from crm.fcrm.role_policy import resolve_crm_profile
 
 DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh"
 TREND_RANGES = {"4w", "3m"}
-STUDENT_STATUS_ORDER = ("consulting", "waiting", "documents", "admission", "new")
+STUDENT_STATUS_ORDER = ("new", "attempting", "connected", "qualified", "disqualified")
 STUDENT_STATUS_LABELS = {
-	"consulting": "Đang tư vấn",
-	"waiting": "Chờ phản hồi",
-	"documents": "Đang làm hồ sơ",
-	"admission": "Chờ nhập học",
-	"new": "Mới nhận",
-}
-DASHBOARD_STAGE_ORDER = ("lead", "contacted", "qualified", "opportunity", "application", "enrollment")
-DASHBOARD_STAGE_LABELS = {
-	"lead": "Lead mới",
-	"contacted": "Đã liên hệ",
+	"new": "Lead mới",
+	"attempting": "Đang liên hệ",
+	"connected": "Đã kết nối",
 	"qualified": "Đủ điều kiện",
-	"opportunity": "Cơ hội",
-	"application": "Làm hồ sơ",
-	"enrollment": "Nhập học",
+	"disqualified": "Không đủ điều kiện",
+}
+DASHBOARD_STAGE_ORDER = ("new", "attempting", "connected", "qualified")
+DASHBOARD_STAGE_LABELS = {
+	"new": "Lead mới",
+	"attempting": "Đang liên hệ",
+	"connected": "Đã kết nối",
+	"qualified": "Đủ điều kiện",
 }
 DASHBOARD_STAGE_PROBABILITY = {
-	"lead": 0.0,
-	"contacted": 0.25,
-	"qualified": 0.10,
-	"opportunity": 0.50,
-	"application": 0.75,
-	"enrollment": 0.95,
+	"new": 0.0,
+	"attempting": 0.10,
+	"connected": 0.25,
+	"qualified": 0.50,
 }
 DASHBOARD_LIFECYCLE_STAGE_MAP = {
-	"lead": "lead",
-	"new": "lead",
-	"engaged": "contacted",
-	"attempting": "contacted",
-	"mql": "qualified",
-	# CRM Student.Qualified is the canonical Applicant lifecycle state. The
-	# dashboard keeps its six-column presentation without inventing a second
-	# qualification state for the same Student.
-	"qualified": "application",
-	"prospect": "lead",
-	"counselling": "qualified",
-	"consultation": "qualified",
-	"consulted": "qualified",
-	"applicant": "application",
-	"application": "application",
-	"accepted": "application",
-	"enrolled": "enrollment",
-	"connected": "enrollment",
+	"new": "new",
+	"attempting": "attempting",
+	"connected": "connected",
+	"qualified": "qualified",
+	"disqualified": "disqualified",
+	# Legacy lifecycle values are normalized to the canonical CRM Student stages.
+	"lead": "new",
+	"prospect": "attempting",
+	"engaged": "attempting",
+	"mql": "attempting",
+	"counselling": "connected",
+	"consultation": "connected",
+	"consulted": "connected",
+	"applicant": "qualified",
+	"application": "qualified",
+	"accepted": "qualified",
+	"enrolled": "qualified",
+	"lost": "disqualified",
+	"refused": "disqualified",
+	"follow_up": "attempting",
 }
 DASHBOARD_TREND_WEEKS = {"4w": 4, "3m": 12}
 DASHBOARD_AGING_BUCKETS = ("0-2-days", "3-5-days", "6-10-days", "over-10-days")
@@ -195,8 +192,6 @@ STUDENT_FIELDS = [
 	"quality_bucket",
 	"first_contact_time",
 	"next_follow_up",
-	"sla_status",
-	"sla_started_at",
 	"modified",
 ]
 LIFECYCLE_EVENT_FIELDS = ["name", "student", "from_stage", "to_stage", "occurred_at"]
@@ -619,8 +614,6 @@ def _build_records(
 			"quality_bucket",
 			"first_contact_time",
 			"next_follow_up",
-			"sla_status",
-			"sla_started_at",
 			"modified",
 			"enrollment_date",
 			"student_stage",
@@ -653,7 +646,7 @@ def _build_stage_history(
 		if stage in DASHBOARD_STAGE_ORDER and when:
 			entries.append((stage, when))
 
-	add("lead", student.get("creation"))
+	add("new", student.get("creation"))
 	for event in lifecycle_events:
 		stage = DASHBOARD_LIFECYCLE_STAGE_MAP.get(_dashboard_status(event.get("to_stage")))
 		when = sale_overview._coerce_datetime(event.get("occurred_at"))
@@ -661,21 +654,17 @@ def _build_stage_history(
 		if stage and when:
 			lifecycle_entry_times[stage].append(when)
 	for contact in contacts:
-		add("contacted", contact.get("first_contact_time"))
+		add("attempting", contact.get("first_contact_time"))
 	for interaction in interactions:
 		if sale_overview._is_consulted_interaction(interaction):
-			add("qualified", interaction.get("interaction_datetime"))
+			add("connected", interaction.get("interaction_datetime"))
 	if "interested" in (record.get("stages") or set()):
 		latest_interaction = sale_overview._latest_interaction(interactions)
-		add("opportunity", (latest_interaction or {}).get("interaction_datetime"))
+		add("qualified", (latest_interaction or {}).get("interaction_datetime"))
 	for application in applications:
 		status = _dashboard_status(application.get("status"))
 		if application.get("submitted_at") or status in {"submitted", "under_review", "accepted", "enrolled"}:
-			add("application", application.get("submitted_at") or application.get("modified"))
-		if application.get("enrolled_at") or status == "enrolled":
-			add("enrollment", application.get("enrolled_at") or application.get("modified"))
-	if "admitted" in (record.get("stages") or set()):
-		add("enrollment", record.get("enrollment_date") or student.get("modified"))
+			add("qualified", application.get("submitted_at") or application.get("modified"))
 
 	current_stage = _dashboard_stage_id(record)
 	if not entries:
@@ -746,7 +735,7 @@ def _build_interventions(
 		student_id = record["id"]
 		if not _is_assigned(record):
 			continue
-		clock_started_at = record.get("sla_started_at") or record.get("creation")
+		clock_started_at = record.get("creation")
 		created_at = sale_overview._as_timezone(sale_overview._coerce_datetime(clock_started_at), timezone)
 		if (
 			created_at
@@ -838,7 +827,9 @@ def _build_team_performance(
 def _build_student_status(records: list[dict[str, Any]]) -> dict[str, Any]:
 	counts = {status: 0 for status in STUDENT_STATUS_ORDER}
 	for record in records:
-		status = record.get("status") if record.get("status") in counts else "new"
+		status = _dashboard_stage_id(record)
+		if status not in counts:
+			status = "new"
 		counts[status] += 1
 	total = len(records)
 	return {
@@ -1019,14 +1010,24 @@ def _build_dashboard_payload(
 		for student_id, rows in applications_by_student.items()
 		if any(_dashboard_status(row.get("status")) in DASHBOARD_LOST_STATUSES for row in rows)
 	}
-	enrollment_ids = {record["id"] for record in records if stage_by_record[record["id"]] == "enrollment"}
+	lost_ids.update(
+		record["id"] for record in records if stage_by_record[record["id"]] == "disqualified"
+	)
+	enrollment_ids = {record["id"] for record in records if _dashboard_is_enrolled(record)}
 	lost_ids -= enrollment_ids
 	pipeline_records = [record for record in records if record["id"] not in lost_ids]
-	active_records = [record for record in pipeline_records if stage_by_record[record["id"]] != "enrollment"]
+	active_records = [record for record in pipeline_records if record["id"] not in enrollment_ids]
 	active_ids = {record["id"] for record in active_records}
 	active_tasks = [task for task in tasks if task.get("student_id") in active_ids]
 	deadline_by_student = _dashboard_follow_up_deadlines(
 		active_records, contacts_by_student, active_tasks, timezone
+	)
+	action_required_ids = _dashboard_action_required_ids(
+		active_records,
+		age_by_record,
+		active_tasks,
+		deadline_by_student,
+		as_of,
 	)
 	period_start = _dashboard_period_start(report_date, trend_range)
 	team_ids = sorted({str(team.get("name")) for team in teams if team.get("name")})
@@ -1035,6 +1036,7 @@ def _build_dashboard_payload(
 		pipeline_records,
 		stage_by_record,
 		age_by_record,
+		action_required_ids,
 		deadline_by_student,
 		period_start,
 		report_date,
@@ -1050,25 +1052,27 @@ def _build_dashboard_payload(
 	closed_won = enrollment
 	closed_lost = len(lost_ids)
 	remaining = max(target - enrollment, 0) if target is not None else None
-	stage_stats = _dashboard_stage_stats(pipeline_records, stage_by_record, age_by_record)
+	stage_stats = _dashboard_stage_stats(
+		pipeline_records, stage_by_record, age_by_record, action_required_ids
+	)
 	open_records = active_records
 	expected = round(
 		sum(DASHBOARD_STAGE_PROBABILITY[stage_by_record[record["id"]]] for record in open_records)
 	)
 	open_opportunities = sum(_dashboard_is_open_opportunity(record) for record in open_records)
 	new_opportunities = sum(
-		_dashboard_stage_in_period(record, "opportunity", period_start, report_date, timezone)
+		_dashboard_stage_in_period(record, "qualified", period_start, report_date, timezone)
 		for record in pipeline_records
 	)
 	follow_up_due = sum(deadline.date() == report_date for deadline in deadline_by_student.values())
 	overdue = sum(deadline < as_of for deadline in deadline_by_student.values())
-	# Stage aging is an operational projection. The canonical SLA breach is
-	# owned by crm.api.sla and materialized on CRM Student.sla_status.
-	aging_over_sla = sum(_dashboard_is_sla_breached(record) for record in active_records)
+	action_required = len(action_required_ids)
+	aging_action_items = sum(age_by_record[record["id"]] >= 6 for record in active_records)
 	priority_queue = _dashboard_priority_queue(
 		pipeline_records,
 		stage_by_record,
 		age_by_record,
+		action_required_ids,
 		contacts_by_student,
 		interactions_by_student,
 		active_tasks,
@@ -1096,7 +1100,7 @@ def _build_dashboard_payload(
 			else 0,
 			"followUpDue": follow_up_due,
 			"overdue": overdue,
-			"agingOverSla": aging_over_sla,
+			"actionRequired": action_required,
 		},
 		"actions": [
 			{
@@ -1119,16 +1123,14 @@ def _build_dashboard_payload(
 			},
 			{
 				"id": "aging",
-				"value": aging_over_sla,
+				"value": aging_action_items,
 				"longestAgeDays": max((age_by_record[record["id"]] for record in active_records), default=0),
 			},
 		],
 		"priorityQueue": priority_queue,
 		"stages": [stage_stats[stage] for stage in DASHBOARD_STAGE_ORDER],
 		"reps": members,
-		"trend": _dashboard_trend(
-			pipeline_records, stage_by_record, report_date, target, trend_range, timezone
-		),
+		"trend": _dashboard_trend(pipeline_records, report_date, trend_range, timezone),
 		"agingBuckets": _dashboard_aging_buckets(
 			{record["id"]: age_by_record[record["id"]] for record in active_records}
 		),
@@ -1225,6 +1227,7 @@ def _dashboard_members(
 	records: list[dict[str, Any]],
 	stage_by_record: dict[str, str],
 	age_by_record: dict[str, int],
+	action_required_ids: set[str],
 	deadline_by_student: dict[str, datetime],
 	period_start: date,
 	report_date: date,
@@ -1272,7 +1275,7 @@ def _dashboard_members(
 		owned_lost_ids = {
 			student_id for student_id in lost_ids if owner_by_student.get(student_id) == staff_id
 		}
-		won = sum(stage_by_record[record["id"]] == "enrollment" for record in owned)
+		won = sum(_dashboard_is_enrolled(record) for record in owned)
 		lost = len(owned_lost_ids)
 		stage_volumes = {
 			stage: sum(stage_by_record[record["id"]] == stage for record in owned)
@@ -1280,7 +1283,7 @@ def _dashboard_members(
 		}
 		stage_stalled = {
 			stage: sum(
-				stage_by_record[record["id"]] == stage and _dashboard_is_sla_breached(record)
+				stage_by_record[record["id"]] == stage and record["id"] in action_required_ids
 				for record in owned
 			)
 			for stage in DASHBOARD_STAGE_ORDER
@@ -1296,7 +1299,7 @@ def _dashboard_members(
 			sum(
 				DASHBOARD_STAGE_PROBABILITY[stage_by_record[record["id"]]]
 				for record in owned
-				if stage_by_record[record["id"]] != "enrollment"
+				if stage_by_record[record["id"]] in DASHBOARD_STAGE_PROBABILITY
 			)
 		)
 		result.append(
@@ -1315,17 +1318,17 @@ def _dashboard_members(
 				"openOpportunities": sum(_dashboard_is_open_opportunity(record) for record in owned),
 				"overdue": sum(deadline < as_of for deadline in member_deadlines.values()),
 				"avgStageAgeDays": avg_age,
-				"agingOverSlaCount": sum(stage_stalled.values()),
+				"actionItemCount": sum(stage_stalled.values()),
 				"pipeline": {
 					"newOpportunities": sum(
-						_dashboard_stage_in_period(record, "opportunity", period_start, report_date, timezone)
+						_dashboard_stage_in_period(record, "qualified", period_start, report_date, timezone)
 						for record in owned
 					),
 					"followUpDue": sum(
 						deadline.date() == report_date for deadline in member_deadlines.values()
 					),
 					"stageVolumes": stage_volumes,
-					"stageStalledCounts": stage_stalled,
+					"stageActionItemCounts": stage_stalled,
 					"agingBuckets": _dashboard_aging_buckets(
 						{record["id"]: age_by_record[record["id"]] for record in owned}, raw=True
 					),
@@ -1333,12 +1336,15 @@ def _dashboard_members(
 				},
 			}
 		)
-	result.sort(key=lambda row: (-row["overdue"], -row["agingOverSlaCount"], row["id"]))
+	result.sort(key=lambda row: (-row["overdue"], -row["actionItemCount"], row["id"]))
 	return result
 
 
 def _dashboard_stage_stats(
-	records: list[dict[str, Any]], stage_by_record: dict[str, str], age_by_record: dict[str, int]
+	records: list[dict[str, Any]],
+	stage_by_record: dict[str, str],
+	age_by_record: dict[str, int],
+	action_required_ids: set[str],
 ) -> dict[str, dict[str, Any]]:
 	stats: dict[str, dict[str, Any]] = {}
 	for index, stage in enumerate(DASHBOARD_STAGE_ORDER):
@@ -1346,12 +1352,12 @@ def _dashboard_stage_stats(
 		next_stage = DASHBOARD_STAGE_ORDER[index + 1] if index + 1 < len(DASHBOARD_STAGE_ORDER) else None
 		entered_count = sum(_dashboard_reached_stage(record, stage, stage_by_record) for record in records)
 		next_count = (
-			sum(_dashboard_reached_stage(record, next_stage, stage_by_record) for record in records)
+			sum(_dashboard_progressed_to_stage(record, stage, next_stage) for record in records)
 			if next_stage
 			else 0
 		)
 		average = round(sum(age_by_record[record["id"]] for record in owned) / len(owned), 1) if owned else 0
-		stalled = sum(_dashboard_is_sla_breached(record) for record in owned)
+		action_items = sum(record["id"] in action_required_ids for record in owned)
 		stats[stage] = {
 			"id": stage,
 			"label": DASHBOARD_STAGE_LABELS[stage],
@@ -1360,10 +1366,37 @@ def _dashboard_stage_stats(
 				round(next_count / entered_count * 100) if entered_count and next_stage else None
 			),
 			"averageDays": average,
-			"slaDays": None,
-			"stalledCount": stalled,
+			"actionItemCount": action_items,
 		}
 	return stats
+
+
+def _dashboard_action_required_ids(
+	records: list[dict[str, Any]],
+	age_by_record: dict[str, int],
+	tasks: list[dict[str, Any]],
+	deadline_by_student: dict[str, datetime],
+	as_of: datetime,
+) -> set[str]:
+	tasks_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	for task in tasks:
+		if task.get("student_id"):
+			tasks_by_student[str(task["student_id"])].append(task)
+
+	result: set[str] = set()
+	for record in records:
+		student_id = record["id"]
+		open_tasks = [task for task in tasks_by_student.get(student_id, []) if not _task_is_terminal(task)]
+		deadline = deadline_by_student.get(student_id)
+		overdue = bool(deadline and deadline < as_of) or any(
+			bool(task.get("is_overdue")) for task in open_tasks
+		)
+		missing_documents = bool(record.get("missing_documents"))
+		uncontacted = not (record.get("stages") or set()) & {"contacted", "consulted"}
+		age = age_by_record[student_id]
+		if overdue or missing_documents or (uncontacted and age > 1) or age >= 6:
+			result.add(student_id)
+	return result
 
 
 def _dashboard_reached_stage(record: dict[str, Any], stage: str, stage_by_record: dict[str, str]) -> bool:
@@ -1379,10 +1412,24 @@ def _dashboard_reached_stage(record: dict[str, Any], stage: str, stage_by_record
 	return False
 
 
+def _dashboard_progressed_to_stage(record: dict[str, Any], stage: str, next_stage: str) -> bool:
+	history = [
+		str(entry.get("stage"))
+		for entry in record.get("stage_history", [])
+		if isinstance(entry, dict) and entry.get("stage")
+	]
+	try:
+		stage_index = history.index(stage)
+	except ValueError:
+		return False
+	return next_stage in history[stage_index + 1 :]
+
+
 def _dashboard_priority_queue(
 	records: list[dict[str, Any]],
 	stage_by_record: dict[str, str],
 	age_by_record: dict[str, int],
+	action_required_ids: set[str],
 	contacts_by_student: dict[str, list[dict[str, Any]]],
 	interactions_by_student: dict[str, list[dict[str, Any]]],
 	tasks: list[dict[str, Any]],
@@ -1398,7 +1445,7 @@ def _dashboard_priority_queue(
 	for record in records:
 		student_id = record["id"]
 		stage = stage_by_record[student_id]
-		if stage == "enrollment":
+		if _dashboard_is_enrolled(record):
 			continue
 		open_tasks = [task for task in tasks_by_student.get(student_id, []) if not _task_is_terminal(task)]
 		age = age_by_record[student_id]
@@ -1409,7 +1456,7 @@ def _dashboard_priority_queue(
 			bool(task.get("is_overdue")) for task in open_tasks
 		)
 		follow_up_age = max(0, (as_of.date() - deadline.date()).days) if deadline and deadline < as_of else 0
-		stalled = _dashboard_is_sla_breached(record)
+		stalled = student_id in action_required_ids
 		if not any((overdue, missing_documents, uncontacted and age > 1, stalled)):
 			continue
 		if overdue:
@@ -1417,7 +1464,7 @@ def _dashboard_priority_queue(
 		elif missing_documents:
 			issue_code, next_action, rank = "missing-documents", "Nhắc bổ sung hồ sơ", 1
 		elif uncontacted:
-			issue_code, next_action, rank = "uncontacted", "Gọi lần đầu", 2
+			issue_code, next_action, rank = "uncontacted", "Thực hiện tương tác", 2
 		else:
 			issue_code, next_action, rank = "aging", "Rà soát và chốt bước tiếp theo", 3
 		latest = sale_overview._latest_interaction(interactions_by_student.get(student_id, []))
@@ -1444,9 +1491,7 @@ def _dashboard_priority_queue(
 
 def _dashboard_trend(
 	records: list[dict[str, Any]],
-	stage_by_record: dict[str, str],
 	report_date: date,
-	target: int | None,
 	trend_range: str,
 	timezone: ZoneInfo,
 ) -> list[dict[str, Any]]:
@@ -1459,18 +1504,13 @@ def _dashboard_trend(
 		points.append(
 			{
 				"period": f"Tuần {index + 1}",
-				"enrollment": sum(
-					stage_by_record[record["id"]] == "enrollment"
-					and sale_overview._date_inclusive(
-						record.get("admitted_at"), period_start, period_end, timezone
+				"stageCounts": {
+					stage: sum(
+						_dashboard_stage_in_period(record, stage, period_start, period_end, timezone)
+						for record in records
 					)
-					for record in records
-				),
-				"target": round(target * (index + 1) / weeks) if target is not None else None,
-				"newOpportunities": sum(
-					_dashboard_stage_in_period(record, "opportunity", period_start, period_end, timezone)
-					for record in records
-				),
+					for stage in DASHBOARD_STAGE_ORDER
+				},
 			}
 		)
 	return points
@@ -1512,17 +1552,17 @@ def _dashboard_stage_id(record: dict[str, Any]) -> str:
 	canonical_stage = DASHBOARD_LIFECYCLE_STAGE_MAP.get(_dashboard_status(record.get("student_stage")))
 	if canonical_stage:
 		return canonical_stage
-	if record.get("admitted_at") or "admitted" in (record.get("stages") or set()):
-		return "enrollment"
+	if record.get("disqualified_at") or "disqualified" in (record.get("stages") or set()):
+		return "disqualified"
 	if record.get("missing_documents") or "documents" in (record.get("stages") or set()):
-		return "application"
-	if "interested" in (record.get("stages") or set()):
-		return "opportunity"
-	if "consulted" in (record.get("stages") or set()):
 		return "qualified"
+	if "interested" in (record.get("stages") or set()):
+		return "qualified"
+	if "consulted" in (record.get("stages") or set()):
+		return "connected"
 	if "contacted" in (record.get("stages") or set()):
-		return "contacted"
-	return "lead"
+		return "attempting"
+	return "new"
 
 
 def _dashboard_age_days(record: dict[str, Any], stage: str, as_of: datetime, timezone: ZoneInfo) -> int:
@@ -1577,14 +1617,19 @@ def _dashboard_status(value: Any) -> str:
 	return str(value or "").strip().lower().replace(" ", "_").replace("-", "_")
 
 
+def _dashboard_is_enrolled(record: dict[str, Any]) -> bool:
+	"""Identify the enrollment outcome without treating it as a Student stage."""
+	return bool(
+		record.get("enrollment_date")
+		or record.get("admitted_at")
+		or "admitted" in (record.get("stages") or set())
+	)
+
+
 def _dashboard_is_open_opportunity(record: dict[str, Any]) -> bool:
 	"""Use the core high-intent signal instead of treating every later stage as an opportunity."""
 	stages = record.get("stages") or set()
 	return bool(record.get("qualification")) and not stages & {"confirmed", "admitted"}
-
-
-def _dashboard_is_sla_breached(record: dict[str, Any]) -> bool:
-	return _dashboard_status(record.get("sla_status")) == _dashboard_status(STUDENT_SLA_BREACH)
 
 
 # Student assignment workspace -------------------------------------------------
