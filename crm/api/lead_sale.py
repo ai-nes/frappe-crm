@@ -21,6 +21,7 @@ import frappe
 
 from crm.api import sale as sale_overview
 from crm.api.director_school_common import parse_limit, raise_api_error
+from crm.fcrm.permissions import can_read_full_lead_board
 from crm.fcrm.role_policy import resolve_crm_profile
 
 DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh"
@@ -215,8 +216,20 @@ def get_lead_sale_overview(
 	as_of = _now(report_timezone)
 	warnings: list[str] = []
 
-	teams = _resolve_teams(access["user"], warnings, report_date)
-	students = _load_students(admission_year, warnings, teams, report_date, include_closed=True)
+	full_board = can_read_full_lead_board(access["user"])
+	teams = (
+		_resolve_all_sales_teams(warnings)
+		if full_board
+		else _resolve_teams(access["user"], warnings, report_date)
+	)
+	students = _load_students(
+		admission_year,
+		warnings,
+		None if full_board else teams,
+		report_date,
+		include_closed=True,
+		unrestricted=full_board,
+	)
 	student_ids = [str(row.get("name")) for row in students if row.get("name")]
 	contacts = sale_overview._load_contacts(student_ids, warnings)
 	applications = sale_overview._load_applications(student_ids, admission_year, warnings)
@@ -256,7 +269,7 @@ def get_lead_sale_overview(
 	return {
 		"meta": {
 			"viewer": _viewer(access["user"]),
-			"team": _team_meta(teams),
+			"team": _team_meta(teams, full_board=full_board),
 			"admissionYear": _year_number(admission_year),
 			"date": report_date.isoformat(),
 			"asOf": as_of.isoformat(timespec="seconds"),
@@ -447,12 +460,25 @@ def _resolve_teams(user: str, warnings: list[str], report_date: date | None = No
 	)
 
 
+def _resolve_all_sales_teams(warnings: list[str]) -> list[dict[str, Any]]:
+	return _get_list(
+		"CRM Team",
+		filters={"team_type": "Sales", "is_active": 1},
+		fields=["name", "team_name", "campus", "is_active"],
+		limit_page_length=0,
+		warnings=warnings,
+		warning_key="team",
+		order_by="name asc",
+	)
+
+
 def _load_students(
 	admission_year: str,
 	warnings: list[str],
 	teams: list[dict[str, Any]] | None = None,
 	report_date: date | None = None,
 	include_closed: bool = False,
+	unrestricted: bool = False,
 ) -> list[dict[str, Any]]:
 	filters: dict[str, Any] = {
 		"admission_year": admission_year,
@@ -482,6 +508,7 @@ def _load_students(
 			warning_key="students",
 			order_by="name asc",
 			or_filters=or_filters,
+			unrestricted=unrestricted,
 		)
 	]
 
@@ -523,6 +550,7 @@ def _get_list(
 	warning_key: str | None = None,
 	order_by: str | None = None,
 	or_filters: list[list[Any]] | None = None,
+	unrestricted: bool = False,
 ) -> list[Any]:
 	try:
 		if not frappe.db.table_exists(doctype):
@@ -538,7 +566,8 @@ def _get_list(
 			kwargs["order_by"] = order_by
 		if or_filters:
 			kwargs["or_filters"] = or_filters
-		return list(frappe.get_list(doctype, **kwargs))
+		reader = frappe.get_all if unrestricted else frappe.get_list
+		return list(reader(doctype, **kwargs))
 	except Exception:
 		if warnings is not None and warning_key:
 			warnings.append(f"{warning_key}.source_unavailable")
@@ -909,7 +938,9 @@ def _is_assigned(record: dict[str, Any]) -> bool:
 	return bool(record.get("owner_staff"))
 
 
-def _team_meta(teams: list[dict[str, Any]]) -> dict[str, str]:
+def _team_meta(teams: list[dict[str, Any]], *, full_board: bool = False) -> dict[str, str]:
+	if full_board:
+		return {"id": "all", "name": "Toàn bộ đội Sale"}
 	if not teams:
 		return {"id": "", "name": "Đội Sale hiện tại"}
 	if len(teams) == 1:
