@@ -62,12 +62,16 @@ STAGES = {
 	"counselling": {"label": "Tư vấn", "student_stage": "Attempting"},
 	"applying": {"label": "Ứng tuyển", "student_stage": "Qualified"},
 	"enrolled": {"label": "Nhập học", "student_stage": "Connected"},
+	"registration": {"label": "Đăng ký", "student_stage": "Registration"},
+	"new_enter": {"label": "Nhập học", "student_stage": "New Enter"},
 }
 STAGE_BY_STUDENT_STAGE = {
 	"New": {"code": "interested", "label": "Quan tâm"},
 	"Attempting": {"code": "counselling", "label": "Tư vấn"},
 	"Qualified": {"code": "applying", "label": "Ứng tuyển"},
 	"Connected": {"code": "enrolled", "label": "Nhập học"},
+	"Registration": {"code": "registration", "label": "Đăng ký"},
+	"New Enter": {"code": "new_enter", "label": "Nhập học"},
 }
 PRIORITIES = {
 	"high": {"label": "Cao", "rank": 1},

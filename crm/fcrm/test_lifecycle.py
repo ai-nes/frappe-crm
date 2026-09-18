@@ -7,9 +7,10 @@ are plain logic with no DB writes required. get_lifecycle_stage/enforce_lifecycl
 still need frappe.db / frappe.session and are covered indirectly through
 CRM Student / CRM Student save-path tests (test_crm_contact.py / test_crm_student.py)."""
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from unittest.mock import patch
 
 from crm.fcrm.lifecycle import (
 	LIFECYCLE_ORDER,
@@ -132,25 +133,34 @@ class TestLifecycleJumps(FrappeTestCase):
 	def test_active_stage_lists_every_later_stage_when_writes_enabled(self):
 		with patch("crm.fcrm.student_lifecycle.enabled", return_value=True):
 			targets = lifecycle_targets("Lead", self.capabilities)
-		self.assertEqual([target["stage"] for target in targets], ["MQL", "Applicant", "Enrolled"])
+		self.assertEqual(
+			[target["stage"] for target in targets],
+			["Attempting", "Connected", "Qualified", "Registration", "New Enter"],
+		)
 
 	def test_each_forward_target_requires_its_cumulative_qualification_evidence(self):
 		for target in ("MQL", "Applicant", "Enrolled"):
 			transition = validate_transition(
 				"Lead", target, outcome_code="qualified", evidence=self.evidence, capabilities=self.capabilities
 			)
-			self.assertEqual(transition["to_stage"], target)
+			self.assertEqual(
+				transition["to_stage"],
+				{"MQL": "Attempting", "Applicant": "Qualified", "Enrolled": "Connected"}[target],
+			)
 
-	def test_lost_and_reopen_require_a_reason_and_capability(self):
+	def test_lost_is_only_available_from_connected_and_reopen_requires_capability(self):
 		with self.assertRaises(StudentLifecycleError) as lost:
 			validate_transition("Applicant", "Lost", capabilities={"lifecycle.lost"})
-		self.assertEqual(lost.exception.code, "REASON_REQUIRED")
+		self.assertEqual(lost.exception.code, "INVALID_EDGE")
 		self.assertEqual(
-			validate_transition("Applicant", "Lost", reason="Candidate withdrew", capabilities={"lifecycle.lost"})[
+			validate_transition("Connected", "Lost", reason="Candidate withdrew", capabilities={"lifecycle.lost"})[
 				"transition_kind"
 			],
 			"lost",
 		)
+		with self.assertRaises(StudentLifecycleError) as qualified_lost:
+			validate_transition("Qualified", "Lost", reason="Candidate withdrew", capabilities={"lifecycle.lost"})
+		self.assertEqual(qualified_lost.exception.code, "INVALID_EDGE")
 		with self.assertRaises(StudentLifecycleError) as reopen:
 			validate_transition("Lost", "Reopen", reason="Re-engaged", capabilities=set())
 		self.assertEqual(reopen.exception.code, "FORBIDDEN")
@@ -178,10 +188,10 @@ class TestLifecycleJumps(FrappeTestCase):
 			"Lead", "Enrolled", outcome_code="qualified", evidence=self.evidence, capabilities=self.capabilities
 		)
 		self.assertEqual(transition["transition_kind"], "forward")
-		self.assertEqual(transition["to_stage"], "Enrolled")
+		self.assertEqual(transition["to_stage"], "Connected")
 		self.assertEqual(
 			validate_transition("MQL", "Enrolled", outcome_code="qualified", evidence=self.evidence, capabilities=self.capabilities)["to_stage"],
-			"Enrolled",
+			"Connected",
 		)
 
 	def test_direct_jump_rejects_missing_skipped_stage_evidence(self):

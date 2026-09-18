@@ -6,8 +6,18 @@ from typing import Any
 
 import frappe
 
-STUDENT_STAGES = ("New", "Attempting", "Connected", "Qualified", "Disqualified")
-TERMINAL_STAGES = frozenset({"Qualified", "Disqualified"})
+from crm.fcrm.role_policy import capabilities_for_roles
+
+STUDENT_STAGES = (
+	"New",
+	"Attempting",
+	"Connected",
+	"Qualified",
+	"Registration",
+	"New Enter",
+	"Disqualified",
+)
+TERMINAL_STAGES = frozenset({"New Enter", "Disqualified"})
 SERVICE_FLAG = "student_stage_service"
 CONTEXT_SERVICE_FLAG = "student_stage_context_service"
 
@@ -18,6 +28,8 @@ STUDENT_STAGE_TO_LIFECYCLE_LABEL = {
 	"Attempting": "MQL",
 	"Connected": "Enrolled",
 	"Qualified": "Applicant",
+	"Registration": "Applicant",
+	"New Enter": "Enrolled",
 	"Disqualified": "Lost",
 }
 
@@ -27,11 +39,12 @@ def lifecycle_label_for_stage(stage: Any) -> str | None:
 
 
 def is_active_stage(stage: Any) -> bool:
-	return str(stage or "New").strip() not in {"Connected", "Disqualified"}
+	return str(stage or "New").strip() not in TERMINAL_STAGES | {"Connected"}
 
 
 def is_enrolled_stage(stage: Any) -> bool:
-	return str(stage or "").strip() == "Connected"
+	return str(stage or "").strip() in {"Connected", "New Enter"}
+
 
 # Kept as a migration compatibility helper for historical patches.  Student
 # records no longer persist enrollment_status or lifecycle_stage; new code uses
@@ -55,6 +68,8 @@ STUDENT_STAGE_TO_LEGACY_ENROLLMENT_STATUS = {
 	"Attempting": "PROSPECT",
 	"Connected": "ENROLLED",
 	"Qualified": "CONFIRMED",
+	"Registration": "CONFIRMED",
+	"New Enter": "ENROLLED",
 	"Disqualified": "REFUSED",
 }
 STUDENT_STAGE_TO_LEGACY_LIFECYCLE_STAGE = {
@@ -62,6 +77,8 @@ STUDENT_STAGE_TO_LEGACY_LIFECYCLE_STAGE = {
 	"Attempting": "MQL",
 	"Connected": "Enrolled",
 	"Qualified": "Applicant",
+	"Registration": "Applicant",
+	"New Enter": "Enrolled",
 	"Disqualified": "Lost",
 }
 
@@ -69,7 +86,9 @@ _NEXT_STAGES = {
 	"New": frozenset({"Attempting"}),
 	"Attempting": frozenset({"Connected"}),
 	"Connected": frozenset({"Qualified", "Disqualified"}),
-	"Qualified": frozenset(),
+	"Qualified": frozenset({"Registration"}),
+	"Registration": frozenset({"New Enter"}),
+	"New Enter": frozenset(),
 	"Disqualified": frozenset(),
 }
 
@@ -128,6 +147,28 @@ def _lock_student(name: str) -> None:
 	frappe.db.sql("select name from `tabCRM Student` where name=%s for update", (name,))
 
 
+def _has_stage_transition_permission(doc) -> bool:
+	"""Authorize the stage command independently from generic Student writes.
+
+	Student stage is a governed command field.  Lead Sale has a full Student
+	read projection but intentionally does not receive unrestricted Student
+	write permission, so checking ``doc.has_permission("write")`` here rejects
+	valid lifecycle transitions.  The command therefore requires the explicit
+	lifecycle capability plus the document's existing read scope.
+	"""
+	actor = getattr(getattr(frappe, "session", None), "user", None)
+	if not actor or actor in {"Guest", "None"}:
+		return False
+	roles = frappe.get_roles(actor)
+	if actor == "Administrator" or "System Manager" in roles:
+		return doc.has_permission("read")
+	capabilities = capabilities_for_roles(
+		roles,
+		administrator=actor == "Administrator",
+	)
+	return "lifecycle.transition" in capabilities and doc.has_permission("read")
+
+
 def set_student_stage(
 	student: str,
 	target_stage: str,
@@ -138,7 +179,7 @@ def set_student_stage(
 	doc = _load_student(student)
 	_lock_student(doc.name)
 	doc = _load_student(doc.name)
-	if not _internal_service and not doc.has_permission("write"):
+	if not _internal_service and not _has_stage_transition_permission(doc):
 		_fail("FORBIDDEN", "You cannot change this Student stage.")
 
 	raw_current_stage = doc.get("student_stage")

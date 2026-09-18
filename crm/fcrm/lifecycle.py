@@ -10,10 +10,10 @@ import frappe
 from crm.fcrm.permissions import FULL_VISIBILITY_ROLES
 from crm.fcrm.student_stage import lifecycle_label_for_stage, stage_from_enrollment_status
 
-# Forward order of the main track. "Lost" is a separate branch reachable
-# from any stage and is deliberately excluded from this ordering — entering
-# Lost is not a "backward move", only *leaving* Lost (reopening) is gated.
-LIFECYCLE_ORDER = ["Lead", "MQL", "Applicant", "Enrolled"]
+# Forward order of the historical lifecycle labels. "Lost" is a separate
+# branch and is deliberately excluded from this ordering; the authoritative
+# Student transition service controls which canonical stage may enter it.
+LIFECYCLE_ORDER = ["Lead", "MQL", "Enrolled", "Applicant", "Registration", "New Enter"]
 LOST_STAGE = "Lost"
 
 # Roles allowed to move a lead backward in its lifecycle or reopen it from
