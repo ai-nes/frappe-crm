@@ -108,10 +108,10 @@ class TestCampaignApi(FrappeTestCase):
 		campus.insert(ignore_permissions=True)
 		return campus.name
 
-	def _create_campaign(self, **values):
+	def _create_campaign(self, campus=None, **values):
 		return create_campaign(
 			title=f"_Test Campaign API {self._suffix} {uuid.uuid4().hex[:6]}",
-			campus=self.campus,
+			campus=campus or self.campus,
 			**values,
 		)
 
@@ -166,10 +166,12 @@ class TestCampaignApi(FrappeTestCase):
 
 		self.assertEqual(get_campaign(name=created["name"])["stable_code"], created["stable_code"])
 
-	def test_lead_sale_can_create_and_update_campaign(self):
+	def test_lead_sale_can_delete_campaign(self):
+		lead_sale_campus = frappe.db.get_value("CRM Staff", {"user": "leadsale@gmail.com"}, "campus")
+		created = self._create_campaign(campus=lead_sale_campus)
 		frappe.set_user("leadsale@gmail.com")
 		try:
-			self.assertTrue(frappe.has_permission("CRM Campaign", "create"))
-			self.assertTrue(frappe.has_permission("CRM Campaign", "write"))
+			self.assertTrue(frappe.has_permission("CRM Campaign", "delete"))
+			self.assertEqual(delete_campaign(created["name"]), {"deleted": created["name"]})
 		finally:
 			frappe.set_user(self._original_user)

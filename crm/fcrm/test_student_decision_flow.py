@@ -7,21 +7,32 @@ from frappe.tests.utils import FrappeTestCase
 
 from crm.fcrm.student_decision import (
 	ACTION_TRANSITIONS,
-	OUTCOMES,
 	StudentDecisionError,
+	_can_assign_global_executor,
+	_canonical_decision_student,
 	_required,
 	_valid_executor,
 )
+from crm.services.action_outcome import OUTCOME_CODES
 
 
 class TestStudentDecisionFlow(FrappeTestCase):
+	def test_team_oversee_scope_can_assign_executor_across_student_teams(self):
+		scope = {"capabilities": ["team.oversee"]}
+		self.assertTrue(_can_assign_global_executor("lead.sale@example.test", scope))
+
+	def test_decision_resolves_display_student_id_before_link_writes(self):
+		doc = frappe._dict(doctype="CRM Recommendation", target_type="CRM Student", target_id="HS-2026-HCM-002284")
+		with patch("crm.fcrm.student_decision.canonical_student", return_value="CRMC-2026-002284"):
+			self.assertEqual(_canonical_decision_student(doc), "CRMC-2026-002284")
+
 	def test_sales_action_state_machine_has_no_direct_completion_from_planned(self):
 		self.assertNotIn("completed", ACTION_TRANSITIONS["planned"])
 		self.assertIn("completed", ACTION_TRANSITIONS["in_progress"])
 
 	def test_completion_outcome_vocabulary_is_explicit(self):
-		self.assertIn("APPLICATION_COMPLETED", OUTCOMES)
-		self.assertNotIn("arbitrary free text", OUTCOMES)
+		self.assertIn("APPLICATION_COMPLETED", OUTCOME_CODES)
+		self.assertNotIn("arbitrary free text", OUTCOME_CODES)
 
 	def test_reject_and_defer_reason_contract_rejects_blank_values(self):
 		with self.assertRaises(StudentDecisionError) as error:
