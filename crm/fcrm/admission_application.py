@@ -196,9 +196,11 @@ def _offering_effective_dates(admission_year: str) -> tuple[str, str]:
 def _create_active_offering(*, admission_year: str, admission_method: str, campus: str, major: str) -> str:
 	"""Create the default active offering when the catalog has no matching row."""
 	effective_from, effective_until = _offering_effective_dates(admission_year)
+	policy_version = "admissions-policy-v1"
 	doc = frappe.get_doc(
 		{
 			"doctype": "CRM Admission Offering",
+			"offering_key": "|".join((admission_year, campus, major, admission_method, policy_version)),
 			"admission_year": admission_year,
 			"campus": campus,
 			"major": major,
@@ -207,6 +209,7 @@ def _create_active_offering(*, admission_year: str, admission_method: str, campu
 			"effective_from": effective_from,
 			"effective_until": effective_until,
 			"status": "Active",
+			"policy_version": policy_version,
 			"source_reference": (
 				f"application:auto-offering:{admission_year}:{admission_method}:{campus}:{major}"
 			),

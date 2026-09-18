@@ -13,7 +13,7 @@ _DISPLAY_CODE_RE = re.compile(
 	re.IGNORECASE,
 )
 _LEGACY_CODE_RE = re.compile(
-	r"^(?:ENR|LD)-(?P<year>\d{4})-(?P<sequence>\d{1,6})$",
+	r"^(?:CRMC|ENR|LD)-(?P<year>\d{4})-(?P<sequence>\d{1,6})$",
 	re.IGNORECASE,
 )
 
@@ -141,6 +141,34 @@ def lead_for_reference(value: str | None) -> str | None:
 	return None
 
 
+def _student_for_display_reference(value: str | None) -> str | None:
+	"""Resolve a public HS code to one canonical CRM Student row.
+
+	Older converted Students can retain an ``ENR-``/``CRMC-`` technical name
+	while the dashboard exposes the derived ``HS-YYYY-HCM-NNNNNN`` code. The
+	Lead compatibility lookup cannot resolve rows whose Lead link is missing or
+	stale, so inspect the canonical Student table as a second, unambiguous path.
+	"""
+	normalized = hs_code_for_reference(value)
+	if not normalized:
+		return None
+	year = normalized.split("-", 2)[1]
+	rows = frappe.get_all(
+		"CRM Student",
+		filters={"admission_year": year},
+		fields=["name", "lead_code", "admission_year"],
+		limit_page_length=0,
+		ignore_permissions=True,
+	)
+	matches = set()
+	for row in rows:
+		for candidate in (row.get("name"), row.get("lead_code")):
+			if hs_code_for_reference(candidate, row.get("admission_year")) == normalized:
+				matches.add(row.get("name"))
+				break
+	return next(iter(matches)) if len(matches) == 1 else None
+
+
 def sync_canonical_student(doc, method=None):
 	"""Populate the canonical Student link while retaining legacy Lead aliases."""
 	has_canonical_field = doc.meta.has_field(CANONICAL_FIELD)
@@ -179,6 +207,9 @@ def canonical_student(value: str | None) -> str | None:
 		return None
 	if frappe.db.exists("CRM Student", value):
 		return value
+	student = _student_for_display_reference(value)
+	if student:
+		return student
 	lead = lead_for_reference(value)
 	return student_for_lead(lead)
 

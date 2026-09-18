@@ -17,6 +17,7 @@ from frappe.utils import now_datetime
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.record_retention import technical_retention_until
 from crm.fcrm.role_policy import capabilities_for_roles
+from crm.fcrm.student_reference import canonical_student
 from crm.fcrm.utils.effective import is_effective
 from crm.services.action_outcome import allowed_outcomes
 
@@ -143,13 +144,22 @@ def _validate_decision_executor(actor, scope, student, assignee_staff):
 	_valid_executor(student, assignee_staff, allow_global=can_assign_global)
 
 
+def _canonical_decision_student(doc):
+	"""Resolve a decision target before it is written into Student Links."""
+	student_reference = doc.get("student")
+	if doc.doctype == RECOMMENDATION:
+		student_reference = doc.target_id if doc.target_type == "CRM Student" else None
+	student = canonical_student(student_reference)
+	if not student:
+		_fail("OUT_OF_SCOPE", "The recommendation is outside your current scope.")
+	return student
+
+
 def _can_decide(actor, doc):
 	scope = _scope(actor)
 	if actor != "Administrator" and not ({"student.execute", "recommendation.decide"} & set(scope["capabilities"])):
 		_fail("FORBIDDEN", "You are not permitted to decide recommendations.")
-	student_name = doc.get("student")
-	if doc.doctype == RECOMMENDATION:
-		student_name = doc.target_id if doc.target_type == "CRM Student" else None
+	student_name = _canonical_decision_student(doc)
 	try:
 		student = frappe.get_doc("CRM Student", student_name)
 	except Exception:
@@ -386,7 +396,7 @@ def _normalize_decision_delta(operation: str, delta: Any) -> dict:
 	return {k: v for k, v in delta.items() if v not in (None, "")}
 
 
-def _supersede_evaluation_siblings(doc, *, actor, scope, receipt, correlation_id) -> None:
+def _supersede_evaluation_siblings(doc, *, student, actor, scope, receipt, correlation_id) -> None:
 	"""Dismiss every other still-pending recommendation from the same NBA
 	Evaluation once one of them is accepted -- a sale works exactly one of
 	the Top-N proposals at a time, never several in parallel.
@@ -417,7 +427,7 @@ def _supersede_evaluation_siblings(doc, *, actor, scope, receipt, correlation_id
 		)
 		_event(
 			"recommendation.dismissed_by_selection",
-			doc.target_id,
+			student,
 			sibling_name,
 			None,
 			actor,
@@ -477,9 +487,7 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 	_lock(RECOMMENDATION, name)
 	doc = frappe.get_doc(RECOMMENDATION, name)
 	scope = _can_decide(actor, doc)
-	student_name = doc.target_id if doc.target_type == "CRM Student" else None
-	if not student_name:
-		_fail("INVALID_INPUT", "Only CRM Student recommendations can be decided.")
+	student_name = _canonical_decision_student(doc)
 	_lock("CRM Student", student_name)
 	expires_at = frappe.utils.get_datetime(doc.expires_at) if doc.expires_at else None
 	if expires_at and expires_at <= now_datetime():
@@ -639,7 +647,14 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 	frappe.db.set_value(RECOMMENDATION, doc.name, projection, update_modified=False)
 	_outbox("recommendation.decided.v1", event)
 	if accepting:
-		_supersede_evaluation_siblings(doc, actor=actor, scope=scope, receipt=receipt, correlation_id=correlation_id)
+		_supersede_evaluation_siblings(
+			doc,
+			student=student_name,
+			actor=actor,
+			scope=scope,
+			receipt=receipt,
+			correlation_id=correlation_id,
+		)
 	result = {"status": status, "operation": operation, "recommendation": doc.name, "action": action, "revision": 0, "event": event.name, "receipt": receipt.name}
 	_finish(receipt, result)
 	return result
@@ -941,7 +956,7 @@ def create_manual_action(
 	if not assignee_staff and actor != "Administrator":
 		_fail("INVALID_INPUT", "A mapped Sales executor is required.")
 	if assignee_staff:
-		_valid_executor(student, assignee_staff, allow_global=actor == "Administrator")
+		_valid_executor(student, assignee_staff, allow_global=_can_assign_global_executor(actor, scope))
 	payload = {
 		"student": student,
 		"contact": contact,
@@ -1073,7 +1088,7 @@ def update_manual_action(
 			{"team.oversee", "admissions.oversee"} & set(scope["capabilities"])
 		):
 			_fail("FORBIDDEN", "You may only assign yourself.")
-		_valid_executor(action.student, assignee_staff, allow_global=actor == "Administrator")
+		_valid_executor(action.student, assignee_staff, allow_global=_can_assign_global_executor(actor, scope))
 
 	receipt = _new_receipt(
 		"action_decision", actor, action.student, key, fingerprint, scope, correlation_id
@@ -1316,7 +1331,7 @@ def reassign_action(name: str, expected_revision: Any, assignee_staff: str, idem
 		_fail("STALE_REVISION", "Action changed; reload before retrying.")
 	if action.get("execution_status") not in {"planned", "in_progress"}:
 		_fail("INVALID_STATE", "Only active Actions may be reassigned.")
-	_valid_executor(action.student, assignee_staff, allow_global=actor == "Administrator")
+	_valid_executor(action.student, assignee_staff, allow_global=_can_assign_global_executor(actor, scope))
 	payload = {"name": name, "expected_revision": expected_revision, "assignee_staff": assignee_staff, "reason": reason}
 	fingerprint = _fingerprint(payload); command_key = _command_key("action_reassign", actor, key)
 	if replay := _replay(command_key, fingerprint): return replay
