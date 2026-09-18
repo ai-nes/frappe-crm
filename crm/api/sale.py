@@ -27,64 +27,30 @@ PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 TERMINAL_TASK_STATUSES = {"Done", "Canceled"}
 TERMINAL_ACTION_STATES = {"completed", "cancelled", "rejected", "superseded"}
 
-STAGE_ORDER = (
-	"assigned",
-	"contacted",
-	"consulted",
-	"interested",
-	"documents",
-	"confirmed",
-	"admitted",
-)
-STAGE_LABELS = {
-	"assigned": "Đang phụ trách",
-	"contacted": "Đã liên hệ",
-	"consulted": "Đã tư vấn",
-	"interested": "Có nhu cầu",
-	"documents": "Đang làm hồ sơ",
-	"confirmed": "Đã xác nhận",
-	"admitted": "Nhập học",
+STUDENT_STAGE_ORDER = ("New", "Attempting", "Connected", "Qualified", "Disqualified")
+STUDENT_STAGE_LABELS = {
+	"New": "Mới",
+	"Attempting": "Đang liên hệ",
+	"Connected": "Đã kết nối",
+	"Qualified": "Đủ điều kiện",
+	"Disqualified": "Không đủ điều kiện",
 }
-STUDENT_STATUS_ORDER = ("new", "consulting", "waiting", "documents", "admission")
-STUDENT_STATUS_LABELS = {
-	"new": "Mới phân công",
-	"consulting": "Đang tư vấn",
-	"waiting": "Chờ phản hồi",
-	"documents": "Đang làm hồ sơ",
-	"admission": "Chờ nhập học",
-}
-ATTENTION_ORDER = ("at-risk", "high-intent", "blocked")
-OPERATION_ORDER = ("overdue-tasks", "missing-documents")
+RECENT_RECORD_LIMIT = 2
 
 STUDENT_FIELDS = [
 	"name",
 	"full_name",
+	"lead_code",
+	"source_lead",
 	"student_stage",
 	"admission_year",
-	"interest_level",
-	"fit_level",
-	"enrollment_date",
+	"high_school",
+	"major",
+	"source",
+	"creation",
 	"modified",
-]
-CONTACT_FIELDS = [
-	"name",
-	"student",
-	"student_stage",
-	"readiness_level",
-	"quality_bucket",
-	"is_verified_lead",
 	"first_contact_time",
 	"next_follow_up",
-]
-APPLICATION_FIELDS = [
-	"name",
-	"student",
-	"status",
-	"document_total",
-	"document_completed",
-	"submitted_at",
-	"enrolled_at",
-	"modified",
 ]
 INTERACTION_FIELDS = [
 	"name",
@@ -101,6 +67,7 @@ ACTION_FIELDS = [
 	"action",
 	"action_type",
 	"objective",
+	"description",
 	"priority",
 	"state",
 	"due_at",
@@ -109,6 +76,23 @@ ACTION_FIELDS = [
 	"modified",
 	"completed_at",
 ]
+LEAD_FIELDS = [
+	"name",
+	"lead_code",
+	"processing_status",
+	"resolution",
+	"student_name",
+	"phone",
+	"high_school",
+	"source",
+	"owner_staff",
+	"admission_year",
+	"converted_student",
+	"creation",
+	"modified",
+]
+
+
 @frappe.whitelist(methods=["GET"])
 def get_sale_overview(
 	admissionYear: str | int | None = None,
@@ -130,23 +114,24 @@ def get_sale_overview(
 	if not staff:
 		warnings.append("scope.sale_staff_not_found")
 
-	students = _load_students(staff, admission_year, warnings)
-	student_ids = [str(row.get("name")) for row in students if row.get("name")]
+	all_students = _load_students(staff, admission_year, warnings, include_closed=True)
+	students = [row for row in all_students if row.get("student_stage") not in {"Connected", "Disqualified"}]
 	student_names = {
 		str(row.get("name")): str(row.get("student_name") or "Hồ sơ chưa đặt tên")
-		for row in students
+		for row in all_students
 		if row.get("name")
 	}
-	contacts = _load_contacts(student_ids, warnings)
-	applications = _load_applications(student_ids, admission_year, warnings)
+	student_ids = [str(row.get("name")) for row in all_students if row.get("name")]
 	interactions = _load_interactions(student_ids, warnings)
-	tasks = _load_tasks(student_ids, warnings)
+	active_student_ids = {str(row.get("name")) for row in students if row.get("name")}
+	tasks = _load_tasks(sorted(active_student_ids), warnings)
+	leads = _load_leads(staff, admission_year, warnings)
 	for task in tasks:
 		task["student_name"] = student_names.get(task.get("student_id"), "Hồ sơ chưa đặt tên")
 
-	records = _build_student_records(students, contacts, applications, interactions)
+	records = _build_student_records(students, interactions)
+	all_records = _build_student_records(all_students, interactions)
 	task_snapshot = _build_tasks(tasks, report_date, as_of, report_timezone, priority_limit)
-	missing_document_ids = _missing_document_ids(applications)
 	status = "available"
 	if warnings:
 		status = "unavailable" if _has_warning(warnings, "students") else "partial"
@@ -161,15 +146,13 @@ def get_sale_overview(
 			"status": status,
 			"warnings": warnings,
 		},
-		"kpis": _build_kpis(records),
 		"tasks": task_snapshot,
-		"pipeline": _build_pipeline(records),
-		"attention": _build_attention(
-			records, interactions, missing_document_ids, tasks, as_of, report_timezone
-		),
-		"conversionTrend": _build_conversion_trend(records, report_date, trend_range, report_timezone),
-		"studentStatus": _build_student_status(records),
-		"operations": _build_operations(task_snapshot, missing_document_ids),
+		"conversionTrend": _build_conversion_trend(all_records, report_date, trend_range, report_timezone),
+		"studentStages": _build_student_stages(all_students),
+		"studentActions": _build_student_actions(all_students, all_records, tasks, as_of, report_timezone),
+		"recentLeads": _build_recent_leads(leads),
+		"recentStudents": _build_recent_students(all_students, all_records, tasks, as_of, report_timezone),
+		"health": _build_health(records, task_snapshot, as_of, report_timezone),
 	}
 
 
@@ -308,10 +291,19 @@ def _viewer(user: str) -> dict[str, str]:
 
 
 def _load_students(
-	staff: dict[str, Any] | None, admission_year: str, warnings: list[str]
+	staff: dict[str, Any] | None,
+	admission_year: str,
+	warnings: list[str],
+	include_closed: bool = False,
 ) -> list[dict[str, Any]]:
 	if not staff or not staff.get("name"):
 		return []
+	filters: dict[str, Any] = {
+		"owner_staff": staff["name"],
+		"admission_year": admission_year,
+	}
+	if not include_closed:
+		filters["student_stage"] = ["not in", ["Connected", "Disqualified"]]
 	return [
 		{
 			**dict(row),
@@ -323,13 +315,9 @@ def _load_students(
 		}
 		for row in _get_list(
 			"CRM Student",
-			filters={
-				"owner_staff": staff["name"],
-				"admission_year": admission_year,
-				"student_stage": ["not in", ["Connected", "Disqualified"]],
-			},
+			filters=filters,
 			fields=STUDENT_FIELDS,
-			order_by="name asc",
+			order_by="creation desc, name desc",
 			limit_page_length=0,
 			warnings=warnings,
 			warning_key="students",
@@ -337,38 +325,25 @@ def _load_students(
 	]
 
 
-def _load_contacts(student_ids: list[str], warnings: list[str]) -> list[dict[str, Any]]:
-	if not student_ids:
-		return []
-	return [
-		dict(row)
-		for row in _get_list(
-			"CRM Student",
-			filters={"student": ["in", student_ids]},
-			fields=CONTACT_FIELDS,
-			order_by="name asc",
-			limit_page_length=0,
-			warnings=warnings,
-			warning_key="contacts",
-		)
-	]
-
-
-def _load_applications(
-	student_ids: list[str], admission_year: str, warnings: list[str]
+def _load_leads(
+	staff: dict[str, Any] | None, admission_year: str, warnings: list[str]
 ) -> list[dict[str, Any]]:
-	if not student_ids:
+	if not staff or not staff.get("name"):
 		return []
 	return [
 		dict(row)
 		for row in _get_list(
-			"CRM Admission Application",
-			filters={"student": ["in", student_ids], "admission_year": admission_year},
-			fields=APPLICATION_FIELDS,
-			order_by="modified desc, name desc",
-			limit_page_length=0,
+			"CRM Lead",
+			filters={
+				"owner_staff": staff["name"],
+				"admission_year": admission_year,
+				"processing_status": ["!=", "CLOSED"],
+			},
+			fields=LEAD_FIELDS,
+			order_by="creation desc, name desc",
+			limit_page_length=RECENT_RECORD_LIMIT,
 			warnings=warnings,
-			warning_key="applications",
+			warning_key="leads",
 		)
 	]
 
@@ -439,19 +414,9 @@ def _get_list(
 
 def _build_student_records(
 	students: list[dict[str, Any]],
-	contacts: list[dict[str, Any]],
-	applications: list[dict[str, Any]],
 	interactions: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-	contacts_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
-	applications_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
 	interactions_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
-	for row in contacts:
-		if row.get("student"):
-			contacts_by_student[str(row["student"])].append(row)
-	for row in applications:
-		if row.get("student"):
-			applications_by_student[str(row["student"])].append(row)
 	for row in interactions:
 		if row.get("student"):
 			interactions_by_student[str(row["student"])].append(row)
@@ -461,97 +426,227 @@ def _build_student_records(
 		student_id = str(student.get("name") or "")
 		if not student_id:
 			continue
-		student_contacts = contacts_by_student.get(student_id, [])
-		student_applications = applications_by_student.get(student_id, [])
 		student_interactions = interactions_by_student.get(student_id, [])
-		stages = {"assigned"}
-		if _has_contact_attempt(student_contacts, student_interactions):
-			stages.add("contacted")
-		if _is_consulted(student, student_contacts, student_applications, student_interactions):
-			stages.add("consulted")
-		if _is_interested(student, student_contacts, student_interactions):
-			stages.add("interested")
-		if _has_documents_stage(student, student_applications):
-			stages.add("documents")
-		if _is_confirmed(student, student_applications):
-			stages.add("confirmed")
-		if _is_admitted(student, student_applications):
-			stages.add("confirmed")
-			stages.add("admitted")
 
 		consulted_at = _first_datetime(
 			row.get("interaction_datetime") for row in student_interactions if _is_consulted_interaction(row)
 		)
-		admitted_at = _first_datetime(
-			[row.get("enrolled_at") for row in student_applications] + [student.get("enrollment_date")]
-		)
+		latest_interaction = _latest_interaction(student_interactions)
+		last_activity_at = _latest_activity_at(student, latest_interaction)
 		records.append(
 			{
 				"id": student_id,
 				"name": str(student.get("student_name") or "Hồ sơ chưa đặt tên"),
-				"stages": stages,
-				"status": _student_status(stages),
+				"student_stage": str(student.get("student_stage") or "New"),
 				"consulted_at": consulted_at,
-				"admitted_at": admitted_at,
-				"last_interaction": _latest_interaction(student_interactions),
-				"missing_documents": _student_has_missing_documents(student_applications),
-				"qualification": "interested" in stages,
+				"last_interaction": latest_interaction,
+				"created_at": _coerce_datetime(student.get("creation")),
+				"last_activity_at": last_activity_at,
+				"has_activity": bool(latest_interaction or student.get("first_contact_time")),
 			}
 		)
 	return records
 
 
-def _build_kpis(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-	return [
-		{"id": "assigned", "value": len(records)},
-		{"id": "consulting", "value": _count_status(records, "consulting")},
-		{"id": "qualified", "value": sum(bool(row.get("qualification")) for row in records)},
-		{"id": "documents", "value": _count_status(records, "documents")},
-		{"id": "admission", "value": _count_status(records, "admission")},
-	]
+def _build_student_stages(students: list[dict[str, Any]]) -> dict[str, Any]:
+	counts = {
+		stage: sum(str(row.get("student_stage") or "") == stage for row in students)
+		for stage in STUDENT_STAGE_ORDER
+	}
+	total = len(students)
+	return {
+		"total": total,
+		"items": [
+			{
+				"stage": stage,
+				"label": STUDENT_STAGE_LABELS[stage],
+				"count": counts[stage],
+				"share": round(counts[stage] / total * 100, 1) if total else None,
+			}
+			for stage in STUDENT_STAGE_ORDER
+		],
+	}
 
 
-def _build_pipeline(records: list[dict[str, Any]]) -> dict[str, Any]:
-	previous = len(records)
-	stages = []
-	for stage_id in STAGE_ORDER:
-		value = min(previous, sum(stage_id in row["stages"] for row in records))
-		previous = value
-		stages.append({"id": stage_id, "label": STAGE_LABELS[stage_id], "count": max(0, value)})
-	return {"stages": stages}
-
-
-def _build_attention(
+def _build_student_actions(
+	students: list[dict[str, Any]],
 	records: list[dict[str, Any]],
-	interactions: list[dict[str, Any]],
-	missing_document_ids: set[str],
 	tasks: list[dict[str, Any]],
 	as_of: datetime,
 	timezone: ZoneInfo,
+) -> list[dict[str, Any]]:
+	records_by_id = {record["id"]: record for record in records}
+	tasks_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	for task in tasks:
+		if not _task_is_terminal(task):
+			tasks_by_student[task.get("student_id", "")].append(task)
+
+	actions = []
+	for student in students:
+		student_id = str(student.get("name") or "")
+		if not student_id:
+			continue
+		record = records_by_id.get(student_id)
+		if not record:
+			continue
+		task = _first_task(tasks_by_student.get(student_id, []), as_of, timezone)
+		student_action = _student_action(student, record, task)
+		if student_action.get("nba"):
+			actions.append(student_action)
+	return actions
+
+
+def _build_recent_leads(leads: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	return [
+		{
+			"id": str(row.get("name") or ""),
+			"leadCode": str(row.get("lead_code") or row.get("name") or ""),
+			"name": str(row.get("student_name") or "Lead chưa đặt tên"),
+			"phone": str(row.get("phone")) if row.get("phone") else None,
+			"school": str(row.get("high_school")) if row.get("high_school") else None,
+			"processingStatus": str(row.get("processing_status") or "NEW").upper(),
+			"resolution": str(row.get("resolution") or "PENDING").upper(),
+			"source": str(row.get("source") or "Chưa cập nhật"),
+			"createdAt": _iso_datetime(row.get("creation") or row.get("modified")),
+			"contactNoAnswer": 0,
+			"contactSuccess": 0,
+			"nextAction": "",
+		}
+		for row in leads
+		if row.get("name")
+	]
+
+
+def _build_recent_students(
+	students: list[dict[str, Any]],
+	records: list[dict[str, Any]],
+	tasks: list[dict[str, Any]],
+	as_of: datetime,
+	timezone: ZoneInfo,
+) -> list[dict[str, Any]]:
+	records_by_id = {record["id"]: record for record in records}
+	tasks_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	for task in tasks:
+		if not _task_is_terminal(task):
+			tasks_by_student[task.get("student_id", "")].append(task)
+
+	recent = []
+	for student in students[:RECENT_RECORD_LIMIT]:
+		student_id = str(student.get("name") or "")
+		record = records_by_id.get(student_id)
+		if not student_id or not record:
+			continue
+		task = _first_task(tasks_by_student.get(student_id, []), as_of, timezone)
+		recent.append(
+			{
+				"student": _student_action(student, record, task),
+				"school": str(student.get("high_school") or ""),
+				"major": str(student.get("major") or ""),
+				"source": str(student.get("source") or ""),
+				"latestActivity": _iso_datetime(record.get("last_activity_at")),
+			}
+		)
+	return recent
+
+
+def _build_health(
+	records: list[dict[str, Any]],
+	task_snapshot: dict[str, Any],
+	as_of: datetime,
+	timezone: ZoneInfo,
 ) -> dict[str, Any]:
-	interactions_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
-	for row in interactions:
-		if row.get("student"):
-			interactions_by_student[str(row["student"])].append(row)
-	atrisk = 0
-	high_intent = 0
-	blocked_ids = set(missing_document_ids)
+	aging = {"0-2d": 0, "3-5d": 0, "6-10d": 0, "10d-plus": 0}
 	for record in records:
-		student_interactions = interactions_by_student.get(record["id"], [])
-		latest = _latest_interaction(student_interactions)
-		if latest and _outcome_id(latest.get("outcome")) == "missed":
-			atrisk += 1
-		if record.get("qualification") and not (set(record["stages"]) & {"confirmed", "admitted"}):
-			high_intent += 1
-		if _has_open_task_without_due(tasks, record["id"], as_of, timezone):
-			blocked_ids.add(record["id"])
+		bucket = _age_bucket(record.get("last_activity_at"), as_of, timezone)
+		if bucket:
+			aging[bucket] += 1
 	return {
-		"items": [
-			{"id": "at-risk", "count": max(0, atrisk)},
-			{"id": "high-intent", "count": max(0, high_intent)},
-			{"id": "blocked", "count": sum(record["id"] in blocked_ids for record in records)},
-		]
+		"followUpDue": int(task_snapshot["summary"]["today"]["pending"]),
+		"overdue": int(task_snapshot["summary"]["overdue"]["count"]),
+		"noActivity": sum(not record.get("has_activity") for record in records),
+		"agingBuckets": [
+			{"id": "0-2d", "label": "0–2 ngày", "count": aging["0-2d"]},
+			{"id": "3-5d", "label": "3–5 ngày", "count": aging["3-5d"]},
+			{"id": "6-10d", "label": "6–10 ngày", "count": aging["6-10d"]},
+			{"id": "10d-plus", "label": "Trên 10 ngày", "count": aging["10d-plus"]},
+		],
 	}
+
+
+def _student_action(
+	student: dict[str, Any], record: dict[str, Any], task: dict[str, Any] | None
+) -> dict[str, Any]:
+	result: dict[str, Any] = {
+		"studentId": record["id"],
+		"studentCode": str(student.get("lead_code") or student.get("name") or record["id"]),
+		"studentName": record["name"],
+		"studentStage": record.get("student_stage") or "New",
+		"stageAgeDays": None,
+		"lastActivityAt": _iso_datetime(record.get("last_activity_at")) or None,
+		"attentionReason": None,
+	}
+	if task:
+		result["nba"] = {
+			"actionCode": task["id"],
+			"title": task["title"],
+			"priority": task["priority"],
+			"channel": task["task_type"].upper(),
+			"reason": None,
+			"whyNow": None,
+			"salesNextStep": None,
+			"scheduledAt": _iso_datetime(task.get("due_at")) or None,
+		}
+	return result
+
+
+def _first_task(tasks: list[dict[str, Any]], as_of: datetime, timezone: ZoneInfo) -> dict[str, Any] | None:
+	return min(
+		tasks,
+		key=lambda task: (
+			0
+			if task.get("due_at") and _task_due_at(task, timezone) and _task_due_at(task, timezone) < as_of
+			else 1,
+			_task_due_at(task, timezone) or datetime.max.replace(tzinfo=as_of.tzinfo),
+			PRIORITY_ORDER.get(task.get("priority", "medium"), 1),
+			task.get("id", ""),
+		),
+		default=None,
+	)
+
+
+def _task_due_at(task: dict[str, Any], timezone: ZoneInfo) -> datetime | None:
+	return _as_timezone(_coerce_datetime(task.get("due_at")), timezone)
+
+
+def _latest_activity_at(
+	student: dict[str, Any], latest_interaction: dict[str, Any] | None
+) -> datetime | None:
+	values = [
+		latest_interaction.get("interaction_datetime") if latest_interaction else None,
+		student.get("first_contact_time"),
+		student.get("creation"),
+	]
+	parsed = [_coerce_datetime(value) for value in values]
+	return max((value for value in parsed if value), key=_datetime_sort_key, default=None)
+
+
+def _age_bucket(value: Any, as_of: datetime, timezone: ZoneInfo) -> str | None:
+	activity = _as_timezone(_coerce_datetime(value), timezone)
+	if not activity:
+		return None
+	days = max(0, (as_of.date() - activity.date()).days)
+	if days <= 2:
+		return "0-2d"
+	if days <= 5:
+		return "3-5d"
+	if days <= 10:
+		return "6-10d"
+	return "10d-plus"
+
+
+def _iso_datetime(value: Any) -> str:
+	parsed = _coerce_datetime(value)
+	return parsed.isoformat(timespec="seconds") if parsed else ""
 
 
 def _build_conversion_trend(
@@ -576,39 +671,18 @@ def _trend_range(
 		start = from_date + timedelta(days=index * 7)
 		end = min(start + timedelta(days=6), report_date)
 		consulted = sum(_date_inclusive(row.get("consulted_at"), start, end, timezone) for row in records)
-		admitted = sum(_date_inclusive(row.get("admitted_at"), start, end, timezone) for row in records)
 		points.append(
 			{
 				"label": f"Tuần {index + 1}" if weeks == 4 else f"T{index + 1}",
 				"periodStart": start.isoformat(),
 				"periodEnd": end.isoformat(),
 				"consulted": consulted,
-				"admitted": admitted,
 			}
 		)
 	return {
 		"from": from_date.isoformat(),
 		"to": report_date.isoformat(),
 		"points": points,
-	}
-
-
-def _build_student_status(records: list[dict[str, Any]]) -> dict[str, Any]:
-	counts = {status: 0 for status in STUDENT_STATUS_ORDER}
-	for record in records:
-		counts[record["status"]] += 1
-	total = len(records)
-	return {
-		"total": total,
-		"items": [
-			{
-				"id": status,
-				"label": STUDENT_STATUS_LABELS[status],
-				"count": counts[status],
-				"share": round(counts[status] / total * 100, 1) if total else None,
-			}
-			for status in STUDENT_STATUS_ORDER
-		],
 	}
 
 
@@ -662,18 +736,6 @@ def _build_tasks(
 	}
 
 
-def _build_operations(task_snapshot: dict[str, Any], missing_document_ids: set[str]) -> dict[str, Any]:
-	overdue = int(task_snapshot["summary"]["overdue"]["count"])
-	missing = len(missing_document_ids)
-	return {
-		"total": overdue + missing,
-		"items": [
-			{"id": "overdue-tasks", "count": overdue},
-			{"id": "missing-documents", "count": missing},
-		],
-	}
-
-
 def _normalize_action_task(row: dict[str, Any]) -> dict[str, Any]:
 	state = str(row.get("state") or "pending").strip().lower()
 	status = (
@@ -685,12 +747,14 @@ def _normalize_action_task(row: dict[str, Any]) -> dict[str, Any]:
 		if state == "in-progress"
 		else "Todo"
 	)
+	title = str(row.get("objective") or row.get("action") or row.get("action_type") or "Việc cần xử lý")
+	detail = str(row.get("description") or row.get("objective") or row.get("action") or "")
 	action_type = f"{row.get('action_type') or ''} {row.get('action') or ''}"
 	return {
 		"id": f"CRM Action Item:{row.get('name')}",
 		"student_id": str(row.get("student") or ""),
-		"title": str(row.get("objective") or "Việc cần xử lý"),
-		"detail": str(row.get("objective") or ""),
+		"title": title,
+		"detail": detail,
 		"task_type": _task_type(action_type, row.get("objective")),
 		"priority": _priority(row.get("priority")),
 		"status": status,
@@ -742,111 +806,6 @@ def _task_is_canceled(task: dict[str, Any]) -> bool:
 
 def _task_is_done(task: dict[str, Any]) -> bool:
 	return task.get("status") == "Done"
-
-
-def _has_open_task_without_due(
-	tasks: list[dict[str, Any]], student_id: str, as_of: datetime, timezone: ZoneInfo
-) -> bool:
-	return any(
-		task.get("student_id") == student_id
-		and not _task_is_terminal(task)
-		and task.get("due_at") is None
-		and task.get("status") != "Done"
-		for task in tasks
-	)
-
-
-def _has_contact_attempt(contacts: list[dict[str, Any]], interactions: list[dict[str, Any]]) -> bool:
-	return bool(interactions) or any(row.get("first_contact_time") for row in contacts)
-
-
-def _is_consulted(
-	student: dict[str, Any],
-	contacts: list[dict[str, Any]],
-	applications: list[dict[str, Any]],
-	interactions: list[dict[str, Any]],
-) -> bool:
-	if any(_is_consulted_interaction(row) for row in interactions):
-		return True
-	if str(student.get("student_stage") or "") in {"Connected", "Qualified"}:
-		return True
-	if any(str(row.get("student_stage") or "") in {"Connected", "Qualified"} for row in contacts):
-		return True
-	return str(student.get("resolution") or "") == "CREATED" or any(
-		_fold(row.get("status")) in {"submitted", "under review", "accepted", "enrolled"}
-		for row in applications
-	)
-
-
-def _is_interested(
-	student: dict[str, Any], contacts: list[dict[str, Any]], interactions: list[dict[str, Any]]
-) -> bool:
-	if any(str(row.get("student_stage") or "") in {"Attempting", "Connected", "Qualified"} for row in contacts):
-		return True
-	if _fold(student.get("interest_level")) in {"high", "medium"}:
-		return True
-	if _fold(student.get("fit_level")) == "high":
-		return True
-	for row in contacts:
-		text = " ".join(
-			_fold(row.get(field))
-			for field in ("readiness_level", "quality_bucket", "student_stage")
-		)
-		if any(
-			token in text
-			for token in ("qualified", "high intent", "hot", "level 2", "level 3", "level 4", "co trien vong")
-		):
-			return True
-	return any(_outcome_id(row.get("outcome")) == "qualified" for row in interactions)
-
-
-def _has_documents_stage(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
-	return any(
-		_fold(row.get("status")) in {"submitted", "under review"} or _student_has_missing_documents([row])
-		for row in applications
-	)
-
-
-def _is_confirmed(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
-	if str(student.get("student_stage") or "") == "Connected":
-		return True
-	return any(_fold(row.get("status")) == "accepted" for row in applications)
-
-
-def _is_admitted(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
-	if str(student.get("student_stage") or "") == "Connected":
-		return True
-	return any(_fold(row.get("status")) == "enrolled" for row in applications)
-
-
-def _student_status(stages: set[str]) -> str:
-	if stages & {"confirmed", "admitted"}:
-		return "admission"
-	if "documents" in stages:
-		return "documents"
-	if stages & {"consulted", "interested"}:
-		return "consulting"
-	if "contacted" in stages:
-		return "waiting"
-	return "new"
-
-
-def _student_has_missing_documents(applications: list[dict[str, Any]]) -> bool:
-	return any(
-		int(row.get("document_total") or 0) > int(row.get("document_completed") or 0) for row in applications
-	)
-
-
-def _missing_document_ids(applications: list[dict[str, Any]]) -> set[str]:
-	return {
-		str(row.get("student"))
-		for row in applications
-		if row.get("student") and _student_has_missing_documents([row])
-	}
-
-
-def _count_status(records: list[dict[str, Any]], status: str) -> int:
-	return sum(row.get("status") == status for row in records)
 
 
 def _is_consulted_interaction(row: dict[str, Any]) -> bool:
