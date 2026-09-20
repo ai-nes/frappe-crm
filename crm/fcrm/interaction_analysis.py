@@ -144,11 +144,109 @@ def _validate_decision_signals(value: Any, *, state: str) -> dict[str, Any]:
 	}
 
 
+def _validate_conversation_summary(value: Any) -> dict[str, Any]:
+	if not isinstance(value, Mapping) or set(value) != {"problem", "resolution", "result"}:
+		frappe.throw("intelligence conversation summary is invalid.", frappe.ValidationError)
+
+	section_shapes = {
+		"problem": {"identified", "description", "evidence_refs"},
+		"resolution": {"status", "description", "evidence_refs"},
+		"result": {"status", "description", "next_action", "evidence_refs"},
+	}
+	status_values = {
+		"resolution": {"resolved", "partially_resolved", "unresolved", "unknown"},
+		"result": {"completed", "follow_up_required", "no_response", "not_interested", "unknown"},
+	}
+	validated: dict[str, Any] = {}
+	for name, allowed in section_shapes.items():
+		section = value.get(name)
+		if not isinstance(section, Mapping) or set(section) != allowed:
+			frappe.throw(f"intelligence conversation summary.{name} is invalid.", frappe.ValidationError)
+		if name == "problem" and not isinstance(section["identified"], bool):
+			frappe.throw("intelligence conversation summary.problem.identified is invalid.", frappe.ValidationError)
+		if name in status_values and section["status"] not in status_values[name]:
+			frappe.throw(f"intelligence conversation summary.{name}.status is invalid.", frappe.ValidationError)
+
+		validated_section = {
+			"description": "",
+			"evidence_refs": [],
+		}
+		if name == "problem":
+			validated_section["identified"] = section["identified"]
+		if name in status_values:
+			validated_section["status"] = section["status"]
+		if name == "result":
+			validated_section["next_action"] = ""
+		for field, maximum in (("description", 500), ("next_action", 240)):
+			if field not in section:
+				continue
+			field_value = section[field]
+			if field_value in (None, ""):
+				validated_section[field] = ""
+			elif isinstance(field_value, str):
+				validated_section[field] = _safe_intelligence_text(
+					field_value,
+					f"intelligence.conversation_summary.{name}.{field}",
+					maximum,
+				)
+			else:
+				frappe.throw(
+					f"intelligence conversation summary.{name}.{field} is invalid.",
+					frappe.ValidationError,
+				)
+
+		refs = section["evidence_refs"]
+		if not isinstance(refs, list) or len(refs) > 4:
+			frappe.throw(
+				f"intelligence conversation summary.{name}.evidence_refs is invalid.",
+				frappe.ValidationError,
+			)
+		validated_refs = []
+		for index, ref in enumerate(refs):
+			if not isinstance(ref, Mapping) or set(ref) != {"doctype", "name", "actor_role"}:
+				frappe.throw(
+					f"intelligence conversation summary.{name}.evidence_refs[{index}] is invalid.",
+					frappe.ValidationError,
+				)
+			if ref.get("doctype") != "CRM Interaction Evidence":
+				frappe.throw(
+					"conversation summary evidence must reference CRM Interaction Evidence.",
+					frappe.PermissionError,
+				)
+			if ref.get("actor_role") not in {"student", "parent"}:
+				frappe.throw(
+					"conversation summary evidence must be student or parent evidence.",
+					frappe.PermissionError,
+				)
+			validated_refs.append(
+				{
+					"doctype": "CRM Interaction Evidence",
+					"name": _bounded_text(
+						ref.get("name"),
+						f"intelligence.conversation_summary.{name}.evidence_refs[{index}].name",
+						140,
+					),
+					"actor_role": ref["actor_role"],
+				}
+			)
+		if len({ref["name"] for ref in validated_refs}) != len(validated_refs):
+			frappe.throw(
+				f"intelligence conversation summary.{name}.evidence_refs must be unique.",
+				frappe.ValidationError,
+			)
+		validated_section["evidence_refs"] = validated_refs
+		validated[name] = validated_section
+	return validated
+
+
 def _validate_intelligence(value: Any, *, state: str) -> dict[str, Any]:
 	value = _parse_json(value, "intelligence")
-	if state not in {"intent_bearing", "no_intent"} or not isinstance(value, Mapping):
-		frappe.throw("intelligence is invalid for this interaction result.", frappe.ValidationError)
-	allowed = {"summary", "sentiment", "entities", "readiness", "concerns"}
+	if state not in {"intent_bearing", "no_intent", "unknown"} or not isinstance(value, Mapping):
+		frappe.throw(
+			"intelligence is only valid on intent_bearing or no_intent results (unknown is also allowed).",
+			frappe.ValidationError,
+		)
+	allowed = {"summary", "sentiment", "entities", "readiness", "concerns", "conversation_summary"}
 	if set(value) - allowed:
 		frappe.throw("intelligence contains unsupported fields.", frappe.ValidationError)
 	summary = value.get("summary", "")
@@ -182,7 +280,44 @@ def _validate_intelligence(value: Any, *, state: str) -> dict[str, Any]:
 		frappe.throw("intelligence concerns are invalid.", frappe.ValidationError)
 	for index, item in enumerate(concerns):
 		_safe_intelligence_text(item, f"intelligence.concerns[{index}]", 64)
+	if "conversation_summary" in value:
+		value = dict(value)
+		value["conversation_summary"] = _validate_conversation_summary(value["conversation_summary"])
 	return dict(value)
+
+
+def _assert_conversation_summary_refs(
+	intelligence: Mapping[str, Any],
+	*,
+	interaction: str,
+	student: str,
+	crm_contact: str | None,
+	source_revision: int,
+) -> None:
+	conversation_summary = intelligence.get("conversation_summary")
+	if not isinstance(conversation_summary, Mapping):
+		return
+	for section in conversation_summary.values():
+		for ref in section.get("evidence_refs", []):
+			evidence = frappe.db.get_value(
+				"CRM Interaction Evidence",
+				ref["name"],
+				["interaction", "student", "crm_contact", "source_revision", "actor_role"],
+				as_dict=True,
+			)
+			if not evidence:
+				frappe.throw("Conversation summary evidence is unavailable.", frappe.ValidationError)
+			if (
+				evidence.interaction != interaction
+				or evidence.student != student
+				or evidence.crm_contact != crm_contact
+				or int(evidence.source_revision or 0) != source_revision
+				or evidence.actor_role != ref["actor_role"]
+			):
+				frappe.throw(
+					"Conversation summary evidence is outside this analysis revision.",
+					frappe.PermissionError,
+				)
 
 
 def claim_interaction_analysis_run(*, run_id: str, stage_generation: int) -> dict:
@@ -486,6 +621,14 @@ def settle_interaction_analysis_result(
 	if not interaction_target:
 		frappe.throw("Interaction analysis target is unavailable.", frappe.DoesNotExistError)
 	student = interaction_target.student
+	if intelligence is not None:
+		_assert_conversation_summary_refs(
+			intelligence,
+			interaction=run.interaction,
+			student=student,
+			crm_contact=interaction_target.crm_contact,
+			source_revision=expected_source_revision,
+		)
 	if parsed_intent:
 		semantic_key, refs = parsed_intent
 		for ref in refs:
