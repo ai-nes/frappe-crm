@@ -23,6 +23,7 @@ ADMISSION_YEAR = "CRM Admission Year"
 ACADEMIC_YEAR_CONFIG = "CRM Academic Year Config"
 ADMISSION_OFFERING = "CRM Admission Offering"
 SCORE_TEMPLATE = "CRM Score Template"
+SCORE_SIGNAL = "CRM Score Signal"
 
 GOVERNED_FIELDS = {
 	"CRM Campus": [
@@ -98,6 +99,15 @@ SCORE_TEMPLATE_FIELDS = [
 	"engagement_weight",
 	"intent_weight",
 	"modified",
+]
+SCORE_SIGNAL_FIELDS = [
+	"name",
+	"signal_key",
+	"label",
+	"category",
+	"signal_type",
+	"is_active",
+	"description",
 ]
 YEAR_FIELDS = ["name", "year_name", "start_date", "end_date", "is_active", "modified"]
 CONFIG_FIELDS = ["name", "admission_year", "config_name", "notes", "modified"]
@@ -390,6 +400,41 @@ def get_score_template(name: str) -> dict[str, Any]:
 	doc = frappe.get_doc(SCORE_TEMPLATE, name)
 	doc.check_permission("read")
 	return doc.as_dict()
+
+
+@frappe.whitelist()
+def list_score_signals(
+	search: str | None = None,
+	active_only: bool | str = False,
+	start: int | str = 0,
+	page_length: int | str = 50,
+) -> dict[str, Any]:
+	"""List score signals for the rule editor's controlled Signal picker."""
+	_require_authentication()
+	start, page_length = parse_pagination(start, page_length)
+	filters = {}
+	if str(active_only).strip().lower() in {"1", "true"}:
+		filters["is_active"] = 1
+
+	search_value = _text(search, optional=True)
+	or_filters = None
+	if search_value:
+		like = f"%{search_value}%"
+		or_filters = [
+			[field, "like", like] for field in ("name", "signal_key", "label", "category", "signal_type")
+		]
+
+	result = paged_list(
+		SCORE_SIGNAL,
+		SCORE_SIGNAL_FIELDS,
+		filters=filters,
+		or_filters=or_filters,
+		start=start,
+		page_length=page_length,
+		order_by="is_active desc, label asc, name asc",
+	)
+	rows = result.pop("rows")
+	return {"signals": [dict(row) for row in rows], **result}
 
 
 def _score_template_values(values: dict[str, Any]) -> dict[str, Any]:
