@@ -67,6 +67,53 @@ def _parse_intent(value: Any) -> tuple[str, list[dict[str, str]]] | None:
 	return semantic_key, parsed
 
 
+def _resolve_dominant_intent(
+	*, interaction: str, student: str, intent_type: str, analysis_result: str
+) -> str:
+	"""Reuse the interaction's dominant intent during a safe analysis replay.
+
+	An interaction is intentionally limited to one Dominant ``CRM Intent``. A
+	re-analysis creates a new immutable analysis result, but it must not try to
+	insert a second dominant intent for the same interaction. Reusing the same
+	semantic intent keeps the new result linked to the current CRM intent while
+	preserving the original intent's unique ``analysis_result`` provenance.
+	"""
+	existing = frappe.db.get_value(
+		"CRM Intent",
+		{"interaction": interaction, "intent_role": "Dominant"},
+		["name", "intent_type"],
+		as_dict=True,
+	)
+	if existing:
+		if existing.intent_type != intent_type:
+			frappe.throw(
+				(
+					"Interaction {0} already has Dominant intent {1} ({2}); "
+					"the replay selected a different intent type ({3})."
+				).format(interaction, existing.name, existing.intent_type, intent_type),
+				frappe.ValidationError,
+			)
+		return existing.name
+
+	previous_flag = getattr(frappe.flags, "interaction_analysis_result_service", False)
+	frappe.flags.interaction_analysis_result_service = True
+	try:
+		intent_doc = frappe.get_doc(
+			{
+				"doctype": "CRM Intent",
+				"interaction": interaction,
+				"student": student,
+				"intent_type": intent_type,
+				"intent_role": "Dominant",
+				"confidence": 100,
+				"analysis_result": analysis_result,
+			}
+		).insert(ignore_permissions=True)
+		return intent_doc.name
+	finally:
+		frappe.flags.interaction_analysis_result_service = previous_flag
+
+
 def _parse_json(value: Any, field: str) -> Any:
 	if isinstance(value, str):
 		try:
@@ -687,22 +734,12 @@ def settle_interaction_analysis_result(
 	).insert(ignore_permissions=True)
 	intent_name = None
 	if term:
-		frappe.flags.interaction_analysis_result_service = True
-		try:
-			intent_doc = frappe.get_doc(
-				{
-					"doctype": "CRM Intent",
-					"interaction": run.interaction,
-					"student": student,
-					"intent_type": term,
-					"intent_role": "Dominant",
-					"confidence": 100,
-					"analysis_result": result.name,
-				}
-			).insert(ignore_permissions=True)
-			intent_name = intent_doc.name
-		finally:
-			frappe.flags.interaction_analysis_result_service = False
+		intent_name = _resolve_dominant_intent(
+			interaction=run.interaction,
+			student=student,
+			intent_type=term,
+			analysis_result=result.name,
+		)
 		frappe.db.set_value(
 			"CRM Interaction Analysis Result", result.name, "intent", intent_name, update_modified=False
 		)
