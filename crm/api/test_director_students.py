@@ -18,7 +18,8 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(
 			director_students._student_order_by("latest_score", "desc"),
 			"modified desc, CASE student_stage WHEN 'New' THEN 1 WHEN 'Attempting' THEN 2 "
-			"WHEN 'Connected' THEN 3 WHEN 'Qualified' THEN 4 WHEN 'Disqualified' THEN 5 "
+			"WHEN 'Connected' THEN 3 WHEN 'Qualified' THEN 4 WHEN 'Registration' THEN 5 "
+			"WHEN 'New Enter' THEN 6 WHEN 'Disqualified' THEN 7 "
 			"ELSE 99 END asc, latest_score desc, name desc",
 		)
 

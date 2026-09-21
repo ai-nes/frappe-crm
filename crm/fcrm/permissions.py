@@ -50,6 +50,7 @@ OPERATIONAL_RECORD_STUDENT_FIELDS = {
 	# the parent Interaction's own Student/Contact scope instead of requiring
 	# a non-null student.
 	"CRM Score History": "student",
+	"CRM NPS Point": "student",
 	"CRM Student Geography Snapshot": "student",
 	"CRM Admission Application": "student",
 	"CRM Student Payment": "student",
@@ -80,6 +81,31 @@ def get_operational_record_permission_query_conditions(user=None, doctype=None):
 		f"(select `tabCRM Student`.`name` from `tabCRM Student` "
 		f"where ({student_condition}))"
 	)
+
+
+def get_nps_point_permission_query_conditions(user=None, doctype=None):
+	"""Apply both Student scope and Sale ownership to NPS point lists."""
+	condition = get_operational_record_permission_query_conditions(user=user, doctype="CRM NPS Point")
+	roles = set(frappe.get_roles(user))
+	if user == "Administrator" or roles & {
+		"System Manager",
+		"CRM Manager",
+		"Lead Sale",
+		"Admissions Director",
+	}:
+		return condition
+	if not roles & {"Sale", "CTV Sale"}:
+		return condition
+
+	staff = frappe.db.get_value("CRM Staff", {"user": user, "is_active": 1}, "name")
+	if not staff:
+		return "1=0"
+	sale_condition = f"`tabCRM NPS Point`.`sale` = {frappe.db.escape(staff)}"
+	if condition is None:
+		return sale_condition
+	if condition == "1=0":
+		return condition
+	return f"({condition}) and ({sale_condition})"
 
 
 def has_operational_record_permission(doc, user=None, permission_type=None, ptype=None):

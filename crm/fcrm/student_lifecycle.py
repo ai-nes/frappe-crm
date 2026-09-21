@@ -25,7 +25,7 @@ RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 POLICY_VERSION = "phase5-lifecycle-v1"
 SCHEMA_VERSION = "phase5-v1"
 SERVICE_FLAG = "student_lifecycle_service"
-ACTIVE_STAGES = ("New", "Attempting", "Connected", "Qualified")
+ACTIVE_STAGES = ("New", "Attempting", "Connected", "Qualified", "Registration", "New Enter")
 LIFECYCLE_ORDER = ACTIVE_STAGES
 LOST_STAGE = "Disqualified"
 STAGE_ALIASES = {
@@ -36,6 +36,7 @@ STAGE_ALIASES = {
 	"Lost": "Disqualified",
 }
 FORWARD_EDGES = {stage: ACTIVE_STAGES[index + 1] for index, stage in enumerate(ACTIVE_STAGES[:-1])}
+STAGE_DISPLAY_LABELS = {"New Enter": "Nhập học"}
 
 
 class StudentLifecycleError(frappe.ValidationError):
@@ -48,8 +49,18 @@ def _fail(code: str, message: str):
 	raise StudentLifecycleError(code, message)
 
 
+def _canonical_stage(stage: str | None, *, default: str = "New") -> str:
+	value = str(stage or default).strip()
+	return STAGE_ALIASES.get(value, value)
+
+
+def _stage_display_label(stage: str) -> str:
+	return STAGE_DISPLAY_LABELS.get(stage, stage)
+
+
 def lifecycle_targets(current_stage: str, capabilities: set[str] | frozenset[str]) -> list[dict[str, Any]]:
 	"""Return server-authoritative targets for the transition dialog."""
+	current_stage = _canonical_stage(current_stage)
 	if current_stage == LOST_STAGE:
 		return (
 			[{"stage": "Reopen", "label": "Reopen", "requires_reason": True}]
@@ -64,8 +75,10 @@ def lifecycle_targets(current_stage: str, capabilities: set[str] | frozenset[str
 	):
 		current_index = ACTIVE_STAGES.index(current_stage)
 		for stage in ACTIVE_STAGES[current_index + 1 :]:
-			targets.append({"stage": stage, "label": stage, "requires_evidence": True})
-	if "lifecycle.lost" in capabilities:
+			targets.append(
+				{"stage": stage, "label": _stage_display_label(stage), "requires_evidence": True}
+			)
+	if current_stage == "Connected" and "lifecycle.lost" in capabilities:
 		targets.append({"stage": LOST_STAGE, "label": LOST_STAGE, "requires_reason": True})
 	return targets
 
@@ -76,9 +89,9 @@ def get_lifecycle_stages() -> dict[str, Any]:
 	stages = [
 		{
 			"stage": stage,
-			"label": stage,
+			"label": _stage_display_label(stage),
 			"order": order,
-			"is_terminal": False,
+			"is_terminal": stage == "New Enter",
 		}
 		for order, stage in enumerate(ACTIVE_STAGES)
 	]
@@ -102,8 +115,8 @@ def validate_transition(
 	outcome_code: str | None = None,
 	capabilities: set[str] | frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
-	current = STAGE_ALIASES.get((current_stage or "New").strip(), (current_stage or "New").strip())
-	target = STAGE_ALIASES.get((target_stage or "").strip(), (target_stage or "").strip())
+	current = _canonical_stage(current_stage)
+	target = _canonical_stage(target_stage, default="")
 	if target == "Reopen":
 		if current != LOST_STAGE:
 			_fail("INVALID_EDGE", "Reopen is only valid for a Disqualified Student.")
@@ -119,8 +132,8 @@ def validate_transition(
 			"evidence": [],
 		}
 	if target == LOST_STAGE:
-		if current not in ACTIVE_STAGES:
-			_fail("INVALID_EDGE", "Disqualified can only be entered from an active Student stage.")
+		if current != "Connected":
+			_fail("INVALID_EDGE", "Disqualified can only be entered from Connected.")
 		if "lifecycle.lost" not in capabilities:
 			_fail("FORBIDDEN", "You are not permitted to mark a Student Lost.")
 		if not str(reason or "").strip():

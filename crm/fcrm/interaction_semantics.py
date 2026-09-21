@@ -60,8 +60,10 @@ INTERACTION_INTELLIGENCE_POLICY = {
 	"intelligence": {
 		"placement": "settlement_payload_top_level_sibling_of_intent",
 		"digest_bound": False,
-		"states": ("intent_bearing", "no_intent"),
-		"fields": ("summary", "sentiment", "entities", "readiness", "concerns"),
+		"states": ("intent_bearing", "no_intent", "unknown"),
+		"fields": (
+			"summary", "sentiment", "entities", "readiness", "concerns", "conversation_summary"
+		),
 		"summary": "bounded_single_line_quote_free_model_prose",
 		"summary_max_chars": 600,
 		"sentiment_values": ("mixed", "negative", "neutral", "positive"),
@@ -285,7 +287,7 @@ def _canonical_json(mapping):
 # Frozen expected value of CONTENT_HASH below -- both repos assert their own
 # computed hash equals this literal, so an unmirrored edit to either copy
 # fails that repo's own contract test without a cross-repo import.
-FROZEN_CONTENT_HASH = "ee6a9db7833f623c34e64db0ad657d657256eb2d76736dc3dab40e1cac9c9855"
+FROZEN_CONTENT_HASH = "d839bd5cd6bb756418cbbc3313c1635c99d374cb6bc66a0b9c8de3bd10f41203"
 
 CONTENT_HASH = hashlib.sha256(
 	_canonical_json(
@@ -430,7 +432,7 @@ def validate_interaction_intake(payload):
 	_require_positive_int(source["revision"], "source.revision")
 	if source["state"] == "draft":
 		raise InteractionContractError("draft call evidence must not enter analysis")
-	if actor["role"] not in {"student", "advisor", "system"}:
+	if actor["role"] not in {"student", "parent", "advisor", "system"}:
 		raise InteractionContractError("actor.role is unsupported")
 
 

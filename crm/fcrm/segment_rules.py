@@ -11,7 +11,7 @@ FIELDS = {
 	"student_stage": {
 		"label": "Student Stage",
 		"fieldtype": "Select",
-		"options": "New\nAttempting\nConnected\nQualified\nDisqualified",
+		"options": "New\nAttempting\nConnected\nQualified\nRegistration\nNew Enter\nDisqualified",
 	},
 	"potential": {"label": "Potential", "fieldtype": "Select", "options": "HIGH\nMEDIUM\nLOW"},
 	"intent": {"label": "Intent", "fieldtype": "Select", "options": "HIGH\nMEDIUM\nLOW"},

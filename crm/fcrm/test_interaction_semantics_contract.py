@@ -108,6 +108,16 @@ class TestInteractionSemanticsContract(unittest.TestCase):
 		validate_analysis_result(intent_bearing)
 		validate_analysis_result(no_intent)
 
+	def test_parent_is_valid_context_evidence_but_not_intent_evidence(self):
+		intake = json.loads((_FIXTURES / "intake-final-message.json").read_text(encoding="utf-8"))
+		intake["actor"]["role"] = "parent"
+		validate_interaction_intake(intake)
+
+		result = json.loads((_FIXTURES / "result-intent-bearing.json").read_text(encoding="utf-8"))
+		result["intent"]["evidence_refs"][0]["actor_role"] = "parent"
+		with self.assertRaises(InteractionContractError):
+			validate_analysis_result(result)
+
 	def test_only_calls_may_be_drafts_and_only_students_substantiate_intent(self):
 		intake = json.loads((_FIXTURES / "intake-final-message.json").read_text(encoding="utf-8"))
 		intake["source"]["state"] = "draft"

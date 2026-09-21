@@ -21,7 +21,7 @@
   {"fieldname": "evidence_state", "fieldtype": "Select", "options": "draft\nfinal\ncorrection", "read_only": 1, "reqd": 1},
   {"fieldname": "channel", "fieldtype": "Data", "read_only": 1},
   {"fieldname": "direction", "fieldtype": "Select", "options": "inbound\noutbound", "read_only": 1},
-  {"fieldname": "actor_role", "fieldtype": "Select", "options": "student\nadvisor\nsystem", "read_only": 1},
+  {"fieldname": "actor_role", "fieldtype": "Select", "options": "student\nparent\nadvisor\nsystem", "read_only": 1},
   {"fieldname": "occurred_at", "fieldtype": "Datetime", "read_only": 1},
   {"fieldname": "content", "fieldtype": "Long Text", "read_only": 1, "reqd": 1}
  ],

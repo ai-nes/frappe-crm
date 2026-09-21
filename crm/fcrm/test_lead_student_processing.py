@@ -26,9 +26,7 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 	def test_operator_reason_does_not_expose_pre_conversion_lead_identifier(self):
 		from crm.fcrm.lead_processing import _operator_lead_reason
 
-		reason = _operator_lead_reason(
-			"Đã đóng hồ sơ vì trùng CCCD với Lead HS-2026-HCM-000019."
-		)
+		reason = _operator_lead_reason("Đã đóng hồ sơ vì trùng CCCD với Lead HS-2026-HCM-000019.")
 
 		self.assertEqual(reason, "Đã đóng hồ sơ vì trùng CCCD với một Lead khác.")
 
@@ -305,10 +303,18 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 			("Attempting", "Connected"),
 			("Connected", "Qualified"),
 			("Connected", "Disqualified"),
+			("Qualified", "Registration"),
+			("Registration", "New Enter"),
 		):
 			self.assertEqual(validate_transition(current, target), (current, target))
 
-		for current, target in (("Qualified", "Connected"), ("Disqualified", "New"), ("New", "Connected")):
+		for current, target in (
+			("Qualified", "Connected"),
+			("Qualified", "Disqualified"),
+			("Disqualified", "New"),
+			("New Enter", "Disqualified"),
+			("New", "Connected"),
+		):
 			with self.assertRaises(StudentStageError) as ctx:
 				validate_transition(current, target)
 			self.assertEqual(ctx.exception.code, "INVALID_TRANSITION")
@@ -346,6 +352,8 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 		self.assertIn("MATCHED", lead_fields["resolution"]["options"])
 		self.assertEqual(student_fields["student_stage"]["default"], "New")
 		self.assertTrue(student_fields["student_stage"]["read_only"])
+		self.assertIn("Registration", student_fields["student_stage"]["options"])
+		self.assertIn("New Enter", student_fields["student_stage"]["options"])
 		self.assertNotIn("enrollment_status", student_fields)
 		self.assertNotIn("lifecycle_stage", student_fields)
 
@@ -544,6 +552,42 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 
 		self.assertEqual(result["student_stage"], "Attempting")
 		self.assertEqual(frappe.db.get_value("CRM Student", student.name, "student_stage"), "Attempting")
+
+	def test_lead_sale_can_advance_a_readable_student_without_generic_write_access(self):
+		from crm.fcrm.permissions import has_permission as shared_has_permission
+		from crm.fcrm.student_stage import set_student_stage
+
+		email = "_test_stage_lead_sale@example.com"
+		if frappe.db.exists("User", email):
+			frappe.delete_doc("User", email, force=True)
+		user = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": "_Test Stage Lead Sale",
+				"send_welcome_email": 0,
+				"roles": [{"role": "Lead Sale"}],
+			}
+		).insert(ignore_permissions=True)
+		student = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"full_name": "_Test Processing Lead Sale Stage",
+				"phone": "0902222555",
+			}
+		).insert(ignore_permissions=True)
+		original_user = frappe.session.user
+		try:
+			frappe.set_user(user.name)
+			self.assertTrue(student.has_permission("read"))
+			self.assertFalse(shared_has_permission(student, user=user.name, ptype="write"))
+			result = set_student_stage(student.name, "Attempting")
+		finally:
+			frappe.set_user(original_user)
+			frappe.delete_doc("CRM Student", student.name, force=True)
+			frappe.delete_doc("User", user.name, force=True)
+
+		self.assertEqual(result["student_stage"], "Attempting")
 
 	def test_workflow_fields_reject_direct_document_edits(self):
 		lead = self._new_lead("Guard")

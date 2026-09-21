@@ -15,12 +15,15 @@ class TestSaleOverview(FrappeTestCase):
 				{"student_stage": "New"},
 				{"student_stage": "Attempting"},
 				{"student_stage": "Connected"},
+				{"student_stage": "Registration"},
+				{"student_stage": "New Enter"},
 				{"student_stage": "Disqualified"},
 			]
 		)
 
-		self.assertEqual(result["total"], 4)
-		self.assertEqual([item["count"] for item in result["items"]], [1, 1, 1, 0, 1])
+		self.assertEqual(result["total"], 6)
+		self.assertEqual([item["count"] for item in result["items"]], [1, 1, 1, 0, 1, 1, 1])
+		self.assertEqual(result["items"][5]["label"], "Nhập học")
 		self.assertEqual(sum(item["count"] for item in result["items"]), result["total"])
 
 	def test_student_records_use_core_students_and_interactions(self):

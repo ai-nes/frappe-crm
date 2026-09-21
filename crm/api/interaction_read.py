@@ -208,7 +208,15 @@ def _safe_analysis(interaction: str) -> dict[str, Any] | None:
 		],
 		order_by="creation desc",
 	)
-	return dict(rows[0]) if rows else None
+	if not rows:
+		return None
+	analysis = dict(rows[0])
+	if isinstance(analysis.get("intelligence"), str):
+		try:
+			analysis["intelligence"] = json.loads(analysis["intelligence"])
+		except (TypeError, ValueError):
+			analysis["intelligence"] = None
+	return analysis
 
 
 def _summary(

@@ -53,6 +53,9 @@ class TestSessionRoleContract(FrappeTestCase):
 		try:
 			response = me()
 			self.assertEqual(response["permission"], response["crm_capabilities"])
+			self.assertIn("CRM Lead", response["crm_doctype_permissions"])
+			self.assertTrue(response["crm_doctype_permissions"]["CRM Lead"]["create"])
+			self.assertTrue(response["crm_doctype_permissions"]["CRM Lead"]["delete"])
 		finally:
 			frappe.set_user(previous_user)
 
@@ -195,19 +198,20 @@ class TestSessionRoleContract(FrappeTestCase):
 				"acquisition",
 				"governed_acquisition",
 				"governed_admissions",
+				"sensitive_admissions",
 				"control_plane",
 				"legacy_untouched",
 			},
 		)
 		self.assertEqual(
 			CANONICAL_PERMISSION_MATRIX["admissions_case"]["doctypes"],
-			("CRM Lead", "CRM Student"),
+			("CRM Lead", "CRM Student", "CRM Student Admission Profile", "CRM Student Document"),
 		)
 		self.assertEqual(CANONICAL_PERMISSION_MATRIX["admissions_case"]["permissions"]["sales"], "rwc")
 		self.assertEqual(CANONICAL_PERMISSION_MATRIX["acquisition"]["permissions"]["lead_sales"], "r")
 		self.assertEqual(
 			CANONICAL_PERMISSION_MATRIX["acquisition"]["per_doctype_permissions"]["CRM Campaign"]["lead_sales"],
-			"rwc",
+			"rwcd",
 		)
 		self.assertEqual(
 			CANONICAL_PERMISSION_MATRIX["governed_admissions"]["per_doctype_permissions"]["CRM Campus"][

@@ -15,7 +15,7 @@ Segment filters intentionally expose five business dimensions:
 
 | Filter field | Authoritative data | Cardinality |
 |---|---|---|
-| Student Stage | `CRM Student.student_stage`: New / Attempting / Connected / Qualified / Disqualified | Zero or one; server-managed |
+| Student Stage | `CRM Student.student_stage`: New / Attempting / Connected / Qualified / Registration / New Enter / Disqualified | Zero or one; server-managed |
 | Potential | `CRM Student.potential`: HIGH / MEDIUM / LOW | Zero or one; unset means unknown |
 | Intent | `CRM Student.intent`: HIGH / MEDIUM / LOW | Zero or one, independent of Potential |
 | Need | `needs` rows referencing `CRM Need`, or `CRM Action Item -> CRM Action -> CRM Need` | Multiple |

@@ -27,12 +27,22 @@ PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 TERMINAL_TASK_STATUSES = {"Done", "Canceled"}
 TERMINAL_ACTION_STATES = {"completed", "cancelled", "rejected", "superseded"}
 
-STUDENT_STAGE_ORDER = ("New", "Attempting", "Connected", "Qualified", "Disqualified")
+STUDENT_STAGE_ORDER = (
+	"New",
+	"Attempting",
+	"Connected",
+	"Qualified",
+	"Registration",
+	"New Enter",
+	"Disqualified",
+)
 STUDENT_STAGE_LABELS = {
 	"New": "Mới",
 	"Attempting": "Đang liên hệ",
 	"Connected": "Đã kết nối",
 	"Qualified": "Đủ điều kiện",
+	"Registration": "Đăng ký",
+	"New Enter": "Nhập học",
 	"Disqualified": "Không đủ điều kiện",
 }
 RECENT_RECORD_LIMIT = 2
