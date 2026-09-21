@@ -53,6 +53,11 @@ def _canonical_digest(value: object) -> str:
 	).hexdigest()
 
 
+def _can_replay_nps_assessment(*, existing_status: str, incoming_status: str, same_digest: bool) -> bool:
+	"""Allow idempotent retry of an unchanged or still-abstained assessment."""
+	return same_digest or existing_status == "abstained" and incoming_status == "abstained"
+
+
 def _validate_digest(value: Any, fieldname: str) -> str:
 	if (
 		not isinstance(value, str)
@@ -337,10 +342,17 @@ def settle_interaction_nps_point(
 		}
 	)
 	existing = frappe.db.get_value(
-		"CRM NPS Point", {"idempotency_key": assessment_key}, ["name", "assessment_digest"], as_dict=True
+		"CRM NPS Point",
+		{"idempotency_key": assessment_key},
+		["name", "assessment_digest", "status"],
+		as_dict=True,
 	)
 	if existing:
-		if existing.assessment_digest != assessment_digest:
+		if not _can_replay_nps_assessment(
+			existing_status=existing.status or "",
+			incoming_status=status,
+			same_digest=existing.assessment_digest == assessment_digest,
+		):
 			frappe.throw("NPS assessment conflicts with an existing settlement.", frappe.ValidationError)
 		return {"point": existing.name, "replayed": True, "status": "replayed"}
 
