@@ -2,7 +2,11 @@ import json
 
 import frappe
 
-from crm.api.interaction_nps import _canonical_digest, _validate_dimensions
+from crm.api.interaction_nps import (
+	_can_replay_nps_assessment,
+	_canonical_digest,
+	_validate_dimensions,
+)
 
 
 def _dimensions():
@@ -45,3 +49,12 @@ def test_nps_dimensions_reject_out_of_range_score():
 	except frappe.ValidationError:
 		return
 	raise AssertionError("out-of-range score was accepted")
+
+
+def test_nps_replay_allows_same_abstention_but_not_score_replacement():
+	assert _can_replay_nps_assessment(
+		existing_status="abstained", incoming_status="abstained", same_digest=False
+	)
+	assert not _can_replay_nps_assessment(
+		existing_status="abstained", incoming_status="scored", same_digest=False
+	)
