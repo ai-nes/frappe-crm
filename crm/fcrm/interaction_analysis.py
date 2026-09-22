@@ -251,6 +251,9 @@ def _validate_conversation_summary(value: Any) -> dict[str, Any]:
 				f"intelligence conversation summary.{name}.evidence_refs is invalid.",
 				frappe.ValidationError,
 			)
+		allowed_roles = {"student", "parent"}
+		if name == "resolution":
+			allowed_roles.add("advisor")
 		validated_refs = []
 		for index, ref in enumerate(refs):
 			if not isinstance(ref, Mapping) or set(ref) != {"doctype", "name", "actor_role"}:
@@ -263,9 +266,9 @@ def _validate_conversation_summary(value: Any) -> dict[str, Any]:
 					"conversation summary evidence must reference CRM Interaction Evidence.",
 					frappe.PermissionError,
 				)
-			if ref.get("actor_role") not in {"student", "parent"}:
+			if ref.get("actor_role") not in allowed_roles:
 				frappe.throw(
-					"conversation summary evidence must be student or parent evidence.",
+					"conversation summary evidence must be student, parent, or advisor evidence.",
 					frappe.PermissionError,
 				)
 			validated_refs.append(
