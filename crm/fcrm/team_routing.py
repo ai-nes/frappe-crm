@@ -192,6 +192,78 @@ def _active_teams_for_province(
 	return result
 
 
+def _active_teams_for_group(
+	group_id: str,
+	*,
+	campus: str | None = None,
+	team_id: str | None = None,
+) -> list[dict[str, Any]]:
+	"""Return active Sales Teams in one Group, optionally constrained by campus."""
+	filters: dict[str, Any] = {"is_active": 1, "team_type": "Sales", "group": group_id}
+	if team_id:
+		filters["name"] = team_id
+	rows = frappe.get_all(
+		"CRM Team",
+		filters=filters,
+		fields=["name", "team_name", "group", "campus", "team_type", "is_active"],
+		order_by="team_name asc, name asc",
+		limit_page_length=0,
+	)
+	group = frappe.db.get_value(
+		"CRM Team Group",
+		group_id,
+		["name", "group_name", "province", "is_active"],
+		as_dict=True,
+	)
+	if not group or not group.is_active:
+		return []
+	return [
+		{**dict(row), "groupName": group.group_name, "province": group.province}
+		for row in rows
+		if not campus or row.get("campus") == campus
+	]
+
+
+def _active_teams_for_campus(
+	campus: str,
+	*,
+	team_id: str | None = None,
+) -> list[dict[str, Any]]:
+	"""Return every active Sales Team in one campus, independent of province."""
+	filters: dict[str, Any] = {"is_active": 1, "team_type": "Sales", "campus": campus}
+	if team_id:
+		filters["name"] = team_id
+	rows = frappe.get_all(
+		"CRM Team",
+		filters=filters,
+		fields=["name", "team_name", "group", "campus", "team_type", "is_active"],
+		order_by="team_name asc, name asc",
+		limit_page_length=0,
+	)
+	result = []
+	for row in rows:
+		group = (
+			frappe.db.get_value(
+				"CRM Team Group",
+				row.get("group"),
+				["name", "group_name", "province", "is_active"],
+				as_dict=True,
+			)
+			if row.get("group")
+			else None
+		)
+		if group and not group.is_active:
+			continue
+		result.append(
+			{
+				**dict(row),
+				"groupName": (group or {}).get("group_name"),
+				"province": (group or {}).get("province"),
+			}
+		)
+	return result
+
+
 def _capacity_snapshot(limit: int, active: int, *, configured: bool = True) -> dict[str, int | bool | None]:
 	return {
 		"active": active,
@@ -376,6 +448,98 @@ def list_province_recipients(
 		targets,
 		key=lambda row: (row["teamName"], row["staffName"], row["staff"]),
 	)
+
+
+def select_recipient_for_teams(
+	teams: list[dict[str, Any]],
+	*,
+	scope_key: str,
+	policy_version: str,
+	strategy: str = "least_load",
+	require_capacity: bool = True,
+	load_overrides: dict[str, int] | None = None,
+	at=None,
+) -> dict[str, Any]:
+	"""Select a Sale/CTV across an already resolved Team scope.
+
+	Capacity ceilings remain hard limits even when the policy allows recipients
+	without a configured capacity period.  ``round_robin`` uses the current
+	active load as a deterministic cursor, which keeps a fresh batch rotating
+	without introducing a second mutable cursor document.
+	"""
+	overrides = load_overrides or {}
+	strategy = strategy if strategy in {"least_load", "round_robin"} else "least_load"
+	candidates = []
+	unconfigured_recipients = []
+	over_capacity_recipients = []
+	blocked_team_reasons = []
+	for team in teams:
+		pool = _team_recipient_pool(team["name"], at)
+		if not pool:
+			blocked_team_reasons.append(f"{team.get('team_name') or team['name']}: chưa có Sale/CTV")
+			continue
+		for recipient in pool:
+			capacity = dict(recipient["capacity"])
+			if require_capacity and not capacity.get("configured"):
+				unconfigured_recipients.append(f"{recipient['staffName']} ({team.get('team_name') or team['name']})")
+				continue
+			effective_active = int(capacity.get("active") or 0) + int(overrides.get(recipient["staff"], 0))
+			limit = capacity.get("limit")
+			if limit and effective_active >= limit:
+				over_capacity_recipients.append(f"{recipient['staffName']} ({team.get('team_name') or team['name']})")
+				continue
+			candidates.append(
+				{
+					**recipient,
+					"teamName": team.get("team_name") or team["name"],
+					"effectiveActive": effective_active,
+				}
+			)
+	if not candidates:
+		if unconfigured_recipients:
+			_raise_routing_error(
+				"STAFF_CAPACITY_NOT_CONFIGURED",
+				"Chưa có Sale/CTV đủ điều kiện vì chưa thiết lập capacity: "
+				+ ", ".join(unconfigured_recipients),
+			)
+		if blocked_team_reasons:
+			_raise_routing_error(
+				"NO_ELIGIBLE_RECIPIENT",
+				"Không có Team đủ điều kiện: " + "; ".join(blocked_team_reasons),
+			)
+		_raise_routing_error("NO_ELIGIBLE_RECIPIENT", "Tất cả Sale/CTV trong phạm vi đã đạt giới hạn nhận Lead.")
+
+	candidates.sort(key=lambda row: (row["teamName"], row["staffName"], row["staff"]))
+	if strategy == "round_robin":
+		cursor = sum(int(row["effectiveActive"]) for row in candidates) % len(candidates)
+		winner = candidates[cursor]
+	else:
+		winner = min(
+			candidates,
+			key=lambda row: (row["effectiveActive"], row["teamName"], row["staffName"], row["staff"]),
+		)
+
+	capacity = dict(winner["capacity"])
+	capacity["active"] = winner["effectiveActive"]
+	if capacity.get("limit"):
+		capacity["remaining"] = max(0, int(capacity["limit"]) - winner["effectiveActive"])
+	return {
+		"team": winner["team"],
+		"teamName": winner["teamName"],
+		"ownerStaff": winner["staff"],
+		"ownerName": winner["staffName"],
+		"function": winner["function"],
+		"capacity": capacity,
+		"reason": (
+			f"{scope_key} → {winner['teamName']} → {winner['staffName']} "
+			f"({winner['function']}, tải {winner['effectiveActive']}"
+			f"/{winner['capacity'].get('limit') or 'không giới hạn'}, {strategy})."
+		),
+		"policyVersion": policy_version,
+		"tier": scope_key.split(":", 1)[0].lower(),
+		"queue": scope_key,
+		"scope": scope_key,
+	}
 
 
 def select_province_recipient(

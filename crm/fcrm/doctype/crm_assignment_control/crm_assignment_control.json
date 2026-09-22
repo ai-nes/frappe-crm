@@ -7,6 +7,17 @@
   "routing_enabled",
   "assignment_mode",
   "capacity_required",
+  "lead_routing_section",
+  "lead_campaign_layer_enabled",
+  "lead_group_layer_enabled",
+  "lead_global_layer_enabled",
+  "lead_layer_order",
+  "lead_distribution_strategy",
+  "lead_workflow_section",
+  "lead_assignment_workflow_config",
+  "lead_workflow_revision",
+  "lead_workflow_last_changed_by",
+  "lead_workflow_last_change_reason",
   "last_changed_by",
   "last_change_reason",
   "revision"
@@ -34,6 +45,76 @@
    "fieldname": "capacity_required",
    "fieldtype": "Check",
    "label": "Require Capacity Before Assignment"
+  },
+  {
+   "fieldname": "lead_routing_section",
+   "fieldtype": "Section Break",
+   "label": "Lead Routing Policy"
+  },
+  {
+   "default": "1",
+   "fieldname": "lead_campaign_layer_enabled",
+   "fieldtype": "Check",
+   "label": "Enable Campaign Layer"
+  },
+  {
+   "default": "1",
+   "fieldname": "lead_group_layer_enabled",
+   "fieldtype": "Check",
+   "label": "Enable Group/Province Layer"
+  },
+  {
+   "default": "1",
+   "fieldname": "lead_global_layer_enabled",
+   "fieldtype": "Check",
+   "label": "Enable Campus-wide Equal Distribution"
+  },
+  {
+   "default": "campaign,group,global",
+   "description": "Comma-separated order of the governed Lead routing layers.",
+   "fieldname": "lead_layer_order",
+   "fieldtype": "Data",
+   "label": "Lead Layer Order"
+  },
+  {
+   "default": "least_load",
+   "fieldname": "lead_distribution_strategy",
+   "fieldtype": "Select",
+   "label": "Lead Distribution Strategy",
+   "options": "least_load\nround_robin"
+  },
+  {
+   "fieldname": "lead_workflow_section",
+   "fieldtype": "Section Break",
+   "label": "Lead Assignment Workflow"
+  },
+  {
+   "default": "{}",
+   "description": "Versioned JSON settings for the fixed Lead assignment workflow.",
+   "fieldname": "lead_assignment_workflow_config",
+   "fieldtype": "JSON",
+   "hidden": 1,
+   "label": "Lead Assignment Workflow Config"
+  },
+  {
+   "default": "0",
+   "fieldname": "lead_workflow_revision",
+   "fieldtype": "Int",
+   "label": "Lead Workflow Revision",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lead_workflow_last_changed_by",
+   "fieldtype": "Link",
+   "label": "Lead Workflow Last Changed By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lead_workflow_last_change_reason",
+   "fieldtype": "Small Text",
+   "label": "Lead Workflow Last Change Reason",
+   "read_only": 1
   },
   {
    "fieldname": "last_changed_by",

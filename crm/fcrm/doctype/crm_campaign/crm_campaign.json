@@ -23,6 +23,11 @@
   "owner_staff",
   "owning_team",
   "column_break_2",
+  "section_lead_routing",
+  "lead_routing_enabled",
+  "lead_routing_target_type",
+  "lead_routing_target_team",
+  "lead_routing_target_group",
   "platform",
   "channel_boundary",
   "channel_type",
@@ -135,6 +140,38 @@
   {
    "fieldname": "column_break_2",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_lead_routing",
+   "fieldtype": "Section Break",
+   "label": "Lead Routing"
+  },
+  {
+   "default": "0",
+   "fieldname": "lead_routing_enabled",
+   "fieldtype": "Check",
+   "label": "Enable Lead Campaign Routing"
+  },
+  {
+   "depends_on": "eval:doc.lead_routing_enabled",
+   "fieldname": "lead_routing_target_type",
+   "fieldtype": "Select",
+   "label": "Lead Routing Target Type",
+   "options": "\nTeam\nTeam Group"
+  },
+  {
+   "depends_on": "eval:doc.lead_routing_enabled && doc.lead_routing_target_type == 'Team'",
+   "fieldname": "lead_routing_target_team",
+   "fieldtype": "Link",
+   "label": "Lead Routing Team",
+   "options": "CRM Team"
+  },
+  {
+   "depends_on": "eval:doc.lead_routing_enabled && doc.lead_routing_target_type == 'Team Group'",
+   "fieldname": "lead_routing_target_group",
+   "fieldtype": "Link",
+   "label": "Lead Routing Team Group",
+   "options": "CRM Team Group"
   },
   {
    "fieldname": "platform",

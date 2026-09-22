@@ -84,3 +84,83 @@ class TestUserCapacityEndpoints(TestCase):
 					max_active_students=5,
 					reason="Thiết lập ban đầu",
 				)
+
+
+class TestLeadRoutingPolicyAccess(TestCase):
+	def test_lead_sale_can_manage_lead_routing_policy(self):
+		context = {"capabilities": ["student.routing.operate"]}
+		with patch.object(assignment_control, "_actor_context", return_value=context):
+			self.assertIs(assignment_control._require_lead_routing_policy_access(), context)
+
+	def test_users_without_routing_operation_cannot_manage_lead_routing_policy(self):
+		context = {"capabilities": ["student.routing.read"]}
+		with patch.object(assignment_control, "_actor_context", return_value=context):
+			with self.assertRaises(frappe.PermissionError):
+				assignment_control._require_lead_routing_policy_access()
+
+	def test_system_manager_can_manage_lead_routing_policy(self):
+		context = {"capabilities": ["system.configure"]}
+		with patch.object(assignment_control, "_actor_context", return_value=context):
+			self.assertIs(assignment_control._require_lead_routing_policy_access(), context)
+
+
+class TestLeadAssignmentWorkflowEndpoints(TestCase):
+	def test_routing_reader_can_load_workflow_without_manage_capability(self):
+		context = {"capabilities": ["student.routing.read"]}
+		with (
+			patch.object(assignment_control, "_actor_context", return_value=context),
+			patch.object(assignment_control, "_stored_control", return_value={}),
+		):
+			result = assignment_control.get_lead_assignment_workflow_config()
+
+		self.assertFalse(result["canManage"])
+		self.assertEqual(result["config"]["stored"]["input"]["maxLeadsPerRun"], 1000)
+
+	def test_lead_sale_can_update_one_workflow_step_with_revision_and_reason(self):
+		context = {"capabilities": ["student.routing.operate"]}
+		control = {
+			"lead_assignment_workflow_config": "{}",
+			"lead_workflow_revision": 2,
+			"revision": 0,
+		}
+		doc = type("Control", (), {})()
+		doc.save = lambda **_kwargs: None
+		with (
+			patch.object(assignment_control, "_require_lead_routing_policy_access", return_value=context),
+			patch.object(assignment_control, "_actor_context", return_value=context),
+			patch.object(assignment_control, "_stored_control", return_value=control),
+			patch.object(assignment_control.frappe, "get_single", return_value=doc),
+			patch.object(
+				assignment_control,
+				"_workflow_snapshot_response",
+				return_value={"config": {"revision": 3}},
+			),
+		):
+			result = assignment_control.update_lead_assignment_workflow_step(
+				"input",
+				{"enabled": False, "scheduledMinAgeMinutes": 12, "maxLeadsPerRun": 20},
+				"Giảm tải job nền",
+				expected_revision=2,
+			)
+
+		self.assertEqual(result, {"config": {"revision": 3}})
+		self.assertEqual(doc.lead_workflow_revision, 3)
+		self.assertEqual(doc.lead_assignment_workflow_config["input"]["maxLeadsPerRun"], 20)
+		self.assertEqual(doc.lead_workflow_last_change_reason, "Giảm tải job nền")
+
+	def test_workflow_update_rejects_stale_revision(self):
+		context = {"capabilities": ["student.routing.operate"]}
+		with (
+			patch.object(assignment_control, "_require_lead_routing_policy_access", return_value=context),
+			patch.object(
+				assignment_control,
+				"_stored_control",
+				return_value={"lead_workflow_revision": 4},
+			),
+		):
+			with self.assertRaises(frappe.ValidationError) as error:
+				assignment_control.update_lead_assignment_workflow_step(
+					"review", {"maxRetries": 2}, "Điều chỉnh retry", expected_revision=3
+				)
+
+		self.assertEqual(error.exception.code, "WORKFLOW_REVISION_CONFLICT")

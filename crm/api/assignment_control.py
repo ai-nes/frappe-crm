@@ -16,11 +16,20 @@ from crm.api.assignment_workspace import (
 	_safe_get_all,
 )
 from crm.fcrm.role_policy import resolve_crm_profile
+from crm.fcrm.lead_assignment_workflow import (
+	STEP_IDS,
+	get_lead_assignment_workflow_config as get_workflow_config,
+	normalize_step_id,
+	step_snapshot,
+	update_stored_step,
+)
+from crm.fcrm.lead_routing_policy import get_lead_routing_policy, validate_policy_payload
 from crm.fcrm.student_feature_flags import enabled as feature_enabled
 from crm.fcrm.team_routing import _capacity_snapshot, active_lead_count_by_staff
 
 RECIPIENT_FUNCTIONS = {"Sale", "CTV Sale"}
 CONTROL_DOCTYPE = "CRM Assignment Control"
+LEAD_ROUTING_POLICY_CAPABILITIES = frozenset({"system.configure", "student.routing.operate"})
 
 
 def _as_bool(value) -> bool:
@@ -38,6 +47,20 @@ def _require_control_access():
 	return context
 
 
+def _can_manage_lead_routing_policy(context) -> bool:
+	return bool(set(context.get("capabilities") or ()) & LEAD_ROUTING_POLICY_CAPABILITIES)
+
+
+def _require_lead_routing_policy_access():
+	context = _actor_context(required_capabilities=LEAD_ROUTING_POLICY_CAPABILITIES)
+	if not _can_manage_lead_routing_policy(context):
+		frappe.throw(
+			_("Chỉ người có quyền vận hành phân tuyến mới được thay đổi cấu hình phân bổ Lead."),
+			frappe.PermissionError,
+		)
+	return context
+
+
 def _stored_control():
 	if not _doctype_exists(CONTROL_DOCTYPE):
 		return None
@@ -49,6 +72,15 @@ def _stored_control():
 				"routing_enabled",
 				"assignment_mode",
 				"capacity_required",
+				"lead_campaign_layer_enabled",
+				"lead_group_layer_enabled",
+				"lead_global_layer_enabled",
+				"lead_layer_order",
+				"lead_distribution_strategy",
+				"lead_assignment_workflow_config",
+				"lead_workflow_revision",
+				"lead_workflow_last_changed_by",
+				"lead_workflow_last_change_reason",
 				"last_changed_by",
 				"last_change_reason",
 				"revision",
@@ -300,6 +332,7 @@ def get_routing_control():
 			"capacity_required": False,
 			"revision": 0,
 		},
+		"lead_policy": get_lead_routing_policy(control),
 		"can_manage": "system.configure" in context["capabilities"],
 		"can_approve_policy": "student.policy.approve" in context["capabilities"],
 		"checks": checks,
@@ -318,6 +351,164 @@ def get_routing_control():
 		"policies": policies,
 		"policy_options": _policy_options(sources),
 	}
+
+
+@frappe.whitelist(methods=["GET"])
+def get_lead_routing_policy_snapshot():
+	"""Return only the governed Lead routing policy for the Lead workspace."""
+	context = _actor_context()
+	return {
+		"schemaVersion": "lead-routing-policy-v1",
+		"policy": get_lead_routing_policy(_stored_control()),
+		"canManage": _can_manage_lead_routing_policy(context),
+	}
+
+
+def _workflow_settings(value):
+	if isinstance(value, dict):
+		return value
+	if isinstance(value, str) and value.strip():
+		try:
+			parsed = frappe.parse_json(value)
+		except (TypeError, ValueError):
+			frappe.throw(_("settings phải là JSON object hợp lệ."), frappe.ValidationError)
+		if isinstance(parsed, dict):
+			return parsed
+	frappe.throw(_("settings phải là JSON object hợp lệ."), frappe.ValidationError)
+	return {}
+
+
+def _workflow_revision(control) -> int:
+	try:
+		return max(0, int((control or {}).get("lead_workflow_revision") or 0))
+	except (TypeError, ValueError):
+		return 0
+
+
+def _assert_workflow_revision(control, expected_revision):
+	if expected_revision in (None, ""):
+		frappe.throw(
+			_("Cần gửi workflow revision hiện tại trước khi lưu cấu hình."),
+			frappe.ValidationError,
+		)
+	try:
+		expected = int(expected_revision)
+	except (TypeError, ValueError):
+		frappe.throw(_("Workflow revision không hợp lệ."), frappe.ValidationError)
+	current = _workflow_revision(control)
+	if expected != current:
+		exception = frappe.ValidationError(
+			_("Cấu hình workflow đã thay đổi. Hãy tải lại trước khi lưu lần nữa.")
+		)
+		exception.code = "WORKFLOW_REVISION_CONFLICT"
+		raise exception
+
+
+def _workflow_snapshot_response(context, control=None):
+	control = control if control is not None else _stored_control()
+	config = get_workflow_config(control)
+	policy = get_lead_routing_policy(control)
+	return {
+		"schemaVersion": config["schemaVersion"],
+		"config": config,
+		"steps": {
+			step_id: step_snapshot(config, step_id, policy=policy)
+			for step_id in STEP_IDS
+		},
+		"policy": policy,
+		"canManage": _can_manage_lead_routing_policy(context),
+	}
+
+
+@frappe.whitelist(methods=["GET"])
+def get_lead_assignment_workflow_config():
+	"""Return the fixed workflow graph's editable operational configuration."""
+	context = _actor_context()
+	return _workflow_snapshot_response(context)
+
+
+@frappe.whitelist(methods=["POST"])
+def update_lead_routing_policy(
+	enabled: bool | str | None = None,
+	layer_order: str | list[str] | None = None,
+	campaign_layer_enabled: bool | str | None = None,
+	group_layer_enabled: bool | str | None = None,
+	global_layer_enabled: bool | str | None = None,
+	distribution_strategy: str | None = None,
+	capacity_required: bool | str | None = None,
+	reason: str | None = None,
+):
+	"""Update the active Lead policy immediately and increment its revision."""
+	_require_lead_routing_policy_access()
+	reason = str(reason or "").strip()
+	if len(reason) < 5:
+		frappe.throw(_("Cần ghi lý do thay đổi ít nhất 5 ký tự."), frappe.ValidationError)
+	values = validate_policy_payload(
+		enabled=enabled,
+		layer_order=layer_order,
+		campaign_layer_enabled=campaign_layer_enabled,
+		group_layer_enabled=group_layer_enabled,
+		global_layer_enabled=global_layer_enabled,
+		distribution_strategy=distribution_strategy,
+		capacity_required=capacity_required,
+	)
+	doc = frappe.get_single(CONTROL_DOCTYPE)
+	for fieldname, value in values.items():
+		if value is not None:
+			doc.set(fieldname, value)
+	doc.last_changed_by = frappe.session.user
+	doc.last_change_reason = reason
+	doc.revision = int(doc.revision or 0) + 1
+	doc.lead_workflow_revision = int(doc.lead_workflow_revision or 0) + 1
+	doc.lead_workflow_last_changed_by = frappe.session.user
+	doc.lead_workflow_last_change_reason = reason
+	doc.save(ignore_permissions=True)
+	return get_lead_routing_policy_snapshot()
+
+
+@frappe.whitelist(methods=["POST"])
+def update_lead_assignment_workflow_step(
+	step_id: str,
+	settings: dict | str | None = None,
+	reason: str | None = None,
+	expected_revision: int | str | None = None,
+):
+	"""Update one workflow step atomically while preserving guarded contracts."""
+	_require_lead_routing_policy_access()
+	step_id = normalize_step_id(step_id)
+	reason = str(reason or "").strip()
+	if len(reason) < 5:
+		frappe.throw(_("Cần ghi lý do thay đổi ít nhất 5 ký tự."), frappe.ValidationError)
+	control = _stored_control() or {}
+	_assert_workflow_revision(control, expected_revision)
+	settings = _workflow_settings(settings)
+	doc = frappe.get_single(CONTROL_DOCTYPE)
+
+	if step_id == "matching":
+		values = validate_policy_payload(
+			enabled=settings.get("enabled"),
+			layer_order=settings.get("layerOrder"),
+			campaign_layer_enabled=settings.get("campaignLayerEnabled"),
+			group_layer_enabled=settings.get("groupLayerEnabled"),
+			global_layer_enabled=settings.get("globalLayerEnabled"),
+			distribution_strategy=settings.get("distributionStrategy"),
+			capacity_required=settings.get("capacityRequired"),
+		)
+		for fieldname, value in values.items():
+			if value is not None:
+				doc.set(fieldname, value)
+		doc.last_changed_by = frappe.session.user
+		doc.last_change_reason = reason
+		doc.revision = int(doc.revision or 0) + 1
+	else:
+		stored = update_stored_step(control, step_id, settings)
+		doc.lead_assignment_workflow_config = stored
+
+	doc.lead_workflow_revision = _workflow_revision(control) + 1
+	doc.lead_workflow_last_changed_by = frappe.session.user
+	doc.lead_workflow_last_change_reason = reason
+	doc.save(ignore_permissions=True)
+	return _workflow_snapshot_response(_actor_context(), _stored_control())
 
 
 @frappe.whitelist(methods=["POST"])
