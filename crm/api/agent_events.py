@@ -39,6 +39,8 @@ _EXPECTED_CONTRACT_VERSIONS = {
 }
 _MAX_DELIVERY_ATTEMPTS = 10
 _LEASE_SECONDS = 120
+_INTERACTION_ANALYSIS_LEASE_SECONDS = 600
+_INTERACTION_ANALYSIS_DELIVERY_TIMEOUT_SECONDS = 600
 _AGENT_MANIFEST_CACHE_KEY = "crm_agents:contract_manifest:v1"
 _AGENT_MANIFEST_CACHE_TTL_SECONDS = 60
 SLA_NOTIFICATION_EVENT = "student.sla.notification.v1"
@@ -779,7 +781,12 @@ def deliver_agent_event(event_name: str) -> None:
 		_quiesce_contract_mismatch(event)
 		return
 	lease_id = str(uuid.uuid4())
-	lease_until = now_datetime() + timedelta(seconds=_LEASE_SECONDS)
+	lease_seconds = (
+		_INTERACTION_ANALYSIS_LEASE_SECONDS
+		if event.event_type == "interaction.analysis.requested.v1"
+		else _LEASE_SECONDS
+	)
+	lease_until = now_datetime() + timedelta(seconds=lease_seconds)
 	claim_condition = "(status = 'pending' or (status = 'processing' and lease_expires_at < %(now)s))" if {"lease_id", "lease_expires_at"}.issubset(fields) else "status = 'pending'"
 	frappe.db.sql(
 		"UPDATE `tabCRM Agent Event` SET status = 'processing'" + (", lease_id = %(lease_id)s, lease_expires_at = %(lease_until)s" if {"lease_id", "lease_expires_at"}.issubset(fields) else "") + " WHERE name = %(name)s AND " + claim_condition,
@@ -814,7 +821,11 @@ def deliver_agent_event(event_name: str) -> None:
 				"X-CRM-Timestamp": timestamp,
 				"X-CRM-KID": kid,
 			},
-			timeout=10,
+			timeout=(
+				_INTERACTION_ANALYSIS_DELIVERY_TIMEOUT_SECONDS
+				if event.event_type == "interaction.analysis.requested.v1"
+				else 10
+			),
 		)
 		response.raise_for_status()
 	except Exception as exc:

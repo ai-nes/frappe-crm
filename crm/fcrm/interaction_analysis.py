@@ -20,7 +20,10 @@ from crm.fcrm.intelligence_runs import (
 )
 
 _STATES = {"no_intent", "intent_bearing", "unknown", "failed"}
-_LEASE_SECONDS = 120
+# The conversation agent may retry the provider up to two times. Keep the
+# Frappe execution lease longer than the maximum provider request duration so
+# a slow but valid analysis cannot be reclaimed by a duplicate delivery.
+_LEASE_SECONDS = 600
 _PII_EMAIL = re.compile(r"\b[^\s@]+@[^\s@]+\.[^\s@]+\b")
 _PII_PHONE = re.compile(r"(?<!\d)(?:\+?\d[\d .()-]{7,}\d)(?!\d)")
 _ISO_DATE_OR_TIMESTAMP = re.compile(
