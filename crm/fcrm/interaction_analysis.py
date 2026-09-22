@@ -252,7 +252,7 @@ def _validate_conversation_summary(value: Any) -> dict[str, Any]:
 				frappe.ValidationError,
 			)
 		allowed_roles = {"student", "parent"}
-		if name == "resolution":
+		if name in {"resolution", "result"}:
 			allowed_roles.add("advisor")
 		validated_refs = []
 		for index, ref in enumerate(refs):
