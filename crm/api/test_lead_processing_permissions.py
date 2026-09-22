@@ -26,6 +26,7 @@ class TestLeadProcessingPermissionContracts(FrappeTestCase):
 		capabilities = capabilities_for_roles({"Lead Sale"})
 		self.assertIn("student.execute", capabilities)
 		self.assertIn("student.ownership.manage", capabilities)
+		self.assertIn("student.routing.operate", capabilities)
 
 	def test_marketing_does_not_receive_sales_mutations(self):
 		capabilities = capabilities_for_roles({"Marketing"})

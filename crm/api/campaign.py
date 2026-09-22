@@ -25,6 +25,10 @@ CAMPAIGN_FIELDS = [
 	"budget",
 	"owner_staff",
 	"owning_team",
+	"lead_routing_enabled",
+	"lead_routing_target_type",
+	"lead_routing_target_team",
+	"lead_routing_target_group",
 	"platform",
 	"channel_boundary",
 	"channel_type",
@@ -53,6 +57,10 @@ WRITABLE_FIELDS = [
 	"budget",
 	"owner_staff",
 	"owning_team",
+	"lead_routing_enabled",
+	"lead_routing_target_type",
+	"lead_routing_target_team",
+	"lead_routing_target_group",
 	"platform",
 	"channel_boundary",
 	"channel_type",
@@ -281,6 +289,33 @@ def get_campaign(code: str | None = None, name: str | None = None) -> dict[str, 
 	doc = frappe.get_doc("CRM Campaign", campaign_name or identifier)
 	doc.check_permission("read")
 	return doc.as_dict()
+
+
+@frappe.whitelist(methods=["GET"])
+def get_campaign_routing_options() -> dict[str, Any]:
+	"""Return active Sales Teams and Team Groups for campaign Lead routing."""
+	return {
+		"teams": [
+			dict(row)
+			for row in frappe.get_list(
+				"CRM Team",
+				filters={"is_active": 1, "team_type": "Sales"},
+				fields=["name", "team_name", "campus", "group"],
+				order_by="team_name asc, name asc",
+				limit_page_length=5000,
+			)
+		],
+		"groups": [
+			dict(row)
+			for row in frappe.get_list(
+				"CRM Team Group",
+				filters={"is_active": 1},
+				fields=["name", "group_name", "province"],
+				order_by="group_name asc, name asc",
+				limit_page_length=5000,
+			)
+		],
+	}
 
 
 @frappe.whitelist(methods=["POST"])

@@ -406,7 +406,224 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 			trigger="scheduled_unassigned_leads",
 			blocking=False,
 			blocking_timeout=None,
-			min_age_minutes=5,
+		)
+
+	def test_manual_unassigned_scan_ignores_configured_wait_time(self):
+		expected = {"status": "no_work", "batch": None}
+		with (
+			patch.object(lead_assignment_batch, "_require_access", return_value={}),
+			patch.object(
+				lead_assignment_batch,
+				"_run_unassigned_lead_assignment",
+				return_value=expected,
+			) as run_scan,
+		):
+			result = lead_assignment_batch.run_unassigned_lead_assignment()
+
+		self.assertIs(result, expected)
+		run_scan.assert_called_once_with(
+			{},
+			trigger="unassigned_leads",
+			blocking=True,
+			blocking_timeout=10,
+			min_age_minutes=0,
+		)
+
+	def test_scheduled_unassigned_scan_uses_workflow_input_settings(self):
+		config = {
+			"stored": {
+				"input": {
+					"enabled": True,
+					"scheduledMinAgeMinutes": 12,
+					"maxLeadsPerRun": 7,
+				},
+				"classification": {"enabled": True},
+				"review": {"maxRetries": 3},
+			}
+		}
+		lock = MagicMock()
+		lock.acquire.return_value = True
+		with (
+			patch.object(lead_assignment_batch, "get_workflow_config", return_value=config),
+			patch.object(lead_assignment_batch, "_assignment_run_lock", return_value=lock),
+			patch.object(lead_assignment_batch, "_unassigned_lead_names", return_value=[]) as scan,
+		):
+			result = lead_assignment_batch._run_unassigned_lead_assignment(
+				{},
+				trigger="scheduled_unassigned_leads",
+				blocking=False,
+				blocking_timeout=None,
+			)
+
+		self.assertEqual(result["status"], "no_work")
+		self.assertEqual(
+			scan.call_args.kwargs,
+			{"min_age_minutes": 12, "limit": 7},
+		)
+
+	def test_disabled_input_step_skips_scheduler_before_lock(self):
+		config = {"stored": {"input": {"enabled": False}}}
+		with (
+			patch.object(lead_assignment_batch, "get_workflow_config", return_value=config),
+			patch.object(
+				lead_assignment_batch,
+				"_assignment_run_lock",
+				side_effect=AssertionError("disabled workflow must not acquire a lock"),
+			),
+		):
+			result = lead_assignment_batch._run_unassigned_lead_assignment(
+				{},
+				trigger="scheduled_unassigned_leads",
+				blocking=False,
+				blocking_timeout=None,
+			)
+
+		self.assertEqual(result["status"], "disabled")
+
+	def test_disabled_classification_uses_saved_processing_result(self):
+		lead = frappe._dict(
+			name="LEAD-STORED-RESULT",
+			processing_status="PROCESSED",
+			resolution="PENDING",
+			resolution_reason="Đã xử lý trước đó",
+			student_name="Nguyễn Văn A",
+			phone="0900000000",
+			province="PROVINCE-1",
+			owner_staff=None,
+			assigned_to=None,
+			converted_student=None,
+			ownership_revision=1,
+		)
+		item = frappe._dict(
+			status="pending",
+			retry_count=0,
+			error_code=None,
+			owner_staff=None,
+		)
+		recipient = {
+			"reason": "Đã dùng kết quả xử lý Lead đã lưu.",
+			"team": "TEAM-1",
+			"ownerStaff": "STAFF-1",
+			"capacity": {"active": 1, "limit": 10, "remaining": 9},
+			"policyVersion": "lead-routing-v1",
+		}
+		with (
+			patch.object(lead_assignment_batch, "_batch_item_lead", return_value=lead),
+			patch.object(lead_assignment_batch, "_validate_batch_scope"),
+			patch.object(lead_assignment_batch, "preview_lead") as preview,
+			patch.object(lead_assignment_batch, "_resolve_batch_recipient", return_value=recipient),
+		):
+			lead_assignment_batch._preview_item(
+				self._BatchScope(),
+				item,
+				{},
+				workflow_config={
+					"stored": {
+						"classification": {"enabled": False},
+					}
+				},
+			)
+
+		preview.assert_not_called()
+		self.assertEqual(item.status, "pending")
+		self.assertEqual(item.owner_staff, "STAFF-1")
+		self.assertEqual(item.reason, recipient["reason"])
+
+	def test_retry_is_blocked_when_batch_item_reaches_snapshot_limit(self):
+		class RetryBatch(SimpleNamespace):
+			def get(self, key, default=None):
+				return getattr(self, key, default)
+
+		batch = RetryBatch(
+			name="BATCH-RETRY",
+			workflow_config_snapshot={
+				"version": "lead-assignment-workflow-v2",
+				"stored": {"review": {"maxRetries": 2}},
+			},
+			items=[
+				frappe._dict(
+					name="ITEM-1",
+					status="manual_review",
+					error_code="NO_ELIGIBLE_RECIPIENT",
+					retry_count=2,
+				)
+			],
+		)
+		with (
+			patch.object(lead_assignment_batch, "_require_access", return_value={}),
+			patch.object(lead_assignment_batch.frappe, "get_doc", return_value=batch),
+			patch.object(lead_assignment_batch, "_save_batch"),
+			patch.object(lead_assignment_batch.frappe.db, "commit"),
+			patch.object(
+				lead_assignment_batch,
+				"_serialize_batch",
+				return_value={"status": "completed_with_errors"},
+			) as serialize,
+		):
+			result = lead_assignment_batch.retry_lead_assignment_batch("BATCH-RETRY")
+
+		self.assertEqual(result, {"status": "completed_with_errors"})
+		self.assertEqual(batch.items[0].retry_count, 2)
+		self.assertEqual(batch.items[0].error_code, "RETRY_LIMIT_REACHED")
+		serialize.assert_called_once_with(batch)
+
+	def test_first_run_persists_workflow_and_routing_policy_snapshot(self):
+		class RunBatch(SimpleNamespace):
+			def get(self, key, default=None):
+				return getattr(self, key, default)
+
+		batch = RunBatch(
+			name="BATCH-SNAPSHOT",
+			batch_name="Batch snapshot",
+			status="ready",
+			province=None,
+			target_team=None,
+			pool=None,
+			source="manual",
+			description="Snapshot test",
+			created_by="Administrator",
+			execution_id=None,
+			workflow_config_version=None,
+			workflow_config_snapshot=None,
+			started_at=None,
+			completed_at=None,
+			items=[],
+			total_count=0,
+			assigned_count=0,
+			deferred_count=0,
+			manual_review_count=0,
+			failed_count=0,
+		)
+		batch.reload = lambda: None
+		workflow_config = {
+			"schemaVersion": "lead-assignment-workflow-v1",
+			"version": "lead-assignment-workflow-v6",
+			"revision": 6,
+			"stored": {
+				"input": {"enabled": True, "scheduledMinAgeMinutes": 5, "maxLeadsPerRun": 1000},
+				"classification": {"enabled": True},
+				"review": {"maxRetries": 3},
+			},
+		}
+		policy = {
+			"version": "lead-routing-v9",
+			"layerOrder": ["campaign", "group", "global"],
+			"layers": [],
+		}
+		with (
+			patch.object(lead_assignment_batch, "_require_access", return_value={}),
+			patch.object(lead_assignment_batch.frappe, "get_doc", return_value=batch),
+			patch.object(lead_assignment_batch, "get_workflow_config", return_value=workflow_config),
+			patch.object(lead_assignment_batch, "get_lead_routing_policy", return_value=policy),
+			patch.object(lead_assignment_batch, "_preview_batch_items"),
+			patch.object(lead_assignment_batch, "_save_batch"),
+			patch.object(lead_assignment_batch.frappe.db, "commit"),
+		):
+			lead_assignment_batch.run_lead_assignment_batch(batch.name)
+
+		self.assertEqual(batch.workflow_config_version, "lead-assignment-workflow-v6")
+		self.assertEqual(
+			batch.workflow_config_snapshot["matching"]["routingPolicy"], policy
 		)
 
 	def test_assignment_batch_has_no_student_handoff_helper(self):
@@ -417,19 +634,24 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		batch = self._BatchScope()
 		lead = frappe._dict(name="LEAD-1", province="Ho Chi Minh City", branch="CAMPUS-1")
 		overrides = {"STAFF-1": 1}
+		policy = {"enabled": True, "version": "lead-routing-v1"}
 		with (
 			patch.object(lead_assignment_batch, "_canonical_province", return_value="Ho Chi Minh City"),
 			patch.object(lead_assignment_batch, "_validate_batch_scope", return_value=None),
 			patch.object(
 				lead_assignment_batch,
-				"select_province_recipient",
+				"resolve_lead_recipient",
 				return_value={"ownerStaff": "STAFF-2"},
-			) as select,
+			) as resolve,
 		):
-			lead_assignment_batch._resolve_batch_recipient(batch, lead, {}, load_overrides=overrides)
+			lead_assignment_batch._resolve_batch_recipient(
+				batch, lead, {}, load_overrides=overrides, policy=policy
+			)
 
-		select.assert_called_once_with(
-			"Ho Chi Minh City",
+		resolve.assert_called_once_with(
+			lead,
+			policy=policy,
+			province="Ho Chi Minh City",
 			campus="CAMPUS-1",
 			team_id=None,
 			load_overrides=overrides,
@@ -596,44 +818,45 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 				team_routing.select_province_fallback_recipient("Ho Chi Minh City")
 		self.assertEqual(context.exception.code, "NO_ELIGIBLE_RECIPIENT")
 
-	def test_batch_recipient_falls_back_to_team_lead_when_no_eligible_recipient(self):
+	def test_batch_recipient_does_not_fall_back_to_team_lead_when_no_eligible_recipient(self):
 		batch = self._BatchScope()
 		lead = frappe._dict(name="LEAD-1", province="Ho Chi Minh City", branch="CAMPUS-1")
 		no_eligible = frappe.ValidationError("Không có Team đủ điều kiện: TEAM-1: chưa có Sale/CTV.")
 		no_eligible.code = "NO_ELIGIBLE_RECIPIENT"
+		policy = {"enabled": True, "version": "lead-routing-v1"}
 		with (
 			patch.object(lead_assignment_batch, "_canonical_province", return_value="Ho Chi Minh City"),
 			patch.object(lead_assignment_batch, "_validate_batch_scope", return_value=None),
-			patch.object(lead_assignment_batch, "select_province_recipient", side_effect=no_eligible),
 			patch.object(
 				lead_assignment_batch,
-				"select_province_fallback_recipient",
-				return_value={"ownerStaff": "STAFF-LEAD", "fallback": True},
-			) as fallback,
-		):
-			result = lead_assignment_batch._resolve_batch_recipient(batch, lead, {})
-
-		fallback.assert_called_once_with("Ho Chi Minh City", campus="CAMPUS-1", team_id=None)
-		self.assertTrue(result["fallback"])
-
-	def test_batch_recipient_does_not_fall_back_when_no_team_covers_province(self):
-		batch = self._BatchScope()
-		lead = frappe._dict(name="LEAD-1", province="Unknown Province", branch="CAMPUS-1")
-		not_found = frappe.ValidationError("Chưa có Team đang hoạt động quản lý tỉnh của Lead.")
-		not_found.code = "TEAM_NOT_FOUND_FOR_PROVINCE"
-		with (
-			patch.object(lead_assignment_batch, "_canonical_province", return_value="Unknown Province"),
-			patch.object(lead_assignment_batch, "_validate_batch_scope", return_value=None),
-			patch.object(lead_assignment_batch, "select_province_recipient", side_effect=not_found),
-			patch.object(
-				lead_assignment_batch,
-				"select_province_fallback_recipient",
-				side_effect=AssertionError("must not fall back when no Team covers the province"),
-			),
+				"resolve_lead_recipient",
+				side_effect=no_eligible,
+			) as resolve,
 		):
 			with self.assertRaises(frappe.ValidationError) as context:
-				lead_assignment_batch._resolve_batch_recipient(batch, lead, {})
-		self.assertEqual(context.exception.code, "TEAM_NOT_FOUND_FOR_PROVINCE")
+				lead_assignment_batch._resolve_batch_recipient(batch, lead, {}, policy=policy)
+
+		resolve.assert_called_once()
+		self.assertEqual(context.exception.code, "NO_ELIGIBLE_RECIPIENT")
+
+	def test_batch_recipient_allows_global_layer_when_province_is_missing(self):
+		batch = self._BatchScope()
+		lead = frappe._dict(name="LEAD-1", province=None, branch="CAMPUS-1")
+		policy = {"enabled": True, "version": "lead-routing-v1"}
+		recipient = {"ownerStaff": "STAFF-1", "team": "TEAM-1"}
+		with (
+			patch.object(lead_assignment_batch, "_canonical_province", return_value=None),
+			patch.object(lead_assignment_batch, "_validate_batch_scope", return_value=None),
+			patch.object(
+				lead_assignment_batch,
+				"resolve_lead_recipient",
+				return_value=recipient,
+			) as resolve,
+		):
+			result = lead_assignment_batch._resolve_batch_recipient(batch, lead, {}, policy=policy)
+
+		self.assertIs(result, recipient)
+		self.assertIsNone(resolve.call_args.kwargs["province"])
 
 	def test_batch_recipient_does_not_fall_back_when_capacity_not_configured(self):
 		"""Missing capacity must land in manual_review, not silently on the Trưởng nhóm.
@@ -650,18 +873,18 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 			"Team có Sale/CTV nhưng chưa ai được thiết lập capacity: Nguyễn Minh Khôi."
 		)
 		not_configured.code = "STAFF_CAPACITY_NOT_CONFIGURED"
+		policy = {"enabled": True, "version": "lead-routing-v1"}
 		with (
 			patch.object(lead_assignment_batch, "_canonical_province", return_value="Ho Chi Minh City"),
 			patch.object(lead_assignment_batch, "_validate_batch_scope", return_value=None),
-			patch.object(lead_assignment_batch, "select_province_recipient", side_effect=not_configured),
 			patch.object(
 				lead_assignment_batch,
-				"select_province_fallback_recipient",
-				side_effect=AssertionError("must not fall back when capacity was never configured"),
+				"resolve_lead_recipient",
+				side_effect=not_configured,
 			),
 		):
 			with self.assertRaises(frappe.ValidationError) as context:
-				lead_assignment_batch._resolve_batch_recipient(batch, lead, {})
+				lead_assignment_batch._resolve_batch_recipient(batch, lead, {}, policy=policy)
 		self.assertEqual(context.exception.code, "STAFF_CAPACITY_NOT_CONFIGURED")
 
 	def test_reset_item_expands_bare_error_code_into_a_specific_reason(self):
@@ -690,12 +913,12 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		with patch.object(lead_assignment_batch, "frappe", frappe_stub):
 			return lead_assignment_batch._retryable_item(item)
 
-	def test_retry_skips_permanent_failure_while_lead_stays_closed(self):
+	def test_retry_keeps_missing_province_review_retryable(self):
 		item = self._RetryItem("manual_review", "MISSING_PROVINCE")
-		self.assertFalse(self._is_retryable(item, "CLOSED"))
+		self.assertTrue(self._is_retryable(item, "CLOSED"))
 
 	def test_retry_accepts_permanent_failure_once_lead_is_reopened(self):
-		item = self._RetryItem("manual_review", "MISSING_PROVINCE")
+		item = self._RetryItem("manual_review", "INVALID_CURRENT_OWNERSHIP")
 		self.assertTrue(self._is_retryable(item, "PROCESSED"))
 
 	def test_retry_accepts_routing_review_failure_without_reopening(self):

@@ -2,8 +2,9 @@
 
 The backend keeps the explicit batch document as an audit record, while the
 operator-facing flow can simply scan every unassigned Lead and run the
-province-based resolver.  The older explicit create/import APIs remain for
-backward compatibility and historical records.
+ordered Campaign → Group/province → campus policy resolver. The older
+explicit create/import APIs remain for backward compatibility and historical
+records.
 """
 
 from __future__ import annotations
@@ -18,6 +19,9 @@ from frappe.utils import add_to_date, getdate, now_datetime, today
 from crm.api import lead_mapping
 from crm.api.assignment_workspace import _actor_context
 from crm.fcrm.lead_identity import resolve_lead_name
+from crm.fcrm.lead_assignment_workflow import (
+	get_lead_assignment_workflow_config as get_workflow_config,
+)
 from crm.fcrm.lead_processing import (
 	_operator_lead_reason,
 	_processing_validation_issues,
@@ -37,9 +41,8 @@ from crm.fcrm.team_routing import (
 	active_lead_count,
 	province_for_zone,
 	require_team_routing_ready,
-	select_province_fallback_recipient,
-	select_province_recipient,
 )
+from crm.fcrm.lead_routing_policy import get_lead_routing_policy, resolve_lead_recipient
 
 BATCH_DOCTYPE = "CRM Lead Assignment Batch"
 MAX_BATCH_SIZE = 1000
@@ -61,14 +64,16 @@ ROUTING_REVIEW_CODES = frozenset(
 		"TEAM_SCOPE_MISMATCH",
 		"MISSING_INPUT_QUEUE",
 		"MULTIPLE_INPUT_QUEUES",
+		"LEAD_ROUTING_DISABLED",
+		"CAMPAIGN_MAPPING_INVALID",
+		"CAMPAIGN_TARGET_UNAVAILABLE",
+		"GROUP_TARGET_UNAVAILABLE",
+		"NO_ROUTING_LAYER",
 	}
 )
 PERMANENT_ASSIGNMENT_ERROR_CODES = frozenset(
 	{
 		"INVALID_CURRENT_OWNERSHIP",
-		"MISSING_PROVINCE",
-		"MISSING_CAMPUS",
-		"TEAM_NOT_FOUND_FOR_PROVINCE",
 		"PROVINCE_MISMATCH",
 		"TEAM_PROVINCE_MISMATCH",
 		"TEAM_SCOPE_MISMATCH",
@@ -86,6 +91,11 @@ GENERIC_REASON_LABELS = {
 	"INVALID_PROCESSING_STATUS": "Trạng thái xử lý của Lead không hợp lệ để phân công.",
 	"MISSING_PROVINCE": "Lead chưa có tỉnh/thành phố nên chưa thể xác định Team.",
 	"MISSING_CAMPUS": "Lead chưa xác định được cơ sở nên chưa thể kiểm tra Team.",
+	"LEAD_ROUTING_DISABLED": "Cơ chế phân bổ Lead hiện đang tắt; hãy bật lại policy trước khi chạy.",
+	"CAMPAIGN_MAPPING_INVALID": "Campaign chưa có cấu hình đích phân bổ hợp lệ.",
+	"CAMPAIGN_TARGET_UNAVAILABLE": "Đích phân bổ của Campaign không còn hoạt động hoặc không cùng cơ sở.",
+	"GROUP_TARGET_UNAVAILABLE": "Tỉnh của Lead chưa có Team Sales đang hoạt động để nhận Lead.",
+	"NO_ROUTING_LAYER": "Không có lớp phân bổ nào đang bật và phù hợp với Lead.",
 	"PREVIEW_FAILED": "Không thể xem trước phân công do lỗi hệ thống ngoài dự kiến.",
 	"ROUTING_FAILED": "Không thể hoàn tất phân công tự động do lỗi cấu hình Team.",
 }
@@ -163,13 +173,14 @@ LEAD_ASSIGNMENT_WORKFLOW_STEP_DEFINITIONS = (
 	(
 		"matching",
 		{
-			"title": "Bước 4 · Tìm Team theo tỉnh",
-			"description": "Tỉnh · Team phụ trách · Sale/CTV",
-			"detail": "Hệ thống tìm các Team đang phụ trách tỉnh của Lead rồi chọn Sale/CTV phù hợp.",
+			"title": "Bước 4 · Xác định tuyến phân bổ",
+			"description": "Campaign · Team Group/tỉnh · campus",
+			"detail": "Hệ thống xét lớp policy đang bật theo thứ tự ưu tiên rồi chọn Sale/CTV phù hợp trong đúng campus.",
 			"rules": [
-				"Tỉnh của Lead được dùng làm căn cứ tìm Team.",
-				"Một tỉnh có thể có nhiều Team cùng phụ trách.",
-				"Team không có người đang hoạt động sẽ không được chọn.",
+				"Campaign mapping hợp lệ được ưu tiên trước.",
+				"Nếu không có mapping Campaign, tỉnh sẽ tìm toàn bộ Team trong Group tương ứng.",
+				"Lớp campus chia đều bỏ qua tỉnh/Group nhưng không vượt campus của Lead.",
+				"Team không có Sale/CTV đủ điều kiện sẽ dừng ở manual review trong đúng lớp đã khớp.",
 			],
 			"tone": "primary",
 		},
@@ -551,6 +562,8 @@ def _preview_item(
 	actor_context: dict[str, Any],
 	*,
 	load_overrides: dict[str, int] | None = None,
+	policy: dict[str, Any] | None = None,
+	workflow_config: dict[str, Any] | None = None,
 ) -> None:
 	lead = _batch_item_lead(item)
 	_validate_batch_scope(batch, lead, actor_context)
@@ -570,7 +583,35 @@ def _preview_item(
 		_reset_item(item, status="manual_review", reason="NOT_PROCESSED")
 		item.error_code = "NOT_PROCESSED"
 		return
-	processing = preview_lead(lead.name)
+	workflow_config = workflow_config or get_workflow_config()
+	classification_enabled = bool(
+		workflow_config.get("stored", {})
+		.get("classification", {})
+		.get("enabled", True)
+	)
+	if not classification_enabled and processing_status != "PROCESSED":
+		_reset_item(
+			item,
+			status="manual_review",
+			reason=lead.get("resolution_reason") or "Lead chưa có kết quả xử lý hợp lệ.",
+		)
+		item.error_code = "INVALID_PROCESSING_STATUS"
+		return
+	if not classification_enabled:
+		validation_reason = _processing_validation_reason(lead)
+		if validation_reason:
+			_reset_item(item, status="manual_review", reason=validation_reason)
+			item.error_code = "INVALID_PROCESSING_STATUS"
+			return
+	processing = (
+		preview_lead(lead.name)
+		if classification_enabled
+		else {
+			"status": "PROCESSED",
+			"reason": "Đã dùng kết quả xử lý Lead đã lưu.",
+			"error_code": None,
+		}
+	)
 	item.reason = processing.get("reason") or "Đã kiểm tra đủ họ tên, số điện thoại và tỉnh/thành phố."
 	item.error_code = processing.get("error_code")
 	if processing.get("status") == "CLOSED":
@@ -583,22 +624,17 @@ def _preview_item(
 		_reset_item(item, status="manual_review", reason="INVALID_PROCESSING_STATUS")
 		item.error_code = "INVALID_PROCESSING_STATUS"
 		return
-	province = _canonical_province(lead.get("province"))
-	if not province:
-		_close_invalid_assignment_lead(lead.name, "Lead bị đóng: thiếu tỉnh để xác định Team quản lý.")
-		_reset_item(item, status="failed", reason="MISSING_PROVINCE")
-		item.error_code = "MISSING_PROVINCE"
-		return
 	recipient = _resolve_batch_recipient(
 		batch,
 		lead,
 		actor_context,
 		load_overrides=load_overrides,
+		policy=policy,
 	)
 	item.status = "pending"
 	item.reason = recipient["reason"]
-	item.routing_tier = "province_fallback_lead" if recipient.get("fallback") else "province"
-	item.queue = f"PROVINCE:{province}"
+	item.routing_tier = recipient.get("tier") or "group"
+	item.queue = recipient.get("queue")
 	item.zone = None
 	item.team = recipient["team"]
 	item.owner_staff = recipient["ownerStaff"]
@@ -610,53 +646,51 @@ def _preview_item(
 	item.error_code = None
 
 
-def _resolve_batch_recipient(batch, lead, actor_context: dict[str, Any], *, load_overrides=None):
-	"""Resolve a Team and Sale/CTV from the Lead's canonical Province.
-
-	When the province and campus are valid but no Sale/CTV is currently
-	eligible (``NO_ELIGIBLE_RECIPIENT`` — everyone full, or the team has no
-	active staff at all), fall back to the covering Team's own Trưởng nhóm so
-	the Lead still gets an accountable owner instead of sitting unassigned.
-
-	``STAFF_CAPACITY_NOT_CONFIGURED`` deliberately skips that fallback: it
-	means a Sale/CTV exists and is active but was never given a capacity
-	period, which is an admin setup gap, not a staffing gap — the Lead must
-	wait in manual review so it re-routes to the right person once capacity
-	is configured, instead of quietly landing on the Trưởng nhóm forever. A
-	missing province/campus or a province with no Team at all also cannot
-	fall back to anyone and is left as the specific routing failure.
-	"""
+def _resolve_batch_recipient(
+	batch,
+	lead,
+	actor_context: dict[str, Any],
+	*,
+	load_overrides=None,
+	policy: dict[str, Any] | None = None,
+):
+	"""Resolve a Lead using one immutable snapshot of the active policy."""
 	province = _canonical_province(lead.get("province"))
-	if not province:
-		_raise_batch_error("MISSING_PROVINCE", "Lead chưa có tỉnh để phân công.")
 	_validate_batch_scope(batch, lead, actor_context)
-	try:
-		return select_province_recipient(
-			province,
-			campus=lead.get("branch"),
-			team_id=batch.target_team or None,
-			load_overrides=load_overrides,
-		)
-	except Exception as exc:
-		code = getattr(exc, "code", None) or getattr(exc, "error_code", None)
-		if code != "NO_ELIGIBLE_RECIPIENT":
-			raise
-		return select_province_fallback_recipient(
-			province,
-			campus=lead.get("branch"),
-			team_id=batch.target_team or None,
-		)
+	return resolve_lead_recipient(
+		lead,
+		policy=policy or get_lead_routing_policy(),
+		province=province,
+		campus=lead.get("branch"),
+		team_id=batch.target_team or None,
+		load_overrides=load_overrides,
+	)
 
 
-def _preview_batch_items(batch, actor_context: dict[str, Any]) -> None:
+def _preview_batch_items(
+	batch,
+	actor_context: dict[str, Any],
+	*,
+	policy: dict[str, Any] | None = None,
+	workflow_config: dict[str, Any] | None = None,
+) -> None:
 	"""Evaluate every item before execution, keeping exceptions out of the run path."""
 	_sync_batch_scope(batch, actor_context)
+	policy = policy or get_lead_routing_policy()
 	load_overrides: dict[str, int] = {}
+	workflow_config = workflow_config or get_workflow_config()
 	for item in batch.items:
 		if item.status in TERMINAL_ITEM_STATUSES:
 			continue
 		try:
-			_preview_item(batch, item, actor_context, load_overrides=load_overrides)
+			_preview_item(
+				batch,
+				item,
+				actor_context,
+				load_overrides=load_overrides,
+				policy=policy,
+				workflow_config=workflow_config,
+			)
 			if item.status == "pending" and item.owner_staff:
 				load_overrides[item.owner_staff] = load_overrides.get(item.owner_staff, 0) + 1
 		except Exception as exc:
@@ -719,6 +753,7 @@ def _persist_item(item) -> None:
 		"capacity_limit",
 		"remaining_capacity",
 		"policy_version",
+		"retry_count",
 		"ownership_revision",
 		"routing_request",
 		"execution_id",
@@ -730,7 +765,13 @@ def _persist_item(item) -> None:
 		{
 			fieldname: (
 				int(item.get(fieldname) or 0)
-				if fieldname in {"active_load", "capacity_limit", "remaining_capacity", "ownership_revision"}
+				if fieldname in {
+					"active_load",
+					"capacity_limit",
+					"remaining_capacity",
+					"ownership_revision",
+					"retry_count",
+				}
 				else item.get(fieldname)
 			)
 			for fieldname in fields
@@ -812,6 +853,7 @@ def _serialize_item(item) -> dict[str, Any]:
 		"capacityLimit": item.capacity_limit or None,
 		"remainingCapacity": item.remaining_capacity if item.capacity_limit else None,
 		"policyVersion": item.policy_version,
+		"retryCount": int(item.get("retry_count") or 0),
 		"ownershipRevision": item.ownership_revision,
 		"routingRequest": item.routing_request,
 		"executionId": item.execution_id,
@@ -975,6 +1017,7 @@ def _serialize_batch_header(batch) -> dict[str, Any]:
 		"updatedAt": str(batch.get("modified")) if batch.get("modified") else None,
 		"previewedAt": str(batch.get("previewed_at")) if batch.get("previewed_at") else None,
 		"completedAt": str(batch.get("completed_at")) if batch.get("completed_at") else None,
+		"workflowConfigVersion": batch.get("workflow_config_version"),
 	}
 
 
@@ -1198,10 +1241,36 @@ def _serialize_batch(batch) -> dict[str, Any]:
 		"description": batch.description,
 		"createdBy": batch.created_by,
 		"executionId": batch.execution_id,
+		"workflowConfigVersion": batch.get("workflow_config_version"),
+		"workflowConfigSnapshot": batch.get("workflow_config_snapshot"),
 		"startedAt": str(batch.started_at) if batch.started_at else None,
 		"completedAt": str(batch.completed_at) if batch.completed_at else None,
 		"summary": _batch_summary(batch),
 		"items": [_serialize_item(item) for item in batch.items],
+	}
+
+
+def _stored_workflow_snapshot(batch) -> dict[str, Any] | None:
+	"""Read a complete workflow snapshot from a batch, if one exists."""
+	raw_snapshot = batch.get("workflow_config_snapshot")
+	if isinstance(raw_snapshot, str) and raw_snapshot.strip():
+		try:
+			raw_snapshot = frappe.parse_json(raw_snapshot)
+		except (TypeError, ValueError):
+			return None
+	if not isinstance(raw_snapshot, dict) or not raw_snapshot.get("stored"):
+		return None
+	return raw_snapshot
+
+
+def _workflow_batch_snapshot(workflow_config: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
+	"""Combine workflow knobs and the routing policy into one immutable audit snapshot."""
+	return {
+		**workflow_config,
+		"matching": {
+			"routingPolicy": policy,
+			"noEligibleOutcome": "review",
+		},
 	}
 
 
@@ -1256,6 +1325,7 @@ def create_lead_assignment_batch(
 			{
 				"lead": lead.name,
 				"status": "pending",
+				"retry_count": 0,
 				"ownership_revision": int(lead.get("ownership_revision") or 0),
 			},
 		)
@@ -1397,6 +1467,7 @@ def import_leads_to_assignment_batch(
 				{
 					"lead": lead.name,
 					"status": "pending",
+					"retry_count": 0,
 					"ownership_revision": int(lead.get("ownership_revision") or 0),
 				},
 			)
@@ -1432,7 +1503,7 @@ def preview_lead_assignment_batch(batch_name: str):
 	batch = frappe.get_doc(BATCH_DOCTYPE, batch_name)
 	if batch.status in {"running", "completed", "cancelled"}:
 		frappe.throw(_("Đợt này không còn cho phép kiểm tra trước."), frappe.ValidationError)
-	_preview_batch_items(batch, actor_context)
+	_preview_batch_items(batch, actor_context, policy=get_lead_routing_policy())
 	_save_batch(batch)
 	frappe.db.commit()
 	return _serialize_batch(batch)
@@ -1513,9 +1584,27 @@ def run_lead_assignment_batch(batch_name: str):
 	batch = frappe.get_doc(BATCH_DOCTYPE, batch_name)
 	if batch.status not in RUNNABLE_STATUSES:
 		frappe.throw(_("Đợt phải ở trạng thái Nháp, Sẵn sàng hoặc Có lỗi."), frappe.ValidationError)
-	# Re-check topology immediately before execution. A Group, Team or member
-	# may have changed after the operator first previewed the batch.
-	_preview_batch_items(batch, actor_context)
+	# Re-check topology immediately before the first execution. Once a batch has
+	# started, retries continue using its immutable workflow/policy snapshot.
+	stored_snapshot = _stored_workflow_snapshot(batch)
+	if stored_snapshot:
+		workflow_config = stored_snapshot
+		policy = (
+			stored_snapshot.get("matching", {}).get("routingPolicy")
+			or get_lead_routing_policy()
+		)
+	else:
+		policy = get_lead_routing_policy()
+		workflow_config = get_workflow_config()
+		stored_snapshot = _workflow_batch_snapshot(workflow_config, policy)
+	batch.workflow_config_version = stored_snapshot.get("version")
+	batch.workflow_config_snapshot = stored_snapshot
+	_preview_batch_items(
+		batch,
+		actor_context,
+		policy=policy,
+		workflow_config=workflow_config,
+	)
 	batch.status = "running"
 	batch.execution_id = f"lead-batch-{uuid.uuid4().hex}"
 	batch.started_at = now_datetime()
@@ -1582,7 +1671,7 @@ def run_lead_assignment_batch(batch_name: str):
 				_reset_item(item, status="skipped", reason="ALREADY_ASSIGNED")
 			else:
 				recipient = _resolve_batch_recipient(
-					batch, lead, actor_context, load_overrides=load_overrides
+					batch, lead, actor_context, load_overrides=load_overrides, policy=policy
 				)
 				assignment = assign_lead(
 					lead.name,
@@ -1600,7 +1689,8 @@ def run_lead_assignment_batch(batch_name: str):
 					"owning_team": recipient["team"],
 					"reason": recipient["reason"],
 					"policy_version": recipient["policyVersion"],
-					"tier": "province_fallback_lead" if recipient.get("fallback") else "province",
+					"tier": recipient.get("tier") or "group",
+					"queue": recipient.get("queue"),
 					"revision": assignment.get("ownership", {}).get("revision"),
 					"ownership": assignment.get("ownership") or {},
 				}
@@ -1659,7 +1749,7 @@ def run_lead_assignment_batch(batch_name: str):
 
 
 def _unassigned_lead_names(
-	actor_context: dict[str, Any], *, min_age_minutes: int = 0
+	actor_context: dict[str, Any], *, min_age_minutes: int = 0, limit: int = MAX_BATCH_SIZE
 ) -> list[str]:
 	"""Return visible, processed Leads that still have no owner.
 
@@ -1678,7 +1768,7 @@ def _unassigned_lead_names(
 		filters=filters,
 		fields=["name", "owner_staff", "assigned_to", "converted_student", "resolution"],
 		order_by="creation asc, name asc",
-		limit_page_length=MAX_BATCH_SIZE,
+		limit_page_length=max(1, min(int(limit or MAX_BATCH_SIZE), MAX_BATCH_SIZE)),
 	)
 	lead_names = []
 	for row in rows:
@@ -1696,8 +1786,15 @@ def _unassigned_lead_names(
 	return [name for name in lead_names if name]
 
 
-def _new_unassigned_lead_batch(lead_names: list[str]):
+def _new_unassigned_lead_batch(
+	lead_names: list[str],
+	workflow_config: dict[str, Any] | None = None,
+	policy: dict[str, Any] | None = None,
+):
 	"""Create an internal audit batch for one automatic or manual scan."""
+	workflow_config = workflow_config or get_workflow_config()
+	policy = policy or get_lead_routing_policy()
+	workflow_snapshot = _workflow_batch_snapshot(workflow_config, policy)
 	stamp = now_datetime().strftime("%Y%m%d-%H%M%S")
 	batch_name = f"Phân công Lead {stamp}"
 	if frappe.db.exists(BATCH_DOCTYPE, {"batch_name": batch_name}):
@@ -1710,6 +1807,8 @@ def _new_unassigned_lead_batch(lead_names: list[str]):
 			"source": "system-unassigned-leads",
 			"description": "Hệ thống quét Lead chưa được phân công và chạy theo cấu hình hiện tại.",
 			"created_by": frappe.session.user,
+			"workflow_config_version": workflow_snapshot.get("version"),
+			"workflow_config_snapshot": workflow_snapshot,
 		}
 	)
 	for lead_name in lead_names:
@@ -1719,6 +1818,7 @@ def _new_unassigned_lead_batch(lead_names: list[str]):
 			{
 				"lead": lead.name,
 				"status": "pending",
+				"retry_count": 0,
 				"ownership_revision": int(lead.get("ownership_revision") or 0),
 			},
 		)
@@ -1756,9 +1856,21 @@ def _run_unassigned_lead_assignment(
 	trigger: str,
 	blocking: bool,
 	blocking_timeout: int | None,
-	min_age_minutes: int = 0,
+	min_age_minutes: int | None = None,
 ):
 	"""Run one serialized scan for processed Leads without an owner."""
+	workflow_config = get_workflow_config()
+	input_settings = workflow_config.get("stored", {}).get("input", {})
+	if not input_settings.get("enabled", True):
+		return {
+			"status": "disabled",
+			"message": "Bước Tiếp nhận Lead đang tắt trong cấu hình workflow.",
+			"scanned": 0,
+			"batch": None,
+			"items": [],
+			"summary": _empty_assignment_summary(),
+			"trigger": trigger,
+		}
 	lock = _assignment_run_lock(
 		blocking=blocking,
 		blocking_timeout=blocking_timeout,
@@ -1777,7 +1889,12 @@ def _run_unassigned_lead_assignment(
 	try:
 		lead_names = _unassigned_lead_names(
 			actor_context,
-			min_age_minutes=min_age_minutes,
+			min_age_minutes=(
+				input_settings.get("scheduledMinAgeMinutes", 5)
+				if min_age_minutes is None
+				else min_age_minutes
+			),
+			limit=input_settings.get("maxLeadsPerRun", MAX_BATCH_SIZE),
 		)
 		if not lead_names:
 			return {
@@ -1790,7 +1907,11 @@ def _run_unassigned_lead_assignment(
 				"trigger": trigger,
 			}
 
-		batch = _new_unassigned_lead_batch(lead_names)
+		batch = _new_unassigned_lead_batch(
+			lead_names,
+			workflow_config,
+			policy=get_lead_routing_policy(),
+		)
 		result = run_lead_assignment_batch(batch.name)
 		result["scanned"] = len(lead_names)
 		result["trigger"] = trigger
@@ -1813,6 +1934,7 @@ def run_unassigned_lead_assignment():
 		trigger="unassigned_leads",
 		blocking=True,
 		blocking_timeout=10,
+		min_age_minutes=0,
 	)
 
 
@@ -1826,7 +1948,6 @@ def run_scheduled_unassigned_lead_assignment():
 			trigger="scheduled_unassigned_leads",
 			blocking=False,
 			blocking_timeout=None,
-			min_age_minutes=5,
 		)
 	finally:
 		frappe.set_user(previous_user)
@@ -1836,12 +1957,28 @@ def run_scheduled_unassigned_lead_assignment():
 def retry_lead_assignment_batch(batch_name: str, item_ids: list[str] | str | None = None):
 	_require_access()
 	batch = frappe.get_doc(BATCH_DOCTYPE, batch_name)
+	workflow_config = _stored_workflow_snapshot(batch) or get_workflow_config()
+	max_retries = int(
+		workflow_config.get("stored", {}).get("review", {}).get("maxRetries", 3)
+	)
 	selected = set(_parse_list(item_ids, "item_ids")) if item_ids else None
+	reset_count = 0
 	for item in batch.items:
 		if selected is not None and item.name not in selected:
 			continue
 		if _retryable_item(item):
+			retry_count = int(item.get("retry_count") or 0)
+			if retry_count >= max_retries:
+				item.reason = "Đã đạt giới hạn xử lý lại theo cấu hình workflow."
+				item.error_code = "RETRY_LIMIT_REACHED"
+				continue
+			item.retry_count = retry_count + 1
+			reset_count += 1
 			_reset_item(item)
+	if not reset_count:
+		_save_batch(batch)
+		frappe.db.commit()
+		return _serialize_batch(batch)
 	batch.status = "ready"
 	_save_batch(batch)
 	frappe.db.commit()

@@ -27,6 +27,50 @@ class CRMCampaign(Document):
 				_("Campaign Code is immutable after creation."),
 				frappe.ValidationError,
 			)
+		self._validate_lead_routing()
+
+	def _validate_lead_routing(self):
+		if not self.get("lead_routing_enabled"):
+			self.lead_routing_target_type = None
+			self.lead_routing_target_team = None
+			self.lead_routing_target_group = None
+			return
+		target_type = str(self.get("lead_routing_target_type") or "").strip()
+		if target_type not in {"Team", "Team Group"}:
+			frappe.throw(_("Hãy chọn loại đích phân bổ Lead cho Campaign."), frappe.ValidationError)
+		if target_type == "Team":
+			team = self.get("lead_routing_target_team")
+			if not team:
+				frappe.throw(_("Campaign đang bật phân bổ nhưng chưa chọn Team."), frappe.ValidationError)
+			team_row = frappe.db.get_value(
+				"CRM Team", team, ["team_type", "campus", "is_active"], as_dict=True
+			)
+			if not team_row or not team_row.is_active or team_row.team_type != "Sales":
+				frappe.throw(_("Đích phân bổ phải là Team Sales đang hoạt động."), frappe.ValidationError)
+			if team_row.campus != self.get("campus"):
+				frappe.throw(_("Team phân bổ phải cùng cơ sở với Campaign."), frappe.ValidationError)
+			self.lead_routing_target_group = None
+		else:
+			group = self.get("lead_routing_target_group")
+			if not group:
+				frappe.throw(_("Campaign đang bật phân bổ nhưng chưa chọn Team Group."), frappe.ValidationError)
+			group_row = frappe.db.get_value("CRM Team Group", group, ["is_active"], as_dict=True)
+			if not group_row or not group_row.is_active:
+				frappe.throw(_("Team Group phân bổ không tồn tại hoặc đã tắt."), frappe.ValidationError)
+			if not frappe.db.exists(
+				"CRM Team",
+				{
+					"group": group,
+					"campus": self.get("campus"),
+					"team_type": "Sales",
+					"is_active": 1,
+				},
+			):
+				frappe.throw(
+					_("Team Group chưa có Team Sales đang hoạt động trong cùng cơ sở với Campaign."),
+					frappe.ValidationError,
+				)
+			self.lead_routing_target_team = None
 
 	def _ensure_campaign_code(self):
 		if self.get("stable_code"):

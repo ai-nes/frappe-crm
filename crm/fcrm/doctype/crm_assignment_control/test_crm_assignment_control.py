@@ -19,3 +19,7 @@ class TestCRMAssignmentControlSchema(TestCase):
 		self.assertEqual(self.fields["routing_enabled"]["default"], "0")
 		self.assertEqual(self.fields["assignment_mode"]["default"], "manual_batch")
 		self.assertEqual(self.fields["capacity_required"]["default"], "1")
+
+	def test_workflow_control_defaults_to_versioned_json_and_zero_revision(self):
+		self.assertEqual(self.fields["lead_assignment_workflow_config"]["default"], "{}")
+		self.assertEqual(self.fields["lead_workflow_revision"]["default"], "0")
