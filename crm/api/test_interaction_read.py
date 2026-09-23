@@ -56,7 +56,12 @@ class TestInteractionReadHelpers(FrappeTestCase):
 			"crm.api.interaction_read.frappe.get_all",
 			side_effect=[
 				["IAR-1"],
-				[{"name": "IRES-1", "intelligence": json.dumps({"conversation_summary": conversation_summary})}],
+				[
+					{
+						"name": "IRES-1",
+						"intelligence": json.dumps({"conversation_summary": conversation_summary}),
+					}
+				],
 			],
 		):
 			analysis = _safe_analysis("INT-1")
