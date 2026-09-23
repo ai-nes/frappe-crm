@@ -1,3 +1,6 @@
+import json
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
@@ -7,6 +10,7 @@ from crm.api.interaction_read import (
 	_encode_cursor,
 	_family_interaction_types,
 	_query_text,
+	_safe_analysis,
 )
 
 
@@ -32,3 +36,29 @@ class TestInteractionReadHelpers(FrappeTestCase):
 		self.assertEqual(_query_text("  webchat inbound  ", "search"), "webchat inbound")
 		with self.assertRaises(frappe.ValidationError):
 			_query_text("x" * 141, "search")
+
+	def test_safe_analysis_preserves_structured_conversation_result(self):
+		conversation_summary = {
+			"problem": {"identified": True, "description": "Học sinh cần hỗ trợ.", "evidence_refs": []},
+			"resolution": {
+				"status": "partially_resolved",
+				"description": "Tư vấn viên đã giải thích quy trình.",
+				"evidence_refs": [],
+			},
+			"result": {
+				"status": "follow_up_required",
+				"description": "Học sinh đang chờ hồ sơ được xử lý.",
+				"next_action": "Sale kiểm tra tình trạng hồ sơ.",
+				"evidence_refs": [],
+			},
+		}
+		with patch(
+			"crm.api.interaction_read.frappe.get_all",
+			side_effect=[
+				["IAR-1"],
+				[{"name": "IRES-1", "intelligence": json.dumps({"conversation_summary": conversation_summary})}],
+			],
+		):
+			analysis = _safe_analysis("INT-1")
+
+		self.assertEqual(analysis["intelligence"]["conversation_summary"], conversation_summary)
