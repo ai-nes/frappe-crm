@@ -7,8 +7,9 @@ Implements the locked row-level data-scope matrix:
 - System Manager / CRM Manager / Administrator / Admissions Director -> full
 
 The Sale list/detail read and write projection is derived from active Team/Group
-leadership links; deletes remain owner-scoped. Lead Sale and the full-visibility
-profiles use unrestricted dashboard readers where their list contract requires it.
+leadership links; ownership-gated deletes remain the default, while Lead Sale may
+delete any CRM Lead on the Lead board. Lead Sale and the full-visibility profiles
+use unrestricted dashboard readers where their list contract requires it.
 
 One doctype-parameterized function is used for both CRM Contact and CRM Student so the two
 doctypes can never drift into the two inconsistent mechanisms they had before this phase.
@@ -19,6 +20,7 @@ campus-wide-for-everyone condition (pre-Phase-1 behavior) without a code deploy.
 
 import frappe
 
+from crm.fcrm.conversion_readiness import is_lead_converted
 from crm.fcrm.role_policy import (
 	STUDENT_OWNER_PROFILES,
 	case_scope_for_roles,
@@ -264,9 +266,9 @@ def can_read_full_lead_board(user=None) -> bool:
 	Sale is also entitled to inspect every canonical Student. List APIs apply
 	their own explicit full-list reader.
 
-	This is read-only compatibility. The Lead write check remains separate, and
-	Student writes, deletes, assignments, ownership, and lifecycle commands keep
-	their existing checks.
+	This read grant is separate from the Lead-board write/delete exceptions. Student
+	writes, deletes, assignments, ownership, and lifecycle commands keep their
+	existing checks.
 	"""
 	user = user or frappe.session.user
 	return resolve_crm_profile(_get_policy_roles(user)) == "lead_sales"
@@ -287,8 +289,9 @@ def can_write_full_lead_board(user=None) -> bool:
 
 	Lead Sale is the intake/routing operator. Detail and routing writes retain the
 	full-board compatibility scope, while LeadList itself is Group/Team scoped.
-	This exception is limited to CRM Lead writes; Student, read, delete, and
-	ownership/lifecycle command permissions keep their existing checks.
+	This exception is limited to CRM Lead writes; CRM Lead delete access is handled
+	by the Lead-board exception, while Student and ownership/lifecycle command
+	permissions keep their existing checks.
 	"""
 	return can_read_full_lead_board(user)
 
@@ -641,6 +644,14 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 	if permission_type == "create" and not getattr(doc, "name", None):
 		return True
 	if permission_type == "write" and doc.doctype == "CRM Lead" and can_write_full_lead_board(user):
+		return True
+	if permission_type == "delete" and doc.doctype == "CRM Lead" and is_lead_converted(doc):
+		# A converted Lead owns an immutable Student/conversion history. This guard
+		# applies to every role, including full-board operators and administrators.
+		return False
+	if permission_type == "delete" and doc.doctype == "CRM Lead" and can_read_full_lead_board(user):
+		# Lead Sale operates the full Lead board. Its CRM Lead delete grant is
+		# intentionally broader than the ownership-gated Student delete grant.
 		return True
 
 	condition = get_permission_query_conditions(

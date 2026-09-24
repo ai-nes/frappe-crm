@@ -75,6 +75,91 @@ class TestCRMLead(FrappeTestCase):
 		self.assertEqual(student.resolution, "PENDING")
 		self.assertFalse(frappe.db.exists("CRM Student", {"phone": "0981000099"}))
 
+	def test_deleting_lead_removes_empty_assignment_batch(self):
+		lead = self._make_student_with_status("_Test Delete Assignment Lead", "0981000081", "NEW")
+		batch_name = "_Test Delete Assignment Batch"
+		if frappe.db.exists("CRM Lead Assignment Batch", batch_name):
+			frappe.delete_doc("CRM Lead Assignment Batch", batch_name, force=True)
+		batch = frappe.get_doc(
+			{
+				"doctype": "CRM Lead Assignment Batch",
+				"batch_name": batch_name,
+				"status": "completed",
+				"items": [{"lead": lead.name, "status": "assigned"}],
+				"total_count": 1,
+				"assigned_count": 1,
+			}
+		).insert(ignore_permissions=True)
+
+		frappe.delete_doc("CRM Lead", lead.name, ignore_permissions=True)
+
+		self.assertFalse(frappe.db.exists("CRM Lead", lead.name))
+		self.assertFalse(
+			frappe.db.exists("CRM Lead Assignment Batch Item", {"lead": lead.name})
+		)
+		self.assertFalse(frappe.db.exists("CRM Lead Assignment Batch", batch.name))
+
+	def test_deleting_lead_recounts_nonempty_assignment_batch(self):
+		lead = self._make_student_with_status("_Test Delete Assignment Lead One", "0981000082", "NEW")
+		remaining_lead = self._make_student_with_status(
+			"_Test Delete Assignment Lead Two", "0981000083", "NEW"
+		)
+		batch_name = "_Test Delete Assignment Batch With Sibling"
+		if frappe.db.exists("CRM Lead Assignment Batch", batch_name):
+			frappe.delete_doc("CRM Lead Assignment Batch", batch_name, force=True)
+		batch = frappe.get_doc(
+			{
+				"doctype": "CRM Lead Assignment Batch",
+				"batch_name": batch_name,
+				"status": "completed",
+				"items": [
+					{"lead": lead.name, "status": "assigned"},
+					{"lead": remaining_lead.name, "status": "pending"},
+				],
+				"total_count": 2,
+				"assigned_count": 1,
+			}
+		).insert(ignore_permissions=True)
+
+		try:
+			frappe.delete_doc("CRM Lead", lead.name, ignore_permissions=True)
+			batch.reload()
+			self.assertEqual(batch.total_count, 1)
+			self.assertEqual(batch.assigned_count, 0)
+			self.assertEqual(batch.deferred_count, 0)
+			self.assertEqual(batch.manual_review_count, 0)
+			self.assertEqual(batch.failed_count, 0)
+			self.assertEqual(batch.items[0].lead, remaining_lead.name)
+		finally:
+			if frappe.db.exists("CRM Lead", remaining_lead.name):
+				frappe.delete_doc("CRM Lead", remaining_lead.name, ignore_permissions=True)
+			if frappe.db.exists("CRM Lead Assignment Batch", batch_name):
+				frappe.delete_doc("CRM Lead Assignment Batch", batch_name, force=True)
+
+	def test_converted_lead_cannot_be_deleted_even_with_force(self):
+		lead = self._make_student_with_status("_Test Converted Delete Guard", "0981000084", "ASSIGNED")
+		frappe.db.set_value(
+			"CRM Lead",
+			lead.name,
+			{"converted_student": "STU-TEST-CONVERTED", "converted_at": frappe.utils.now_datetime()},
+			update_modified=False,
+		)
+		lead.reload()
+
+		try:
+			with self.assertRaises(frappe.ValidationError):
+				frappe.delete_doc("CRM Lead", lead.name, force=True, ignore_permissions=True)
+			self.assertTrue(frappe.db.exists("CRM Lead", lead.name))
+		finally:
+			frappe.db.set_value(
+				"CRM Lead",
+				lead.name,
+				{"converted_student": None, "converted_at": None},
+				update_modified=False,
+			)
+			if frappe.db.exists("CRM Lead", lead.name):
+				frappe.delete_doc("CRM Lead", lead.name, force=True)
+
 	def test_sale_and_ctv_sale_creation_assigns_lead_to_creator(self):
 		"""A Sale/CTV-created Lead must be visible in that user's Lead list."""
 		for index, role in enumerate(("Sale", "CTV Sale"), start=1):

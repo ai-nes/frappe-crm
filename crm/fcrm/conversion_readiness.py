@@ -44,3 +44,17 @@ def conversion_readiness(lead: Any) -> dict[str, Any]:
 		"status": "Ready" if not blockers else "Not Ready",
 		"blockers": blockers,
 	}
+
+
+def is_lead_converted(lead: Any) -> bool:
+	"""Return whether a Lead already owns a conversion relationship.
+
+	The direct ``student`` link is retained for legacy rows, while new conversion
+	commands stamp ``converted_student`` and ``converted_at``. Any of these
+	projections is enough to protect the Student and immutable conversion history
+	from Lead deletion.
+	"""
+	return any(
+		_value(lead, fieldname)
+		for fieldname in ("converted_student", "converted_at", "student")
+	)

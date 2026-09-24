@@ -8,7 +8,7 @@ from frappe.model.document import Document
 from frappe.utils import now_datetime
 
 from crm.fcrm.campaign_source import sync_campaign_source
-from crm.fcrm.conversion_readiness import conversion_readiness
+from crm.fcrm.conversion_readiness import conversion_readiness, is_lead_converted
 from crm.fcrm.lead_code import (
 	is_valid_lead_code,
 	lead_code_from_name,
@@ -49,6 +49,61 @@ class CRMLead(Document):
 		# resolvers ever get a chance to run. We disable it here and re-run it
 		# ourselves at the end of validate(), once geo fields are resolved.
 		self.flags.ignore_links = True
+
+	def on_trash(self):
+		"""Protect converted history and remove operational assignment links."""
+		if is_lead_converted(self):
+			frappe.throw(
+				_("Lead {0} đã chuyển đổi thành Student nên không thể xóa.").format(self.name),
+				frappe.ValidationError,
+				title=_("Không thể xóa Lead"),
+			)
+
+		self._cleanup_assignment_batch_links()
+
+	def _cleanup_assignment_batch_links(self):
+		item_doctype = "CRM Lead Assignment Batch Item"
+		batch_doctype = "CRM Lead Assignment Batch"
+		items = frappe.get_all(
+			item_doctype,
+			filters={"lead": self.name},
+			fields=["name", "parent"],
+			limit_page_length=0,
+		)
+		cleanup = {
+			"removed_assignment_items": len(items),
+			"removed_assignment_batches": 0,
+		}
+		self._delete_cleanup = cleanup
+		if not items:
+			return
+
+		parent_names = {item.parent for item in items if item.parent}
+		frappe.db.delete(item_doctype, {"name": ["in", [item.name for item in items]]})
+
+		for parent_name in parent_names:
+			remaining = frappe.get_all(
+				item_doctype,
+				filters={"parent": parent_name},
+				fields=["status"],
+				limit_page_length=0,
+			)
+			if not remaining:
+				frappe.delete_doc(batch_doctype, parent_name, force=True, ignore_permissions=True)
+				cleanup["removed_assignment_batches"] += 1
+				continue
+
+			counts = {"assigned": 0, "deferred": 0, "manual_review": 0, "failed": 0}
+			for item in remaining:
+				if item.status in counts:
+					counts[item.status] += 1
+			batch = frappe.get_doc(batch_doctype, parent_name)
+			batch.total_count = len(remaining)
+			batch.assigned_count = counts["assigned"]
+			batch.deferred_count = counts["deferred"]
+			batch.manual_review_count = counts["manual_review"]
+			batch.failed_count = counts["failed"]
+			batch.save(ignore_permissions=True)
 
 	def autoname(self):
 		"""Use the single HS identifier for new Lead intake records."""

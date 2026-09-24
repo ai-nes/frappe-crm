@@ -13,6 +13,7 @@ from frappe import _
 from frappe.utils import get_datetime
 
 from crm.api.audit import get_audit_logs_for_document
+from crm.fcrm.conversion_readiness import is_lead_converted
 from crm.fcrm.lead_identity import resolve_lead_name
 from crm.fcrm.lead_processing import PROCESSING_STATUSES, RESOLUTIONS
 from crm.fcrm.permissions import can_read_full_lead_board, get_student_list_read_condition
@@ -75,6 +76,7 @@ LEAD_FIELDS = [
 	"student",
 	"matched_student",
 	"converted_student",
+	"converted_at",
 	"creation",
 	"modified",
 ]
@@ -565,6 +567,7 @@ def _map_lead_row(row, *, lookups: dict[str, Any] | None = None) -> dict[str, An
 		"leadCode": row.get("lead_code"),
 		"studentCode": student_code,
 		"studentId": student_id,
+		"isConverted": is_lead_converted(row),
 		"initials": _initials(row.get("student_name")),
 		"name": row.get("student_name") or row.get("name"),
 		"phone": row.get("phone") or "",
