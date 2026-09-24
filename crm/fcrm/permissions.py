@@ -20,6 +20,7 @@ campus-wide-for-everyone condition (pre-Phase-1 behavior) without a code deploy.
 import frappe
 
 from crm.fcrm.role_policy import (
+	STUDENT_OWNER_PROFILES,
 	case_scope_for_roles,
 	delete_requires_ownership_for_roles,
 	resolve_crm_profile,
@@ -718,6 +719,15 @@ def _get_crm_staff_name(user):
 		)
 		or None
 	)
+
+
+def get_self_assignment_staff(user=None):
+	"""Return the creator's CRM Staff row when their profile owns cases."""
+	user = user or frappe.session.user
+	profile = resolve_crm_profile(_get_policy_roles(user))
+	if profile not in STUDENT_OWNER_PROFILES:
+		return None
+	return frappe.db.get_value("CRM Staff", {"user": user, "is_active": 1}, "name")
 
 
 def _get_teams(crm_staff_name):

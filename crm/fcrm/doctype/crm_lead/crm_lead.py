@@ -16,7 +16,11 @@ from crm.fcrm.lead_code import (
 	next_lead_code,
 )
 from crm.fcrm.lead_processing import PROCESSING_STATUSES, RESOLUTIONS, SERVICE_FLAG
-from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
+from crm.fcrm.permissions import (
+	derive_owner_fields,
+	derive_unassigned_owning_team,
+	get_self_assignment_staff,
+)
 from crm.fcrm.student_reference import next_hs_code
 from crm.fcrm.utils.geo_resolver import (
 	resolve_high_school_strict,
@@ -58,6 +62,7 @@ class CRMLead(Document):
 		self.resolution = "PENDING"
 		self.matched_student = None
 		self._set_defaults()
+		self._assign_creator_when_eligible()
 		self._normalize_phone_fields()
 		self._resolve_geo()
 
@@ -121,8 +126,10 @@ class CRMLead(Document):
 			or not self.get_doc_before_save()
 		):
 			self._derive_owner_fields()
-		if getattr(frappe.flags, "student_ownership_service", False) or getattr(
-			frappe.flags, "lead_ownership_service", False
+		if (
+			getattr(self, "_creator_self_assigned", False)
+			or getattr(frappe.flags, "student_ownership_service", False)
+			or getattr(frappe.flags, "lead_ownership_service", False)
 		):
 			self._log_assignment_change()
 		self.flags.ignore_links = False
@@ -159,6 +166,23 @@ class CRMLead(Document):
 		if not self.owning_team:
 			self.owning_team = derive_unassigned_owning_team(frappe.session.user)
 
+	def _assign_creator_when_eligible(self):
+		# Canonical intake and ownership commands write their first ownership after
+		# the Lead row exists. Let those service paths keep their revision contract.
+		if any(
+			getattr(frappe.flags, flag, False)
+			for flag in ("student_intake_service", "student_ownership_service", "lead_ownership_service")
+		):
+			return
+		creator_staff = get_self_assignment_staff()
+		if not creator_staff:
+			return
+		# Sale/CTV creation is always self-owned. This also prevents a direct
+		# document caller from smuggling another staff member into the create path.
+		self.assigned_to = creator_staff
+		self.ownership_revision = 1
+		self._creator_self_assigned = True
+
 	def _log_assignment_change(self):
 		before = self.get_doc_before_save()
 		before_assigned_to = before.assigned_to if before else None
@@ -173,6 +197,7 @@ class CRMLead(Document):
 				"changed_at": now_datetime(),
 				"auto_routed": int(bool(getattr(frappe.flags, "lead_ownership_auto_routed", False))),
 				"reason": getattr(frappe.flags, "lead_ownership_reason", None)
+				or ("Tự phân công cho người tạo Lead" if getattr(self, "_creator_self_assigned", False) else None)
 				or self.status_change_reason,
 			},
 		)

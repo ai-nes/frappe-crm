@@ -75,6 +75,109 @@ class TestCRMLead(FrappeTestCase):
 		self.assertEqual(student.resolution, "PENDING")
 		self.assertFalse(frappe.db.exists("CRM Student", {"phone": "0981000099"}))
 
+	def test_sale_and_ctv_sale_creation_assigns_lead_to_creator(self):
+		"""A Sale/CTV-created Lead must be visible in that user's Lead list."""
+		for index, role in enumerate(("Sale", "CTV Sale"), start=1):
+			with self.subTest(role=role):
+				_other_user, other_staff = self._make_user_and_staff(
+					f"_Test Other Lead Owner {role}", roles=[role]
+				)
+				user, staff = self._make_user_and_staff(f"_Test Lead Creator {role}", roles=[role])
+				frappe.set_user(user)
+				try:
+					lead = frappe.get_doc(
+						{
+							"doctype": "CRM Lead",
+							"student_name": f"_Test Self Assigned Lead {index}",
+							"phone": f"09810000{index:02d}",
+							"assigned_to": other_staff,
+							"processing_status": "NEW",
+							"resolution": "PENDING",
+						}
+					)
+					lead.insert()
+
+					self.assertEqual(lead.assigned_to, staff)
+					self.assertEqual(lead.owner_staff, staff)
+					self.assertEqual(lead.ownership_revision, 1)
+					self.assertEqual(len(lead.assignment_log), 1)
+					self.assertEqual(lead.assignment_log[0].to_staff, staff)
+					self.assertEqual(
+						frappe.get_list(
+							"CRM Lead",
+							filters={"name": lead.name},
+							pluck="name",
+						),
+						[lead.name],
+					)
+				finally:
+					frappe.set_user("Administrator")
+
+	def test_owned_lead_moves_to_assigned_after_processing(self):
+		from crm.fcrm.lead_processing import process_lead
+
+		province = frappe.db.get_value("CRM Province", {}, "name")
+		if not province:
+			self.skipTest("CRM Province fixtures are required for Lead processing.")
+		user, staff = self._make_user_and_staff("_Test Processing Lead Creator", roles=["Sale"])
+		frappe.set_user(user)
+		try:
+			lead = frappe.get_doc(
+				{
+					"doctype": "CRM Lead",
+					"student_name": "_Test Self Assigned Processed Lead",
+					"phone": "0981000097",
+					"province": province,
+					"processing_status": "NEW",
+					"resolution": "PENDING",
+				}
+			).insert()
+			result = process_lead(lead.name)
+		finally:
+			frappe.set_user("Administrator")
+
+		self.assertEqual(result["status"], "ASSIGNED")
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "processing_status"), "ASSIGNED")
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "assigned_to"), staff)
+
+	def test_generic_lead_api_assigns_creator(self):
+		from crm.api.lead import create_lead
+
+		user, staff = self._make_user_and_staff("_Test Generic Lead Creator", roles=["CTV Sale"])
+		frappe.set_user(user)
+		try:
+			result = create_lead(
+				{
+					"student_name": "_Test Generic Self Assigned Lead",
+					"phone": "0981000096",
+				}
+			)
+			lead = frappe.get_doc("CRM Lead", result["name"])
+			self.assertEqual(lead.assigned_to, staff)
+			self.assertEqual(frappe.get_list("CRM Lead", filters={"name": lead.name}, pluck="name"), [lead.name])
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_lead_sale_creation_stays_in_intake_pool(self):
+		user, _staff = self._make_user_and_staff("_Test Lead Intake Creator", roles=["Lead Sale"])
+		frappe.set_user(user)
+		try:
+			lead = frappe.get_doc(
+				{
+					"doctype": "CRM Lead",
+					"student_name": "_Test Lead Sale Intake Lead",
+					"phone": "0981000003",
+					"processing_status": "NEW",
+					"resolution": "PENDING",
+				}
+			)
+			lead.insert(ignore_permissions=True)
+		finally:
+			frappe.set_user("Administrator")
+
+		self.assertIsNone(lead.assigned_to)
+		self.assertIsNone(lead.owner_staff)
+
 	def test_lead_code_is_stable_and_separate_from_student_id(self):
 		lead = self._make_student_with_status("_Test Lead Code", "0981000088", "NEW")
 

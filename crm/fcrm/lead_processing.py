@@ -609,13 +609,16 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 	classified_resolution = classification["resolution"]
 	target_student = classification.get("target_student")
 	status = "PROCESSED" if classified_resolution in ADVANCING_RESOLUTIONS else "CLOSED"
+	if status == "PROCESSED" and (lead_doc.get("owner_staff") or lead_doc.get("assigned_to")):
+		status = "ASSIGNED"
 	processing_reason = _reason(reason)
 	if not processing_reason:
-		processing_reason = (
-			"Đã kiểm tra đủ họ tên, số điện thoại và tỉnh/thành phố; chờ phân công."
-			if status == "PROCESSED"
-			else classification.get("reason") or "Đã đóng hồ sơ vì thông tin bị trùng với hồ sơ khác."
-		)
+		if status == "ASSIGNED":
+			processing_reason = "Đã kiểm tra đủ họ tên, số điện thoại và tỉnh/thành phố; Lead đã được phân công."
+		elif status == "PROCESSED":
+			processing_reason = "Đã kiểm tra đủ họ tên, số điện thoại và tỉnh/thành phố; chờ phân công."
+		else:
+			processing_reason = classification.get("reason") or "Đã đóng hồ sơ vì thông tin bị trùng với hồ sơ khác."
 	_set_processing_values(
 		lead_doc.name,
 		{
