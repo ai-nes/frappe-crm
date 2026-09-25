@@ -23,6 +23,7 @@ from crm.api import sale as sale_overview
 from crm.api.director_school_common import parse_limit, raise_api_error
 from crm.fcrm.permissions import can_read_full_lead_board
 from crm.fcrm.role_policy import resolve_crm_profile
+from crm.fcrm.student_stage import is_enrolled_stage
 
 DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh"
 TREND_RANGES = {"4w", "3m"}
@@ -65,6 +66,8 @@ DASHBOARD_LIFECYCLE_STAGE_MAP = {
 	"application": "qualified",
 	"accepted": "qualified",
 	"enrolled": "qualified",
+	"registration": "qualified",
+	"new_enter": "qualified",
 	"lost": "disqualified",
 	"refused": "disqualified",
 	"follow_up": "attempting",
@@ -716,7 +719,10 @@ def _build_stage_history(
 
 
 def _is_active_pipeline_record(record: dict[str, Any]) -> bool:
-	return _dashboard_status(record.get("student_stage")) not in {"connected", "disqualified"}
+	return (
+		not _dashboard_is_enrolled(record)
+		and _dashboard_status(record.get("student_stage")) != "disqualified"
+	)
 
 
 def _build_kpis(
@@ -938,6 +944,12 @@ def _is_assigned(record: dict[str, Any]) -> bool:
 	return bool(record.get("owner_staff"))
 
 
+def _dashboard_owner_label(record: dict[str, Any], member_names: dict[str, str]) -> str:
+	"""Keep an assigned owner visible even when outside the rep performance roster."""
+	owner_staff = str(record.get("owner_staff") or "").strip()
+	return member_names.get(owner_staff) or owner_staff or "Chưa phân công"
+
+
 def _team_meta(teams: list[dict[str, Any]], *, full_board: bool = False) -> dict[str, str]:
 	if full_board:
 		return {"id": "all", "name": "Toàn bộ đội Sale"}
@@ -1111,6 +1123,20 @@ def _build_dashboard_payload(
 		deadline_by_student,
 		as_of,
 	)
+	detail_records = _dashboard_detail_records(
+		pipeline_records,
+		enrollment_ids,
+		stage_by_record,
+		age_by_record,
+		action_required_ids,
+		contacts_by_student,
+		interactions_by_student,
+		active_tasks,
+		member_names,
+		deadline_by_student,
+		report_date,
+		as_of,
+	)
 	status = "available"
 	if target is None or target <= 0:
 		status = "partial"
@@ -1158,6 +1184,7 @@ def _build_dashboard_payload(
 				"longestAgeDays": max((age_by_record[record["id"]] for record in active_records), default=0),
 			},
 		],
+		"detailRecords": detail_records,
 		"priorityQueue": priority_queue,
 		"stages": [stage_stats[stage] for stage in DASHBOARD_STAGE_ORDER],
 		"reps": members,
@@ -1503,7 +1530,7 @@ def _dashboard_priority_queue(
 			{
 				"id": student_id,
 				"name": record.get("name") or "Hồ sơ chưa đặt tên",
-				"owner": member_names.get(str(record.get("owner_staff")), "Chưa phân công"),
+				"owner": _dashboard_owner_label(record, member_names),
 				"stageId": stage,
 				"stageLabel": DASHBOARD_STAGE_LABELS[stage],
 				"issueCode": issue_code,
@@ -1518,6 +1545,88 @@ def _dashboard_priority_queue(
 		)
 	rows.sort(key=lambda row: (row["priority"], -row["followUpAgeDays"], -row["ageDays"], row["id"]))
 	return rows[:3]
+
+
+def _dashboard_detail_records(
+	records: list[dict[str, Any]],
+	enrollment_ids: set[str],
+	stage_by_record: dict[str, str],
+	age_by_record: dict[str, int],
+	action_required_ids: set[str],
+	contacts_by_student: dict[str, list[dict[str, Any]]],
+	interactions_by_student: dict[str, list[dict[str, Any]]],
+	tasks: list[dict[str, Any]],
+	member_names: dict[str, str],
+	deadline_by_student: dict[str, datetime],
+	report_date: date,
+	as_of: datetime,
+) -> list[dict[str, Any]]:
+	"""Return the permission-scoped records used by dashboard drill-downs."""
+	tasks_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	for task in tasks:
+		if task.get("student_id"):
+			tasks_by_student[str(task["student_id"])].append(task)
+
+	rows = []
+	for record in records:
+		student_id = record["id"]
+		is_enrolled = student_id in enrollment_ids
+		age = age_by_record[student_id]
+		owner_id = str(record.get("owner_staff") or "").strip() or None
+		action_ids: list[str] = []
+		issue_code = None
+		next_action = "Đã nhập học" if is_enrolled else "Theo dõi và cập nhật bước tiếp theo"
+
+		if not is_enrolled:
+			open_tasks = [
+				task for task in tasks_by_student.get(student_id, []) if not _task_is_terminal(task)
+			]
+			deadline = deadline_by_student.get(student_id)
+			overdue = bool(deadline and deadline < as_of) or any(
+				bool(task.get("is_overdue")) for task in open_tasks
+			)
+			missing_documents = bool(record.get("missing_documents"))
+			uncontacted = not (record.get("stages") or set()) & {"contacted", "consulted"}
+
+			if overdue:
+				issue_code, next_action = "overdue", "Xử lý công việc quá hạn"
+			elif missing_documents:
+				issue_code, next_action = "missing-documents", "Nhắc bổ sung hồ sơ"
+			elif uncontacted and age > 1:
+				issue_code, next_action = "uncontacted", "Thực hiện tương tác"
+			elif student_id in action_required_ids:
+				issue_code, next_action = "aging", "Rà soát và chốt bước tiếp theo"
+
+			if overdue and deadline and deadline < as_of:
+				action_ids.append("overdue")
+			if not _is_assigned(record):
+				action_ids.append("unassigned")
+			if deadline and deadline.date() == report_date:
+				action_ids.append("due-today")
+			if age >= 6:
+				action_ids.append("aging")
+
+		latest = sale_overview._latest_interaction(interactions_by_student.get(student_id, []))
+		rows.append(
+			{
+				"id": student_id,
+				"name": record.get("name") or "Hồ sơ chưa đặt tên",
+				"owner": _dashboard_owner_label(record, member_names),
+				"ownerId": owner_id,
+				"recordType": "enrolled" if is_enrolled else "active",
+				"stageId": stage_by_record[student_id],
+				"stageLabel": DASHBOARD_STAGE_LABELS[stage_by_record[student_id]],
+				"issueCode": issue_code,
+				"actionIds": action_ids,
+				"agingBucketId": None if is_enrolled else _dashboard_aging_bucket_id(age),
+				"ageDays": age,
+				"nextAction": next_action,
+				"lastActivityAt": str(
+					(latest or {}).get("interaction_datetime") or record.get("creation") or ""
+				),
+			}
+		)
+	return rows
 
 
 def _dashboard_trend(
@@ -1569,14 +1678,22 @@ def _dashboard_stage_in_period(
 
 def _dashboard_aging_buckets(age_by_record: dict[str, int], raw: bool = False) -> Any:
 	counts = {
-		"0-2-days": sum(age <= 2 for age in age_by_record.values()),
-		"3-5-days": sum(3 <= age <= 5 for age in age_by_record.values()),
-		"6-10-days": sum(6 <= age <= 10 for age in age_by_record.values()),
-		"over-10-days": sum(age > 10 for age in age_by_record.values()),
+		bucket: sum(_dashboard_aging_bucket_id(age) == bucket for age in age_by_record.values())
+		for bucket in DASHBOARD_AGING_BUCKETS
 	}
 	if raw:
 		return counts
 	return [{"id": key, "count": counts[key]} for key in DASHBOARD_AGING_BUCKETS]
+
+
+def _dashboard_aging_bucket_id(age: int) -> str:
+	if age <= 2:
+		return "0-2-days"
+	if age <= 5:
+		return "3-5-days"
+	if age <= 10:
+		return "6-10-days"
+	return "over-10-days"
 
 
 def _dashboard_stage_id(record: dict[str, Any]) -> str:
@@ -1651,7 +1768,8 @@ def _dashboard_status(value: Any) -> str:
 def _dashboard_is_enrolled(record: dict[str, Any]) -> bool:
 	"""Identify the enrollment outcome without treating it as a Student stage."""
 	return bool(
-		record.get("enrollment_date")
+		is_enrolled_stage(record.get("student_stage"))
+		or record.get("enrollment_date")
 		or record.get("admitted_at")
 		or "admitted" in (record.get("stages") or set())
 	)
