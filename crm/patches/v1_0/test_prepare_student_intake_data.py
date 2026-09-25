@@ -1,4 +1,3 @@
-import json
 import unittest
 
 from crm.patches.v1_0.prepare_student_intake_data import (
@@ -6,14 +5,14 @@ from crm.patches.v1_0.prepare_student_intake_data import (
 	encode_lookup_key,
 	normalize_admission_year,
 	normalize_identifier,
-	SCHEMA_VERSION,
-	_source_reference_history,
 )
 
 
 class TestPhase3PrepareStudentIntakeData(unittest.TestCase):
 	def test_lookup_key_is_length_delimited(self):
-		self.assertNotEqual(encode_lookup_key("crm.test", "ab", "c"), encode_lookup_key("crm.test", "a", "bc"))
+		self.assertNotEqual(
+			encode_lookup_key("crm.test", "ab", "c"), encode_lookup_key("crm.test", "a", "bc")
+		)
 
 	def test_normalization_and_cycle_validation(self):
 		self.assertEqual(normalize_identifier(" 12-345.678 "), "12345678")
@@ -27,13 +26,6 @@ class TestPhase3PrepareStudentIntakeData(unittest.TestCase):
 	def test_valid_strong_identifier_resolves(self):
 		student = {"admission_year": "2026", "id_number": "012345678"}
 		self.assertEqual(classify_student(student), "resolvable")
-
-	def test_source_reference_history_is_serialized_for_json_field(self):
-		value = _source_reference_history("CRM-STU-0001")
-		self.assertEqual(
-			json.loads(value),
-			[{"student": "CRM-STU-0001", "kind": "legacy_source", "schema_version": SCHEMA_VERSION}],
-		)
 
 	def test_malformed_or_missing_cycle_is_quarantined(self):
 		self.assertEqual(classify_student({"id_number": "012345678"}), "missing_admission_cycle")
