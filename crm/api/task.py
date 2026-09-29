@@ -20,6 +20,7 @@ from crm.api._pagination import paged_list
 from crm.fcrm.action_type_catalog import canonicalize_action_type
 from crm.fcrm.action_type_registry import is_available_action_type
 from crm.fcrm.role_policy import resolve_crm_profile
+from crm.fcrm.permissions import can_read_full_lead_board
 from crm.fcrm.segment_action_item import (
 	create_segment_action_item,
 	delete_segment_action_item,
@@ -163,6 +164,8 @@ def _normalize_aggregate_filters(date_filter, status, priority, task_type, sort_
 
 def _permission_condition(doctype, alias, actor):
 	"""Return Frappe's row condition rebound to a SQL subquery alias."""
+	if doctype in {"CRM Student", "CRM Lead"} and can_read_full_lead_board(actor):
+		return "1=1"
 	condition = DatabaseQuery(doctype, user=actor).build_match_conditions(as_condition=True)
 	if not condition:
 		return "1=1"

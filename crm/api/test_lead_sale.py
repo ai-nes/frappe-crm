@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
@@ -116,6 +116,139 @@ class TestLeadSaleOverview(FrappeTestCase):
 		self.assertEqual(status["total"], 3)
 		self.assertEqual(sum(item["count"] for item in status["items"]), status["total"])
 		self.assertAlmostEqual(sum(item["share"] for item in status["items"]), 99.9, places=1)
+
+	def test_new_enter_is_an_enrollment_outcome_and_not_an_active_record(self):
+		record = {"id": "STU-1", "student_stage": "New Enter"}
+
+		self.assertTrue(lead_sale._dashboard_is_enrolled(record))
+		self.assertFalse(lead_sale._is_active_pipeline_record(record))
+
+	def test_new_enter_counts_as_won_for_the_responsible_staff_member(self):
+		timezone = ZoneInfo("Asia/Ho_Chi_Minh")
+		records = [
+			{
+				"id": "STU-1",
+				"owner_staff": "STAFF-1",
+				"student_stage": "New Enter",
+				"creation": "2026-09-05 08:00:00",
+			}
+		]
+
+		with (
+			patch.object(lead_sale, "_team_staff_ids", return_value=["STAFF-1"]),
+			patch.object(
+				lead_sale,
+				"_get_list",
+				return_value=[{"name": "STAFF-1", "full_name": "Sale 1"}],
+			),
+		):
+			members = lead_sale._dashboard_members(
+				[{"name": "TEAM-1"}],
+				records,
+				{"STU-1": "qualified"},
+				{"STU-1": 0},
+				set(),
+				{},
+				date(2026, 9, 1),
+				date(2026, 9, 5),
+				datetime(2026, 9, 5, 10, 0, tzinfo=timezone),
+				timezone,
+				{"STU-1": "STAFF-1"},
+				set(),
+			)
+
+		self.assertEqual(members[0]["enrollment"], 1)
+		self.assertEqual(members[0]["closedOpportunities"], 1)
+		self.assertEqual(members[0]["wonOpportunities"], 1)
+
+	def test_priority_queue_keeps_assigned_owner_when_rep_roster_does_not_include_owner(self):
+		record = {
+			"id": "STU-OWNER-OUTSIDE-ROSTER",
+			"name": "Student outside rep roster",
+			"owner_staff": "Trưởng nhóm Tư vấn",
+			"student_stage": "Attempting",
+			"stages": set(),
+			"creation": "2026-09-09 08:00:00",
+		}
+
+		priority_queue = lead_sale._dashboard_priority_queue(
+			[record],
+			{"STU-OWNER-OUTSIDE-ROSTER": "attempting"},
+			{"STU-OWNER-OUTSIDE-ROSTER": 15},
+			set(),
+			{},
+			{},
+			[],
+			{},
+			{},
+			datetime(2026, 9, 25, 10, 0, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh")),
+		)
+
+		self.assertEqual(priority_queue[0]["owner"], "Trưởng nhóm Tư vấn")
+
+	def test_dashboard_detail_records_keep_each_drilldown_group_distinct(self):
+		timezone = ZoneInfo("Asia/Ho_Chi_Minh")
+		as_of = datetime(2026, 9, 25, 10, 0, tzinfo=timezone)
+		records = [
+			{
+				"id": "STU-OVERDUE",
+				"name": "Hồ sơ quá hạn",
+				"owner_staff": "STAFF-1",
+				"stages": {"contacted"},
+			},
+			{
+				"id": "STU-UNASSIGNED",
+				"name": "Hồ sơ chưa phân công",
+				"owner_staff": None,
+				"stages": set(),
+			},
+			{
+				"id": "STU-DUE",
+				"name": "Hồ sơ cần liên hệ",
+				"owner_staff": "STAFF-1",
+				"stages": {"contacted"},
+			},
+			{
+				"id": "STU-ENROLLED",
+				"name": "Hồ sơ đã nhập học",
+				"owner_staff": "STAFF-1",
+				"stages": {"admitted"},
+			},
+		]
+		rows = lead_sale._dashboard_detail_records(
+			records,
+			{"STU-ENROLLED"},
+			{
+				"STU-OVERDUE": "connected",
+				"STU-UNASSIGNED": "new",
+				"STU-DUE": "attempting",
+				"STU-ENROLLED": "qualified",
+			},
+			{
+				"STU-OVERDUE": 11,
+				"STU-UNASSIGNED": 7,
+				"STU-DUE": 1,
+				"STU-ENROLLED": 2,
+			},
+			{"STU-OVERDUE", "STU-UNASSIGNED"},
+			{},
+			{},
+			[],
+			{"STAFF-1": "Sale 1"},
+			{
+				"STU-OVERDUE": datetime(2026, 9, 20, 10, 0, tzinfo=timezone),
+				"STU-DUE": datetime(2026, 9, 25, 15, 0, tzinfo=timezone),
+			},
+			date(2026, 9, 25),
+			as_of,
+		)
+
+		by_id = {row["id"]: row for row in rows}
+		self.assertEqual(by_id["STU-OVERDUE"]["actionIds"], ["overdue", "aging"])
+		self.assertEqual(by_id["STU-UNASSIGNED"]["actionIds"], ["unassigned", "aging"])
+		self.assertEqual(by_id["STU-DUE"]["actionIds"], ["due-today"])
+		self.assertEqual(by_id["STU-ENROLLED"]["recordType"], "enrolled")
+		self.assertIsNone(by_id["STU-ENROLLED"]["agingBucketId"])
 
 	def test_trend_contract_has_four_week_and_three_month_buckets(self):
 		trend = lead_sale._build_result_trend(
@@ -312,6 +445,7 @@ class TestLeadSaleOverview(FrappeTestCase):
 		self.assertEqual(len(response["resultTrend"]["ranges"]["4w"]["points"]), 4)
 		self.assertEqual(len(response["resultTrend"]["ranges"]["3m"]["points"]), 3)
 		self.assertEqual(response["meta"]["team"]["id"], "TEAM-1")
+		self.assertIn("STU-1", [row["id"] for row in response["dashboard"]["detailRecords"]])
 
 	def test_full_board_lead_sale_does_not_require_team_membership(self):
 		timezone = ZoneInfo("Asia/Ho_Chi_Minh")

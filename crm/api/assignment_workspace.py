@@ -64,7 +64,7 @@ TEAM_MEMBER_FUNCTIONS = {
 	"Lead Marketing",
 }
 MAX_BATCH_SCHOOLS = 100
-_GLOBAL_SCOPE_PROFILES = frozenset({"system_manager", "ceo", "admissions_director"})
+_GLOBAL_SCOPE_PROFILES = frozenset({"system_manager", "ceo", "admissions_director", "lead_sales"})
 _GLOBAL_CONTROL_PROFILES = frozenset({"system_manager", "ceo"})
 REQUIRED_DOCTYPES = (
 	"CRM Campus",
@@ -172,6 +172,20 @@ def _roles_for_user(user):
 		return []
 
 
+def _has_global_scope(context) -> bool:
+	"""Return whether the assignment workspace is unrestricted for this actor.
+
+	Lead Sale coordinates the full routing board but does not receive Leads as a
+	team member. Keep that distinction explicit so a missing CRM Staff profile
+	does not block coordinator/read operations, while topology writes remain
+	gated by their existing capabilities.
+	"""
+	return bool(
+		context.get("is_global_scope")
+		or "admissions.oversee" in set(context.get("capabilities") or ())
+	)
+
+
 def _actor_context(*, required_capabilities=None, allow_missing_staff=False):
 	actor = getattr(frappe.session, "user", None)
 	if not actor or actor == "Guest":
@@ -229,6 +243,7 @@ def _actor_context(*, required_capabilities=None, allow_missing_staff=False):
 		"teams": sorted(team_names),
 		"campuses": sorted(campus_names),
 		"is_system_manager": profile in _GLOBAL_CONTROL_PROFILES,
+		"is_global_scope": profile in _GLOBAL_SCOPE_PROFILES,
 	}
 
 
@@ -570,22 +585,22 @@ def _overview_sources(context):
 	)
 
 	allowed_teams = set(context["teams"])
-	if context["is_system_manager"] or "admissions.oversee" in context["capabilities"]:
+	if _has_global_scope(context):
 		allowed_teams = {row.name for row in teams}
 	else:
 		allowed_teams &= {row.name for row in teams}
 	team_map = {row.name: row for row in teams if row.name in allowed_teams}
 	allowed_campuses = {row.campus for row in team_map.values() if row.get("campus")}
 	allowed_campuses.update(context["campuses"])
-	if context["is_system_manager"] or "admissions.oversee" in context["capabilities"]:
+	if _has_global_scope(context):
 		allowed_campuses = {row.name for row in campuses}
 
 	active_zone_map = {row.zone: row for row in zone_assignments if row.get("team") in allowed_teams}
-	if context["is_system_manager"] or "admissions.oversee" in context["capabilities"]:
+	if _has_global_scope(context):
 		active_zone_map = {row.zone: row for row in zone_assignments}
 	allowed_zones = set(active_zone_map)
 	allowed_zones.update(row.name for row in zones if row.get("current_team") in allowed_teams)
-	if context["is_system_manager"] or "admissions.oversee" in context["capabilities"]:
+	if _has_global_scope(context):
 		allowed_zones = {row.name for row in zones}
 	allowed_schools = {
 		row.name
@@ -596,9 +611,9 @@ def _overview_sources(context):
 			for assignment in school_assignments
 		)
 	}
-	if context["is_system_manager"] or "admissions.oversee" in context["capabilities"]:
+	if _has_global_scope(context):
 		allowed_schools = {row.name for row in schools}
-	unrestricted = context["is_system_manager"] or "admissions.oversee" in context["capabilities"]
+	unrestricted = _has_global_scope(context)
 	visible_schools = [row for row in schools if unrestricted or row.name in allowed_schools]
 	visible_zones = [row for row in zones if unrestricted or row.name in allowed_zones]
 	visible_clusters = [
@@ -633,7 +648,7 @@ def _overview_sources(context):
 		"school_assignments": [row for row in school_assignments if row.team in allowed_teams],
 		"memberships": [row for row in memberships if row.team in allowed_teams],
 		"policies": policies
-		if context["is_system_manager"] or "admissions.oversee" in context["capabilities"]
+		if _has_global_scope(context)
 		else [
 			row
 			for row in policies
@@ -2267,8 +2282,7 @@ def get_overview(filters=None, cursor=None, limit=50):
 			"can_edit_topology": "system.configure" in context["capabilities"]
 			or "admissions.oversee" in context["capabilities"],
 			"can_reassign_student": "student.ownership.manage" in context["capabilities"],
-			"team_scoped": not context["is_system_manager"]
-			and "admissions.oversee" not in context["capabilities"],
+			"team_scoped": not _has_global_scope(context),
 		},
 		"edit_options": _topology_options(sources, context),
 	}

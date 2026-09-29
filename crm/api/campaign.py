@@ -329,11 +329,40 @@ def create_campaign(**values: Any) -> dict[str, Any]:
 
 @frappe.whitelist(methods=["POST", "PUT"])
 def update_campaign(name: str, **values: Any) -> dict[str, Any]:
-	"""Update a campaign while keeping its server-generated code immutable."""
-	doc = frappe.get_doc("CRM Campaign", name)
+	"""Update a campaign while keeping its server-generated code immutable.
+
+	``CRM Campaign`` is named from its ``title`` field. Updating that field
+	through ``Document.save`` changes neither the document name nor the title
+	reliably, so title edits must use Frappe's rename path. The stable campaign
+	code remains the durable external identifier.
+	"""
+	identifier = str(name or "").strip()
+	campaign_name = identifier
+	if not frappe.db.exists("CRM Campaign", campaign_name):
+		campaign_name = frappe.db.get_value(
+			"CRM Campaign", {"stable_code": identifier}, "name"
+		)
+	doc = frappe.get_doc("CRM Campaign", campaign_name or identifier)
 	doc.check_permission("write")
 	if "stable_code" in values and values["stable_code"] != doc.stable_code:
 		frappe.throw(_("Campaign Code is immutable after creation."), frappe.ValidationError)
+	title = values.pop("title", None)
+	if title is not None:
+		title = str(title).strip()
+		if not title:
+			frappe.throw(_("Campaign Title is required."), frappe.ValidationError)
+		if title != doc.title:
+			if frappe.db.exists("CRM Campaign", title):
+				frappe.throw(_("Campaign Title already exists."), frappe.ValidationError)
+			frappe.rename_doc(
+				"CRM Campaign",
+				doc.name,
+				title,
+				force=False,
+				merge=False,
+				show_alert=False,
+			)
+			doc = frappe.get_doc("CRM Campaign", title)
 	values.pop("stable_code", None)
 	values.pop("name", None)
 	_set_writable_fields(doc, values)

@@ -14,7 +14,7 @@ from typing import Any
 
 import frappe
 
-from crm.fcrm.conversion_readiness import conversion_readiness
+from crm.fcrm.conversion_readiness import conversion_readiness, is_lead_converted
 from crm.fcrm.permissions import can_convert_all_leads, derive_owner_fields
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.record_retention import technical_retention_until
@@ -340,7 +340,7 @@ def _resolve_target_student(
 
 
 def _lead_is_converted(lead) -> bool:
-	return bool(lead.get("converted_student"))
+	return is_lead_converted(lead)
 
 
 def _assert_lead_ownership_ready(lead) -> None:

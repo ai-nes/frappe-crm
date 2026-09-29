@@ -17,7 +17,7 @@ from frappe import _
 from frappe.utils import add_to_date, getdate, now_datetime, today
 
 from crm.api import lead_mapping
-from crm.api.assignment_workspace import _actor_context
+from crm.api.assignment_workspace import _actor_context, _has_global_scope
 from crm.fcrm.lead_identity import resolve_lead_name
 from crm.fcrm.lead_assignment_workflow import (
 	get_lead_assignment_workflow_config as get_workflow_config,
@@ -339,7 +339,7 @@ def _pool(pool_name: str | None, branch: str | None, actor_context: dict[str, An
 		frappe.throw(_("Hàng chờ đầu vào không tồn tại hoặc đã tắt."), frappe.ValidationError)
 	if branch and pool.campus != branch:
 		frappe.throw(_("Hàng chờ và cơ sở của Lead không khớp."), frappe.ValidationError)
-	if actor_context and not actor_context.get("is_system_manager"):
+	if actor_context and not _has_global_scope(actor_context):
 		allowed_teams = set(actor_context.get("teams") or [])
 		allowed_campuses = set(actor_context.get("campuses") or [])
 		if pool.team not in allowed_teams or pool.campus not in allowed_campuses:
@@ -407,7 +407,7 @@ def _team_scope(team_id: str | None, actor_context: dict[str, Any]) -> dict[str,
 	)
 	if not team or not team.is_active:
 		_raise_batch_error("TEAM_NOT_FOUND", "Team nhận batch không tồn tại hoặc đã tắt.")
-	if not actor_context.get("is_system_manager") and team.name not in set(actor_context.get("teams") or []):
+	if not _has_global_scope(actor_context) and team.name not in set(actor_context.get("teams") or []):
 		frappe.throw(_("Team nằm ngoài phạm vi của bạn."), frappe.PermissionError)
 	group = (
 		frappe.db.get_value(
@@ -526,7 +526,7 @@ def _resolve_batch_pool(batch, lead, actor_context: dict[str, Any]):
 			return _validate_batch_pool(_pool(mapping["pool"], branch, actor_context), lead, context)
 
 	filters = {"is_active": 1, "campus": branch}
-	if not actor_context.get("is_system_manager"):
+	if not _has_global_scope(actor_context):
 		filters["team"] = ["in", actor_context.get("teams") or ["__no_team__"]]
 	candidates = frappe.get_all(
 		"CRM Student Pool",
@@ -542,7 +542,7 @@ def _resolve_batch_pool(batch, lead, actor_context: dict[str, Any]):
 	# System Managers may not have an actor Team. If no school/Zone mapping is
 	# available, retain the safe legacy fallback only when one campus Pool exists.
 	# Multiple Teams remain a Province/manual-review case; never guess a Team.
-	if actor_context.get("is_system_manager"):
+	if _has_global_scope(actor_context):
 		campus_pools = frappe.get_all(
 			"CRM Student Pool",
 			filters={"is_active": 1, "campus": branch},
@@ -1364,12 +1364,12 @@ def _default_campus(row: dict[str, Any], actor_context: dict[str, Any]) -> str:
 		).get("branch")
 		if (
 			resolved_branch
-			and not actor_context.get("is_system_manager")
+			and not _has_global_scope(actor_context)
 			and resolved_branch not in allowed_campuses
 		):
 			frappe.throw(_("Cơ sở của Lead nằm ngoài phạm vi của bạn."), frappe.PermissionError)
 		return resolved_branch
-	if actor_context.get("is_system_manager"):
+	if _has_global_scope(actor_context):
 		default_campus = frappe.db.get_value("CRM Campus", {"is_default": 1}, "name")
 		if default_campus:
 			return default_campus
@@ -2032,7 +2032,7 @@ def list_lead_assignment_batches(
 		frappe.throw(_("Từ khóa tìm kiếm quá dài."), frappe.ValidationError)
 	if search:
 		filters["batch_name"] = ["like", f"%{search}%"]
-	if not actor_context.get("is_system_manager"):
+	if not _has_global_scope(actor_context):
 		allowed_teams = actor_context.get("teams") or ["__no_team__"]
 		team_province_rows = frappe.get_all(
 			"CRM Team",
@@ -2224,7 +2224,7 @@ def get_lead_assignment_batch_options():
 	"""
 	actor_context = _require_read_access()
 	team_filters = {"is_active": 1, "team_type": "Sales"}
-	if not actor_context.get("is_system_manager"):
+	if not _has_global_scope(actor_context):
 		team_filters["name"] = ["in", actor_context.get("teams") or ["__no_team__"]]
 	teams = frappe.get_list(
 		"CRM Team",
@@ -2240,7 +2240,7 @@ def get_lead_assignment_batch_options():
 			else None
 		)
 	province_filters = {}
-	if not actor_context.get("is_system_manager"):
+	if not _has_global_scope(actor_context):
 		allowed_provinces = {team.get("province") for team in teams if team.get("province")}
 		province_filters = {"name": ["in", sorted(allowed_provinces) or ["__no_province__"]]}
 	return {

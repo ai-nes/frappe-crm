@@ -18,12 +18,12 @@ from typing import Any
 import frappe
 from frappe import _
 
+from crm.fcrm.attribution import get_student_attribution
 from crm.fcrm.qualification import redact_evidence
 from crm.fcrm.role_policy import capabilities_for_roles
+from crm.fcrm.student_contact_conversion import conversion_rows_for_student
 from crm.fcrm.student_feature_flags import enabled
 from crm.fcrm.student_lifecycle import get_lifecycle_context
-from crm.fcrm.attribution import get_student_attribution
-from crm.fcrm.student_contact_conversion import conversion_rows_for_student
 
 CONTEXT_POLICY_VERSION = "phase5-context-v1"
 MAX_HISTORY_LIMIT = 50
@@ -641,6 +641,159 @@ def _attribution_context(projection: dict[str, Any]) -> dict[str, Any]:
 	}
 
 
+def _readable_link_titles(doctype: str, names: set[str]) -> dict[str, str]:
+	"""Batch-read linked labels through Frappe's permission-aware list API."""
+	if not names:
+		return {}
+	try:
+		rows = frappe.get_list(
+			doctype,
+			filters={"name": ["in", sorted(names)]},
+			fields=["name", "title"],
+			limit_page_length=len(names),
+		)
+	except Exception:
+		return {}
+	return {row.name: row.title or row.name for row in rows}
+
+
+def _readable_campaign_details(names: set[str]) -> dict[str, dict[str, Any]]:
+	"""Return only permission-filtered, display-safe campaign metadata."""
+	if not names:
+		return {}
+	try:
+		rows = frappe.get_list(
+			"CRM Campaign",
+			filters={"name": ["in", sorted(names)]},
+			fields=[
+				"name",
+				"stable_code",
+				"status",
+				"campaign_type",
+				"event_type",
+				"start_date",
+				"end_date",
+			],
+			limit_page_length=len(names),
+		)
+	except Exception:
+		return {}
+
+	type_names = {row.campaign_type for row in rows if row.campaign_type}
+	type_titles: dict[str, str] = {}
+	if type_names:
+		try:
+			type_rows = frappe.get_list(
+				"CRM Campaign Type",
+				filters={"name": ["in", sorted(type_names)]},
+				fields=["name", "display_name"],
+				limit_page_length=len(type_names),
+			)
+			type_titles = {row.name: row.display_name or row.name for row in type_rows}
+		except Exception:
+			type_titles = {}
+
+	return {
+		row.name: {
+			"stable_code": row.stable_code or None,
+			"status": row.status or None,
+			"campaign_type": type_titles.get(row.campaign_type) if row.campaign_type else None,
+			"event_type": row.event_type or None,
+			"start_date": _iso(row.start_date),
+			"end_date": _iso(row.end_date),
+		}
+		for row in rows
+	}
+
+
+def _readable_event_details(names: set[str]) -> dict[str, dict[str, Any]]:
+	"""Return permission-filtered schedule metadata for linked events."""
+	if not names:
+		return {}
+	try:
+		rows = frappe.get_list(
+			"CRM Event",
+			filters={"name": ["in", sorted(names)]},
+			fields=["name", "event_date", "start_datetime", "end_datetime", "location"],
+			limit_page_length=len(names),
+		)
+	except Exception:
+		return {}
+	return {
+		row.name: {
+			"event_date": _iso(row.event_date),
+			"start_datetime": _iso(row.start_datetime),
+			"end_datetime": _iso(row.end_datetime),
+			"location": row.location or None,
+		}
+		for row in rows
+	}
+
+
+def _campaign_history(
+	projection: dict[str, Any],
+	primary_campaign: str | None = None,
+	primary_occurred_at: Any = None,
+) -> list[dict[str, Any]]:
+	"""Return a bounded, display-only campaign and event history for admissions."""
+	touchpoints = [
+		row
+		for row in projection.get("touchpoints", [])
+		if not row.get("superseded") and (row.get("campaign") or row.get("event"))
+	]
+	campaign_names = {
+		row["campaign"] for row in touchpoints if row.get("campaign")
+	}
+	if primary_campaign:
+		campaign_names.add(primary_campaign)
+	event_names = {
+		row["event"] for row in touchpoints if row.get("event")
+	}
+	campaign_titles = _readable_link_titles("CRM Campaign", campaign_names)
+	event_titles = _readable_link_titles("CRM Event", event_names)
+	campaign_details = _readable_campaign_details(campaign_names)
+	event_details = _readable_event_details(event_names)
+
+	history = []
+	for row in touchpoints:
+		campaign = row.get("campaign")
+		event = row.get("event")
+		if event and event not in event_titles:
+			continue
+		if not event and campaign not in campaign_titles:
+			continue
+		event_title = event_titles.get(event) if event else None
+		campaign_title = campaign_titles.get(campaign) if campaign else None
+		history.append(
+			{
+				"label": event_title or campaign_title,
+				"campaign": campaign_title,
+				"event": event_title,
+				"kind": "event" if event else "campaign",
+				"status": row.get("status"),
+				"occurred_at": _iso(row.get("touched_at")),
+				"campaign_details": campaign_details.get(campaign) if campaign else None,
+				"event_details": event_details.get(event) if event else None,
+			}
+		)
+	history = list(reversed(history[-MAX_HISTORY_LIMIT:]))
+	primary_title = campaign_titles.get(primary_campaign) if primary_campaign else None
+	if primary_title and not any(item.get("campaign") == primary_title for item in history):
+		history.append(
+			{
+				"label": primary_title,
+				"campaign": primary_title,
+				"event": None,
+				"kind": "campaign",
+				"status": None,
+				"occurred_at": _iso(primary_occurred_at),
+				"campaign_details": campaign_details.get(primary_campaign),
+				"event_details": None,
+			}
+		)
+	return history[:MAX_HISTORY_LIMIT]
+
+
 def _admissions_context(student: str, doc: Any, attribution: dict[str, Any]) -> dict[str, Any]:
 	"""Display-only admissions projection for the Student Detail workspace."""
 	try:
@@ -697,6 +850,11 @@ def _admissions_context(student: str, doc: Any, attribution: dict[str, Any]) -> 
 		"fit": doc.get("fit_level"),
 		"primary_barrier": doc.get("primary_barrier"),
 		"campaign": _demo_campaign(latest_campaign),
+		"campaign_history": _campaign_history(
+			attribution,
+			doc.get("campaign"),
+			doc.get("creation"),
+		),
 		"event": _demo_event(latest_event),
 		"scholarship": scholarship,
 		"next_action": {

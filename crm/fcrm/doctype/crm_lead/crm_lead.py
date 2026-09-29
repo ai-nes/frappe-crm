@@ -8,7 +8,7 @@ from frappe.model.document import Document
 from frappe.utils import now_datetime
 
 from crm.fcrm.campaign_source import sync_campaign_source
-from crm.fcrm.conversion_readiness import conversion_readiness
+from crm.fcrm.conversion_readiness import conversion_readiness, is_lead_converted
 from crm.fcrm.lead_code import (
 	is_valid_lead_code,
 	lead_code_from_name,
@@ -16,7 +16,11 @@ from crm.fcrm.lead_code import (
 	next_lead_code,
 )
 from crm.fcrm.lead_processing import PROCESSING_STATUSES, RESOLUTIONS, SERVICE_FLAG
-from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
+from crm.fcrm.permissions import (
+	derive_owner_fields,
+	derive_unassigned_owning_team,
+	get_self_assignment_staff,
+)
 from crm.fcrm.student_reference import next_hs_code
 from crm.fcrm.utils.geo_resolver import (
 	resolve_high_school_strict,
@@ -46,6 +50,61 @@ class CRMLead(Document):
 		# ourselves at the end of validate(), once geo fields are resolved.
 		self.flags.ignore_links = True
 
+	def on_trash(self):
+		"""Protect converted history and remove operational assignment links."""
+		if is_lead_converted(self):
+			frappe.throw(
+				_("Lead {0} đã chuyển đổi thành Student nên không thể xóa.").format(self.name),
+				frappe.ValidationError,
+				title=_("Không thể xóa Lead"),
+			)
+
+		self._cleanup_assignment_batch_links()
+
+	def _cleanup_assignment_batch_links(self):
+		item_doctype = "CRM Lead Assignment Batch Item"
+		batch_doctype = "CRM Lead Assignment Batch"
+		items = frappe.get_all(
+			item_doctype,
+			filters={"lead": self.name},
+			fields=["name", "parent"],
+			limit_page_length=0,
+		)
+		cleanup = {
+			"removed_assignment_items": len(items),
+			"removed_assignment_batches": 0,
+		}
+		self._delete_cleanup = cleanup
+		if not items:
+			return
+
+		parent_names = {item.parent for item in items if item.parent}
+		frappe.db.delete(item_doctype, {"name": ["in", [item.name for item in items]]})
+
+		for parent_name in parent_names:
+			remaining = frappe.get_all(
+				item_doctype,
+				filters={"parent": parent_name},
+				fields=["status"],
+				limit_page_length=0,
+			)
+			if not remaining:
+				frappe.delete_doc(batch_doctype, parent_name, force=True, ignore_permissions=True)
+				cleanup["removed_assignment_batches"] += 1
+				continue
+
+			counts = {"assigned": 0, "deferred": 0, "manual_review": 0, "failed": 0}
+			for item in remaining:
+				if item.status in counts:
+					counts[item.status] += 1
+			batch = frappe.get_doc(batch_doctype, parent_name)
+			batch.total_count = len(remaining)
+			batch.assigned_count = counts["assigned"]
+			batch.deferred_count = counts["deferred"]
+			batch.manual_review_count = counts["manual_review"]
+			batch.failed_count = counts["failed"]
+			batch.save(ignore_permissions=True)
+
 	def autoname(self):
 		"""Use the single HS identifier for new Lead intake records."""
 		self.name = next_hs_code(self.get("admission_year"))
@@ -58,6 +117,7 @@ class CRMLead(Document):
 		self.resolution = "PENDING"
 		self.matched_student = None
 		self._set_defaults()
+		self._assign_creator_when_eligible()
 		self._normalize_phone_fields()
 		self._resolve_geo()
 
@@ -121,8 +181,10 @@ class CRMLead(Document):
 			or not self.get_doc_before_save()
 		):
 			self._derive_owner_fields()
-		if getattr(frappe.flags, "student_ownership_service", False) or getattr(
-			frappe.flags, "lead_ownership_service", False
+		if (
+			getattr(self, "_creator_self_assigned", False)
+			or getattr(frappe.flags, "student_ownership_service", False)
+			or getattr(frappe.flags, "lead_ownership_service", False)
 		):
 			self._log_assignment_change()
 		self.flags.ignore_links = False
@@ -159,6 +221,23 @@ class CRMLead(Document):
 		if not self.owning_team:
 			self.owning_team = derive_unassigned_owning_team(frappe.session.user)
 
+	def _assign_creator_when_eligible(self):
+		# Canonical intake and ownership commands write their first ownership after
+		# the Lead row exists. Let those service paths keep their revision contract.
+		if any(
+			getattr(frappe.flags, flag, False)
+			for flag in ("student_intake_service", "student_ownership_service", "lead_ownership_service")
+		):
+			return
+		creator_staff = get_self_assignment_staff()
+		if not creator_staff:
+			return
+		# Sale/CTV creation is always self-owned. This also prevents a direct
+		# document caller from smuggling another staff member into the create path.
+		self.assigned_to = creator_staff
+		self.ownership_revision = 1
+		self._creator_self_assigned = True
+
 	def _log_assignment_change(self):
 		before = self.get_doc_before_save()
 		before_assigned_to = before.assigned_to if before else None
@@ -173,6 +252,7 @@ class CRMLead(Document):
 				"changed_at": now_datetime(),
 				"auto_routed": int(bool(getattr(frappe.flags, "lead_ownership_auto_routed", False))),
 				"reason": getattr(frappe.flags, "lead_ownership_reason", None)
+				or ("Tự phân công cho người tạo Lead" if getattr(self, "_creator_self_assigned", False) else None)
 				or self.status_change_reason,
 			},
 		)

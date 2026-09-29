@@ -657,6 +657,32 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		finally:
 			frappe.delete_doc("CRM Student", contact.name, force=True)
 
+	def test_lead_sale_can_delete_any_lead_on_the_lead_board(self):
+		_teammate_user, teammate_staff = self._make_user_and_staff(
+			"_Test Lead Delete Teammate", roles=["Sale"], team=self._team, function="Sale"
+		)
+		bystander_user, _bystander_staff = self._make_user_and_staff(
+			"_Test Lead Delete Bystander", roles=["Lead Sale"], team=self._team, function="Lead Sale"
+		)
+		lead = frappe.get_doc(
+			{
+				"doctype": "CRM Lead",
+				"student_name": "_Test Lead Delete Board Lead",
+				"phone": "0981000098",
+				"assigned_to": teammate_staff,
+				"processing_status": "NEW",
+				"resolution": "PENDING",
+			}
+		).insert(ignore_permissions=True)
+		try:
+			self.assertNotEqual(lead.assigned_to, _bystander_staff)
+			self.assertTrue(shared_has_permission(lead, user=bystander_user, ptype="delete"))
+			frappe.set_user(bystander_user)
+			self.assertIsNone(lead.check_permission("delete"))
+		finally:
+			frappe.set_user("Administrator")
+			frappe.delete_doc("CRM Lead", lead.name, force=True)
+
 	def test_kill_switch_restores_delete_without_ownership_gate(self):
 		_teammate_user, teammate_staff = self._make_user_and_staff(
 			"_Test Ownership KillSwitch Teammate", roles=["Sale"], team=self._team, function="Sale"

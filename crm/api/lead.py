@@ -15,6 +15,7 @@ import frappe
 from frappe import _
 
 from crm.api._pagination import paged_list
+from crm.fcrm.conversion_readiness import is_lead_converted
 from crm.fcrm.lead_identity import resolve_lead_name
 
 DOCTYPE = "CRM Lead"
@@ -322,10 +323,23 @@ def update_lead(
 
 
 @frappe.whitelist(methods=["DELETE", "POST"])
-def delete_lead(name: str) -> dict[str, str]:
+def delete_lead(name: str) -> dict[str, Any]:
 	"""Delete one Lead after enforcing its delete permission."""
+	requested_name = name.strip() if isinstance(name, str) else name
 	name = _validate_name(name)
 	doc = frappe.get_doc(DOCTYPE, name)
+	if is_lead_converted(doc):
+		frappe.throw(
+			_("Lead {0} đã chuyển đổi thành Student nên không thể xóa.").format(name),
+			frappe.ValidationError,
+			title=_("Không thể xóa Lead"),
+		)
 	doc.check_permission("delete")
 	doc.delete()
-	return {"deleted": name}
+	cleanup = getattr(doc, "_delete_cleanup", None)
+	response = {"deleted": requested_name}
+	if name != requested_name:
+		response["deleted_name"] = name
+	if isinstance(cleanup, dict):
+		response.update(cleanup)
+	return response

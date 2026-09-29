@@ -64,6 +64,17 @@ không bị ẩn bởi query scope Team/Pool.
 
 ## 3. Quy tắc dữ liệu
 
+- Khi tạo mới `CRM Lead` dưới phiên có profile `Sale` hoặc `CTV Sale`, backend luôn tự
+  gán CRM Staff của người tạo, kể cả khi payload trực tiếp gửi một `assigned_to` khác.
+  Validation đồng bộ `owner_staff` với `assigned_to`, nên Lead xuất hiện ngay trong
+  LeadList của người tạo theo điều kiện `owner_staff`.
+- Người có profile `Lead Sale` không thuộc nhóm tự nhận Lead; Lead họ tạo vẫn chưa có
+  owner và ở intake pool để xử lý theo luồng phân công hiện hành.
+- Lead Sale/CTV đã có owner sẽ chuyển từ `NEW` sang `ASSIGNED` sau khi xử lý dữ liệu
+  thành công; Lead chưa có owner vẫn đi qua bước phân công batch như trước.
+- Điều này không thay đổi contract batch, intake hoặc import: các luồng đó vẫn tạo Lead
+  theo status/routing hiện có. Khi một Lead được tạo dưới phiên Sale/CTV mà chưa có người
+  nhận, quy tắc tự gán trên vẫn áp dụng như mọi thao tác tạo `CRM Lead` khác.
 - Team phải hoạt động và thuộc Group hoạt động.
 - Bản ghi đã phân công được nhận diện qua `owner_staff`, `assigned_to` và
   `owning_team`.

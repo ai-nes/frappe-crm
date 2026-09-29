@@ -141,6 +141,13 @@ class TestCampaignApi(FrappeTestCase):
 		self.assertEqual(updated["channel_type"], "EXPERIENCE_DAY")
 		self.assertEqual(updated["channel_url"], "https://example.com/experience-day")
 
+		renamed_title = f"_Test Campaign API Renamed {self._suffix}"
+		renamed = update_campaign(created["name"], title=renamed_title)
+		self.assertEqual(renamed["name"], renamed_title)
+		self.assertEqual(renamed["title"], renamed_title)
+		self.assertEqual(renamed["stable_code"], created["stable_code"])
+		self.assertFalse(frappe.db.exists("CRM Campaign", created["name"]))
+
 		listed = list_campaigns(
 			status="CLOSED",
 			campus=self.campus,
@@ -150,10 +157,10 @@ class TestCampaignApi(FrappeTestCase):
 			search="autumn-admissions",
 		)
 		self.assertEqual(listed["total"], 1)
-		self.assertEqual(listed["campaigns"][0]["name"], created["name"])
+		self.assertEqual(listed["campaigns"][0]["name"], renamed_title)
 
-		self.assertEqual(delete_campaign(created["name"]), {"deleted": created["name"]})
-		self.assertFalse(frappe.db.exists("CRM Campaign", created["name"]))
+		self.assertEqual(delete_campaign(renamed_title), {"deleted": renamed_title})
+		self.assertFalse(frappe.db.exists("CRM Campaign", renamed_title))
 
 	def test_campaign_code_is_server_managed(self):
 		created = self._create_campaign(stable_code="CUSTOM-CODE")

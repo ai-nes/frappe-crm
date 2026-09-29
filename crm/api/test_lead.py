@@ -75,12 +75,50 @@ class TestLeadCrudApi(TestCase):
 		self.assertEqual(result["name"], "LEAD-1")
 		doc.check_permission.assert_called_once_with("read")
 
+	def test_delete_rejects_converted_lead_before_permission_check(self):
+		doc = SimpleNamespace(
+			name="LEAD-1",
+			doctype="CRM Lead",
+			converted_student="STU-1",
+			converted_at=None,
+			student=None,
+			check_permission=Mock(),
+		)
+		with patch.object(lead_api.frappe, "get_doc", return_value=doc):
+			with self.assertRaises(frappe.ValidationError):
+				lead_api.delete_lead("LEAD-1")
+
+		doc.check_permission.assert_not_called()
+
+	def test_delete_echoes_requested_public_lead_id(self):
+		doc = Mock()
+		doc.converted_student = None
+		doc.converted_at = None
+		doc.student = None
+
+		with (
+			patch.object(lead_api, "_validate_name", return_value="HS-2026-HCM-003320"),
+			patch.object(lead_api.frappe, "get_doc", return_value=doc),
+		):
+			result = lead_api.delete_lead("ae219fc0d0fd43aea63abb570b96788f")
+
+		self.assertEqual(
+			result,
+			{
+				"deleted": "ae219fc0d0fd43aea63abb570b96788f",
+				"deleted_name": "HS-2026-HCM-003320",
+			},
+		)
+
 	def test_create_update_delete_use_document_permissions_and_lifecycle(self):
 		created = Mock()
 		created.as_dict.return_value = {"name": "LEAD-1", "student_name": "An"}
 		created.set.side_effect = lambda fieldname, value: setattr(created, fieldname, value)
 		updated = Mock()
 		updated.as_dict.return_value = {"name": "LEAD-1", "student_name": "Updated"}
+		updated.converted_student = None
+		updated.converted_at = None
+		updated.student = None
 		updated.set.side_effect = lambda fieldname, value: setattr(updated, fieldname, value)
 		with (
 			patch.object(lead_api.frappe, "get_meta", return_value=self.meta),
