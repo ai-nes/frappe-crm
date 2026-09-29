@@ -15,6 +15,7 @@ from collections import defaultdict
 
 import frappe
 from frappe import _
+from frappe.model.rename_doc import rename_doc as rename_document
 from frappe.utils import add_days, getdate, now_datetime, today
 
 from crm.api.assignment_workspace import (
@@ -63,6 +64,24 @@ def _error(code, message):
 	exception = frappe.ValidationError(message)
 	exception.code = code
 	frappe.throw(message, exc=exception)
+
+
+def _rename_named_record(doc, fieldname, value, duplicate_code, duplicate_message):
+	"""Rename a field-named record and keep all linked references consistent."""
+	if str(doc.get(fieldname) or "") == value:
+		return doc
+	if frappe.db.exists(doc.doctype, value):
+		_error(duplicate_code, duplicate_message)
+	rename_document(
+		doc.doctype,
+		doc.name,
+		value,
+		force=False,
+		merge=False,
+		ignore_permissions=True,
+		show_alert=False,
+	)
+	return frappe.get_doc(doc.doctype, value)
 
 
 def _is_global(context):
@@ -848,6 +867,13 @@ def _save_group(
 	if group_id:
 		_assert_group_scope(group_id, context)
 		doc = frappe.get_doc("CRM Team Group", group_id)
+		doc = _rename_named_record(
+			doc,
+			"group_name",
+			group_name,
+			"GROUP_ALREADY_EXISTS",
+			"Tên nhóm quản lý đã tồn tại.",
+		)
 	else:
 		if frappe.db.exists("CRM Team Group", {"group_name": group_name}):
 			_error("GROUP_ALREADY_EXISTS", "Tên nhóm quản lý đã tồn tại.")
@@ -978,6 +1004,13 @@ def _save_team(
 	if team_id:
 		_assert_team_scope(team_id, context)
 		doc = frappe.get_doc("CRM Team", team_id)
+		doc = _rename_named_record(
+			doc,
+			"team_name",
+			team_name,
+			"TEAM_ALREADY_EXISTS",
+			"Tên đội tư vấn đã tồn tại.",
+		)
 		requested_lead = _text(team_lead_staff, "team_lead_staff", required=False)
 		if not _can_manage_leads(context, team_id=team_id, group_id=group_id) and requested_lead != (
 			doc.team_lead_staff or None

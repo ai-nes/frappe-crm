@@ -141,10 +141,17 @@ def get_permission_query_conditions(user=None):
 	from crm.fcrm.doctype.crm_segment.crm_segment import (
 		get_permission_query_conditions as segment_scope,
 	)
-	from crm.fcrm.permissions import get_permission_query_conditions as student_scope
+	from crm.fcrm.permissions import (
+		can_read_full_lead_board,
+		get_permission_query_conditions as student_scope,
+	)
 
 	user = user or frappe.session.user
-	student_condition = student_scope("CRM Student", user=user)
+	student_condition = (
+		None
+		if can_read_full_lead_board(user)
+		else student_scope("CRM Student", user=user)
+	)
 	segment_condition = segment_scope(user=user)
 	student_clause = None
 	segment_clause = None
@@ -170,6 +177,8 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 	permission_type = permission_type or ptype
 	if permission_type == "create" and not getattr(doc, "name", None):
 		return True
+	if permission_type == "read" and can_read_full_lead_board(user or frappe.session.user):
+		return bool(doc.get("student") or doc.get("segment"))
 	student = doc.get("student") if isinstance(doc, dict) else getattr(doc, "student", None)
 	segment = doc.get("segment") if isinstance(doc, dict) else getattr(doc, "segment", None)
 	if segment and not student:

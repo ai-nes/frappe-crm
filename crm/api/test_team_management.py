@@ -16,6 +16,7 @@ from crm.api.team_management import (
 	_is_global,
 	_member_role,
 	_require_access,
+	_save_group,
 	_save_team,
 	get_team_management_workspace,
 )
@@ -144,6 +145,75 @@ class TestTeamManagementWorkspace(FrappeTestCase):
 			True,
 			context,
 		)
+
+	def test_existing_group_and_team_names_are_renamed_through_field_name_contract(self):
+		campus = frappe.db.get_value("CRM Campus", {}, "name")
+		province = frappe.db.get_value("CRM Province", {}, "name")
+		if not campus or not province:
+			self.skipTest("The shared CRM fixtures do not contain a campus and province.")
+
+		suffix = frappe.generate_hash(length=8)
+		old_group_name = f"_Test Team Group Rename {suffix}"
+		new_group_name = f"_Test Team Group Renamed {suffix}"
+		old_team_name = f"_Test Team Rename {suffix}"
+		new_team_name = f"_Test Team Renamed {suffix}"
+		group = frappe.get_doc(
+			{
+				"doctype": "CRM Team Group",
+				"group_name": old_group_name,
+				"province": province,
+				"is_active": 0,
+			}
+		).insert(ignore_permissions=True)
+		team = frappe.get_doc(
+			{
+				"doctype": "CRM Team",
+				"team_name": old_team_name,
+				"group": group.name,
+				"team_type": "Sales",
+				"campus": campus,
+				"is_active": 0,
+			}
+		).insert(ignore_permissions=True)
+
+		try:
+			context = {"profile": "lead_sales"}
+			group_result = _save_group(
+				group.name,
+				new_group_name,
+				province,
+				None,
+				False,
+				False,
+				context,
+			)
+			self.assertEqual(group_result["groupId"], new_group_name)
+			self.assertFalse(frappe.db.exists("CRM Team Group", old_group_name))
+			self.assertTrue(frappe.db.exists("CRM Team Group", new_group_name))
+
+			team_result = _save_team(
+				team.name,
+				new_team_name,
+				new_group_name,
+				"Sales",
+				None,
+				campus,
+				None,
+				None,
+				False,
+				context,
+			)
+			self.assertEqual(team_result["teamId"], new_team_name)
+			self.assertFalse(frappe.db.exists("CRM Team", old_team_name))
+			self.assertEqual(
+				frappe.db.get_value("CRM Team", new_team_name, "group"),
+				new_group_name,
+			)
+		finally:
+			if frappe.db.exists("CRM Team", new_team_name):
+				frappe.delete_doc("CRM Team", new_team_name, force=True)
+			if frappe.db.exists("CRM Team Group", new_group_name):
+				frappe.delete_doc("CRM Team Group", new_group_name, force=True)
 
 	def test_workspace_has_stable_dashboard_contract(self):
 		workspace = get_team_management_workspace()

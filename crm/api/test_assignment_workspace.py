@@ -77,6 +77,23 @@ class TestAssignmentWorkspaceContract(FrappeTestCase):
 		self.assertIsNone(context["staff"])
 		self.assertEqual(context["teams"], [])
 
+	def test_lead_sale_has_global_assignment_scope_without_staff_record(self):
+		previous_user = frappe.session.user
+		frappe.set_user("leadsale@example.com")
+		try:
+			with patch(
+				"crm.api.assignment_workspace._get_policy_roles",
+				return_value=["Lead Sale"],
+			):
+				context = _actor_context()
+		finally:
+			frappe.set_user(previous_user)
+
+		self.assertEqual(context["profile"], "lead_sales")
+		self.assertTrue(context["is_global_scope"])
+		self.assertIsNone(context["staff"])
+		self.assertEqual(context["teams"], [])
+
 	def test_batch_payload_helpers_are_bounded_and_complete(self):
 		self.assertEqual(
 			_parse_string_list('["school-a", "school-a", "school-b"]', "schools"), ["school-a", "school-b"]
