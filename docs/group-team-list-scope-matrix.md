@@ -91,3 +91,22 @@ không bị ẩn bởi query scope Team/Pool.
 - Detail Student/Lead và update dùng cùng read scope; delete vẫn có ownership
   check riêng.
 - Không sửa các thay đổi đang có sẵn trong repository `dashboard-crm`.
+
+## 5. Danh sách thêm thành viên Team (2026-09-30)
+
+`get_team_management_workspace.availableMembers` là nguồn danh sách ứng viên:
+CRM Staff hoạt động, tài khoản đang bật với profile Sale/CTV Sale, chưa có
+membership còn hiệu lực ở bất kỳ Team nào, kể cả Team ngoài scope người xem.
+Membership đã hết hạn không loại ứng viên. Dropdown dùng danh sách này và chỉ
+chọn nhân sự cùng campus với Team; command thêm kiểm tra lại scope và membership.
+Vai trò của nhân sự chưa có membership được lấy từ profile tài khoản.
+
+Luồng tạo tài khoản CRM hoặc đổi profile sang Sale/CTV Sale bổ sung CRM Staff còn
+thiếu qua `crm.fcrm.staff_provisioning.ensure_sales_staff`. Giữ nguyên staff có
+sẵn, trạng thái inactive và membership. Phòng ban/cơ sở được xác định theo User
+Permission; khi chưa có permission, chỉ tự tạo nếu có duy nhất một phòng ban có
+campus. Nếu còn nhiều lựa chọn hoặc tài khoản có nhiều campus, cần cấu hình staff
+tường minh. Không tự chọn phòng ban tùy ý.
+
+Patch `crm.patches.v1_0.backfill_unassigned_sales_staff` áp dụng cùng quy tắc cho
+tài khoản hiện có. Chạy lại không tạo trùng, không tự thêm nhân sự vào Team.
