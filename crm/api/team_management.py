@@ -208,6 +208,10 @@ def _assert_staff_can_be_team_member(staff_doc):
 	user = getattr(staff_doc, "user", None)
 	if user and resolve_crm_profile(frappe.get_roles(user)) == "lead_sales":
 		_error("LEAD_SALE_MANAGER_ONLY", "Lead Sale là quản lý và không phải thành viên của Team.")
+	if not user or not frappe.db.get_value("User", user, "enabled"):
+		_error("STAFF_INACTIVE", "Tài khoản nhân sự đã ngừng hoạt động.")
+	if resolve_crm_profile(frappe.get_roles(user)) not in {"sales", "ctv_sale"}:
+		_error("INVALID_MEMBER_ROLE", "Chỉ Sale hoặc CTV Sale mới được thêm vào Team.")
 
 
 def _default_team_member_function(staff_doc):
@@ -696,7 +700,15 @@ def _read_workspace(context):
 	for row in staff:
 		joined = memberships_by_staff.get(row.name, [])
 		primary = next((item for item in joined if item.is_primary), joined[0] if joined else None)
-		function = primary.function if primary else ("Lead Sale" if row.user in lead_sale_users else "Sale")
+		profile = resolve_crm_profile(frappe.get_roles(row.user)) if row.user else None
+		user_enabled = bool(row.user and frappe.db.get_value("User", row.user, "enabled"))
+		if not joined and profile not in {"sales", "ctv_sale", "lead_sales"}:
+			continue
+		function = (
+			primary.function
+			if primary
+			else {"sales": "Sale", "ctv_sale": "CTV Sale", "lead_sales": "Lead Sale"}.get(profile)
+		)
 		member_rows.append(
 			{
 				"id": row.name,
@@ -704,7 +716,7 @@ def _read_workspace(context):
 				"initials": _initials(row.full_name),
 				"email": row.user,
 				"role": _member_role(function),
-				"isActive": bool(row.is_active),
+				"isActive": bool(row.is_active) and user_enabled,
 				"campusId": row.campus,
 				"teamIds": sorted({item.team for item in joined}),
 				"memberships": [
@@ -777,7 +789,9 @@ def _read_workspace(context):
 		"availableMembers": [
 			row
 			for row in member_rows
-			if row["isActive"] and row["role"] != "LEAD_SALE" and not row["teamIds"]
+			if row["isActive"]
+			and row["role"] in {"SALE", "CTV_SALE"}
+			and row["id"] not in all_membership_staff_ids
 		],
 		"options": {
 			"campuses": [

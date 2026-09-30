@@ -10,6 +10,7 @@ from crm.fcrm.role_policy import (
 	CRM_BUSINESS_ROLES,
 	DESK_MANAGEMENT_ROLE_NAMES,
 )
+from crm.fcrm.staff_provisioning import ensure_sales_staff
 
 CRM_MANAGED_ROLES = CANONICAL_SELECTABLE_ROLES
 
@@ -197,6 +198,7 @@ def create_crm_user(email: str, full_name: str, password: str, role: str = "Sale
 
 	set_canonical_crm_profile(user_doc, role)
 	user_doc.save(ignore_permissions=True)
+	ensure_sales_staff(user_doc)
 	update_password(user=email, pwd=password, logout_all_sessions=True)
 	return user_doc.name
 
@@ -266,6 +268,7 @@ def update_user_role(user: str, new_role: str):
 	set_canonical_crm_profile(user_doc, new_role)
 
 	user_doc.save(ignore_permissions=True)
+	ensure_sales_staff(user_doc)
 
 	_log_role_change(user, "role_changed", previous_role, new_role)
 
