@@ -138,7 +138,7 @@ def handoff_lead(
 
 @frappe.whitelist(methods=["GET"])
 def list_lead_assignment_targets(lead: str) -> dict:
-	"""List Sale/CTV recipients eligible for manual assignment of a Lead."""
+	"""List Sale/CTV and Team/Group leads eligible for manual Lead assignment."""
 	_require_assignment_access()
 	return _run(
 		_list_lead_assignment_targets,

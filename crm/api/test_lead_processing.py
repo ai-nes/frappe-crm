@@ -101,7 +101,7 @@ class TestLeadProcessingAPI(FrappeTestCase):
 
 		self.assertEqual(result["ownership_revision"], 2)
 		self.assertEqual(result["targets"], targets)
-		resolver.assert_called_once_with("Ho Chi Minh City", campus="FPTU Ho Chi Minh Campus")
+		resolver.assert_called_once_with("Ho Chi Minh City", include_leads=True, allow_all_provinces=True)
 
 	def test_assignment_target_service_uses_province_when_lead_has_no_campus(self):
 		lead = frappe._dict(
@@ -125,7 +125,22 @@ class TestLeadProcessingAPI(FrappeTestCase):
 			result = lead_processing_service.list_lead_assignment_targets(lead.name)
 
 		self.assertEqual(result["targets"], targets)
-		resolver.assert_called_once_with("Ho Chi Minh City", campus=None)
+		resolver.assert_called_once_with("Ho Chi Minh City", include_leads=True, allow_all_provinces=True)
+
+	def test_assignment_targets_without_province_use_all_provinces(self):
+		for province in (None, "", "   "):
+			lead = frappe._dict(name="LEAD-1", processing_status="PROCESSED", province=province)
+			targets = [{"staff": "SALE-1", "team": "TEAM-1"}, {"staff": "CTV-1", "team": "TEAM-2"}]
+			with (
+				patch.object(lead_processing_service, "_load_lead", return_value=lead),
+				patch.object(
+					lead_processing_service, "list_province_recipients", return_value=targets
+				) as resolver,
+			):
+				result = lead_processing_service.list_lead_assignment_targets(lead.name)
+			self.assertEqual(result["targets"], targets)
+			self.assertEqual(result["province"], "")
+			resolver.assert_called_once_with("", include_leads=True, allow_all_provinces=True)
 
 	def test_assignment_target_service_rejects_only_new_and_closed_leads(self):
 		base_lead = {
@@ -172,6 +187,78 @@ class TestLeadProcessingAPI(FrappeTestCase):
 			self.assertEqual(lead_processing.process_new_leads("2026", 50), expected)
 
 		command.assert_called_once_with(admission_year="2026", limit=50)
+
+	def test_manual_ownership_accepts_group_lead_but_rejects_wrong_province(self):
+		lead = {"province": "PROVINCE-1", "branch": "LEAD-CAMPUS"}
+		staff = frappe._dict(name="GROUP-LEAD", is_active=1, user="lead@example.com", campus="OTHER")
+		with (
+			patch.object(
+				lead_processing_service,
+				"list_team_lead_recipients",
+				return_value=[
+					{"staff": "GROUP-LEAD", "function": "Lead Group"},
+				],
+			),
+			patch.object(
+				lead_processing_service,
+				"team_routing_readiness",
+				return_value={
+					"status": "not_ready",
+					"reasonCode": "team_lead_missing",
+				},
+			) as readiness,
+			patch.object(lead_processing_service.frappe.db, "get_value", side_effect=[staff, 1]),
+			patch.object(lead_processing_service, "resolve_crm_profile", return_value="lead_sales"),
+			patch.object(lead_processing_service.frappe, "get_roles", return_value=["Lead Sale"]),
+		):
+			lead_processing_service._validate_lead_ownership_target(lead, "GROUP-LEAD", "TEAM-1")
+			readiness.assert_called_once_with("TEAM-1", expected_province="PROVINCE-1")
+			readiness.return_value = {"status": "not_ready", "reasonCode": "province_mismatch"}
+			with self.assertRaises(lead_processing_service.LeadProcessingError):
+				lead_processing_service._validate_lead_ownership_target(lead, "GROUP-LEAD", "TEAM-1")
+
+	def test_manual_ownership_accepts_sale_from_another_campus(self):
+		lead = {"province": "PROVINCE-1", "branch": "LEAD-CAMPUS"}
+		staff = frappe._dict(name="SALE-1", is_active=1, user="sale@example.com", campus="OTHER")
+		with (
+			patch.object(lead_processing_service, "list_team_lead_recipients", return_value=[]),
+			patch.object(lead_processing_service, "team_routing_readiness", return_value={"status": "ready"}),
+			patch.object(lead_processing_service.frappe.db, "get_value", side_effect=[staff, 1]),
+			patch.object(lead_processing_service, "resolve_crm_profile", return_value="sales"),
+			patch.object(lead_processing_service.frappe, "get_roles", return_value=["Sale"]),
+			patch.object(
+				lead_processing_service,
+				"_active_memberships",
+				return_value=[
+					frappe._dict(staff="SALE-1", function="Sale"),
+				],
+			),
+		):
+			lead_processing_service._validate_lead_ownership_target(lead, "SALE-1", "TEAM-1")
+
+	def test_manual_ownership_without_province_accepts_sale_and_ctv_from_any_team(self):
+		for province in (None, "", "   "):
+			for function, profile in (("Sale", "sales"), ("CTV Sale", "ctv_sale")):
+				lead = {"province": province, "branch": "LEAD-CAMPUS"}
+				staff = frappe._dict(name="STAFF-1", is_active=1, user="staff@example.com")
+				with (
+					patch.object(lead_processing_service, "list_team_lead_recipients", return_value=[]),
+					patch.object(
+						lead_processing_service, "team_routing_readiness", return_value={"status": "ready"}
+					) as readiness,
+					patch.object(lead_processing_service.frappe.db, "get_value", side_effect=[staff, 1]),
+					patch.object(lead_processing_service, "resolve_crm_profile", return_value=profile),
+					patch.object(lead_processing_service.frappe, "get_roles", return_value=[function]),
+					patch.object(
+						lead_processing_service,
+						"_active_memberships",
+						return_value=[
+							frappe._dict(staff="STAFF-1", function=function),
+						],
+					),
+				):
+					lead_processing_service._validate_lead_ownership_target(lead, "STAFF-1", "TEAM-OTHER")
+					readiness.assert_called_once_with("TEAM-OTHER", expected_province=None)
 
 	def test_preview_bulk_endpoint_forwards_scan_scope(self):
 		expected = {"summary": {"scanned": 2, "duplicates": 1}, "items": []}
