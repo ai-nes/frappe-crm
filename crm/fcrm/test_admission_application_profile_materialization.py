@@ -115,6 +115,17 @@ class TestAdmissionApplicationProfileMaterialization(FrappeTestCase):
 		self._cleanup.append(("CRM Admission Offering", offering.name))
 		approve_offering(offering=offering.name, idempotency_key=f"test-{uuid.uuid4().hex}")
 
+		idempotency_key = f"test-application-{uuid.uuid4().hex}:" + "|".join(
+			[
+				"ACHIEVEMENT",
+				"FAMILY_FE_FPT",
+				"FIRST_GENERATION",
+				"INTERNATIONAL_PROGRAM",
+				"LANGUAGE_CERTIFICATE",
+				"SCHOLARSHIP",
+				"STUDY_NOW_PAY_LATER",
+			]
+		)
 		result = create_application(
 			student=student.name,
 			values={
@@ -123,16 +134,29 @@ class TestAdmissionApplicationProfileMaterialization(FrappeTestCase):
 				"preference_order": 1,
 				"preference": "Primary",
 				"status": "Draft",
-				"source_reference": f"test:application:{uuid.uuid4().hex}",
 			},
 			expected_revision=int(student.engagement_revision or 0),
-			idempotency_key=f"test-application-{uuid.uuid4().hex}",
+			idempotency_key=idempotency_key,
 		)
 
 		profile_name = result["admission_profile"]
 		self._cleanup.append(("CRM Student Admission Profile", profile_name))
 		self._cleanup.append(("CRM Admission Application", result["application"]))
 		profile = frappe.get_doc("CRM Student Admission Profile", profile_name)
+		self.assertLessEqual(len(profile.source_reference), 140)
+		self.assertEqual(
+			profile.source_reference,
+			frappe.db.get_value("CRM Admission Application", result["application"], "source_reference"),
+		)
+		repeated = create_application(
+			student=student.name,
+			values={"offering": offering.name},
+			expected_revision=0,
+			idempotency_key=idempotency_key,
+		)
+		self.assertTrue(repeated["replayed"])
+		self.assertEqual(repeated["application"], result["application"])
+		self.assertEqual(repeated["admission_profile"], profile_name)
 		self.assertEqual(profile.student, student.name)
 		self.assertEqual(profile.profile_template, template.name)
 		self.assertEqual(profile.application, result["application"])

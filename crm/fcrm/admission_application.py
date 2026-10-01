@@ -9,7 +9,7 @@ from frappe import _
 
 from crm.fcrm.admissions_application_contract import application_projection
 from crm.fcrm.admissions_canonical_contracts import canonical_application_attempt_key
-from crm.fcrm.admissions_migration import provenance
+from crm.fcrm.admissions_migration import provenance, stable_fingerprint
 from crm.fcrm.permissions import has_student_admission_application_write_permission
 from crm.fcrm.student_reference import canonical_student
 
@@ -398,6 +398,14 @@ def materialize_admission_profile(application: str | Any) -> dict[str, Any]:
 	}
 
 
+def _application_source_reference(student: str, idempotency_key: str) -> str:
+	"""Keep legacy references when they fit Frappe's 140-character Data limit."""
+	reference = f"{student}:{idempotency_key}"
+	if len(reference) <= 140:
+		return reference
+	return f"student-admission:{stable_fingerprint(student, idempotency_key)}"
+
+
 def create_application(*, student: str, values: dict[str, Any], expected_revision: int, idempotency_key: str):
 	"""Create an application and update only the Student current-state projection.
 
@@ -427,7 +435,7 @@ def create_application(*, student: str, values: dict[str, Any], expected_revisio
 		)
 	application_values.setdefault(
 		"source_reference",
-		f"{student}:{idempotency_key}",
+		_application_source_reference(student, idempotency_key),
 	)
 	application_values.setdefault(
 		"application_attempt_key",
