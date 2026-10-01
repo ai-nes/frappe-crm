@@ -79,7 +79,7 @@
           type="select"
           :options="[
             { label: __('All'), value: 'All' },
-            { label: __('Admin'), value: 'System Manager' },
+            { label: __('System Manager'), value: 'System Manager' },
             { label: __('Sale'), value: 'Sale' },
             { label: __('Marketing'), value: 'Marketing' },
             { label: __('Promoter'), value: 'Promoter' },
@@ -126,9 +126,9 @@
               />
               <Tooltip
                 v-if="canManageUsers() && user.role == 'System Manager'"
-                :text="__('Cannot change role of user with Admin access')"
+                :text="__('Cannot change role of user with System Manager access')"
               >
-                <Button :label="__('Admin')" icon-left="shield" />
+                <Button :label="__('System Manager')" icon-left="shield" />
               </Tooltip>
               <Dropdown
                 v-else-if="canManageUsers()"
@@ -201,7 +201,7 @@ const search = ref('')
 const currentRole = ref('All')
 
 const roleMap = {
-  'System Manager': __('Admin'),
+  'System Manager': __('System Manager'),
   Sale: __('Sale'),
   Sales: __('Sales (legacy)'),
   'CTV-Sale': __('Sales (legacy)'),
@@ -242,10 +242,10 @@ function getMoreOptions(user) {
 
 function getDropdownOptions(user) {
   return canonicalRoleOptions.map((role) => ({
-    label: __(role.value === 'System Manager' ? 'Admin' : role.label),
+    label: __(role.label),
     component: () =>
       DropdownOption({
-        option: __(role.value === 'System Manager' ? 'Admin' : role.label),
+        option: __(role.label),
         icon:
           role.value === 'System Manager'
             ? 'shield'

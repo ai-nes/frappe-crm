@@ -14,6 +14,7 @@ from crm.fcrm.role_policy import (
 	LEGACY_OVERLAY_ROLES,
 	LEGACY_UNMAPPED_ROLES,
 	ROLE_BACKFILL_SOURCES,
+	SYSTEM_MANAGER_ROLE,
 	managed_docperm_rows,
 )
 
@@ -92,6 +93,58 @@ def _permission_matches(existing, desired):
 	return existing == {field: bool(desired.get(field)) for field in _DOCPERM_FLAG_FIELDS}
 
 
+def _existing_custom_docperm_flags(doctype, role):
+	name = frappe.db.get_value(
+		"Custom DocPerm",
+		{"parent": doctype, "role": role, "permlevel": 0, "if_owner": 0},
+		"name",
+	)
+	if not name:
+		return None
+	doc = frappe.get_doc("Custom DocPerm", name)
+	return {field: bool(doc.get(field)) for field in _DOCPERM_FLAG_FIELDS}
+
+
+def _replace_custom_docperm_row(doctype, role, permission):
+	"""Keep a control-role grant visible when Custom DocPerm shadows DocPerm."""
+	flags = {field: 1 if permission.get(field) else 0 for field in _DOCPERM_FLAG_FIELDS}
+	frappe.db.delete(
+		"Custom DocPerm",
+		{"parent": doctype, "role": role, "permlevel": 0, "if_owner": 0},
+	)
+	frappe.get_doc(
+		{
+			"doctype": "Custom DocPerm",
+			"parent": doctype,
+			"parenttype": "DocType",
+			"parentfield": "permissions",
+			"permlevel": 0,
+			"if_owner": 0,
+			"role": role,
+			**flags,
+		}
+	).insert(ignore_permissions=True)
+
+
+def _sync_system_manager_custom_docperms(desired):
+	"""Bridge legacy custom permission sets to the canonical System Manager grant.
+
+	Frappe replaces standard ``DocPerm`` rows with ``Custom DocPerm`` rows for a
+	doctype as soon as one custom row exists. Only the System Manager row is
+	synchronized here, and only for doctypes that already have a custom set; all
+	other custom grants remain untouched.
+	"""
+	for doctype, permissions in desired.items():
+		permission = next(
+			(row for row in permissions if row["role"] == SYSTEM_MANAGER_ROLE),
+			None,
+		)
+		if permission is None or not frappe.db.exists("Custom DocPerm", {"parent": doctype}):
+			continue
+		if not _permission_matches(_existing_custom_docperm_flags(doctype, SYSTEM_MANAGER_ROLE), permission):
+			_replace_custom_docperm_row(doctype, SYSTEM_MANAGER_ROLE, permission)
+
+
 def _replace_docperm_row(doctype, role, permission):
 	# `DocPerm` field defaults set `create`/`delete`/`export` to 1, so any flag
 	# missing from `permission` must be forced to 0 explicitly here -- leaving
@@ -132,6 +185,8 @@ def apply_managed_docperms():
 			current_pairs.add((doctype, role))
 			if not _permission_matches(_existing_docperm_flags(doctype, role), permission):
 				_replace_docperm_row(doctype, role, permission)
+
+	_sync_system_manager_custom_docperms(desired)
 
 	previously_synced = _load_previously_synced_pairs()
 	for doctype, role in previously_synced - current_pairs:

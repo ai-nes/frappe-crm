@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import frappe
 
-from crm.fcrm.role_policy import CANONICAL_SELECTABLE_ROLES, SYSTEM_MANAGER_ROLE
+from crm.fcrm.role_policy import SYSTEM_MANAGER_ROLE
 from crm.patches.v1_0.seed_crm_permission_profiles import execute as seed_profiles
 from crm.patches.v1_0.seed_new_lead_role_profiles import execute as seed_lead_profiles
 from crm.patches.v1_0.setup_crm_permissions import apply_managed_docperms
@@ -29,6 +29,10 @@ CANONICAL_ROLES = frozenset(
 	}
 )
 PLATFORM_ROLES = frozenset({"All", "Guest", "Desk User", "Website User", SYSTEM_MANAGER_ROLE})
+# System Manager is a Frappe platform role, but it is also the canonical CRM
+# control-plane profile. Keep that profile in sync with the business profiles
+# instead of deleting it during every local-site cutover.
+EXPECTED_PERMISSION_PROFILE_ROLES = CANONICAL_ROLES | {SYSTEM_MANAGER_ROLE}
 # Technical service identities are not selectable CRM business roles, but the
 # AI service principal must survive the business-role cleanup. Its least-
 # privilege permissions are provisioned by the service-identity seed.
@@ -81,16 +85,6 @@ def _replace_user_roles():
 		frappe.db.delete("Has Role", {"name": row.name})
 		changed.append({"user": row.parent, "from": row.role, "to": target})
 
-	# Existing system operators get the new visible control role. Keep the
-	# Frappe System Manager primitive during the transition for recovery.
-	for row in frappe.get_all(
-		"Has Role",
-		filters={"parenttype": "User", "role": SYSTEM_MANAGER_ROLE},
-		fields=["parent"],
-		limit_page_length=0,
-	):
-		if row.parent != "Administrator":
-			_ensure_user_role(row.parent, "Administrator")
 	return changed
 
 
@@ -126,16 +120,10 @@ def _remove_noncanonical_roles():
 
 def _reset_permission_profiles():
 	for profile in frappe.get_all("CRM Permission Profile", fields=["name", "role"], limit_page_length=0):
-		if profile.role not in CANONICAL_ROLES:
+		if profile.role not in EXPECTED_PERMISSION_PROFILE_ROLES:
 			frappe.delete_doc("CRM Permission Profile", profile.name, ignore_permissions=True, force=True)
 	seed_profiles()
 	seed_lead_profiles()
-	# System Manager remains a Frappe technical role, but must not remain a
-	# visible CRM business permission profile; Administrator is the control role.
-	if frappe.db.exists("CRM Permission Profile", SYSTEM_MANAGER_ROLE):
-		frappe.delete_doc(
-			"CRM Permission Profile", SYSTEM_MANAGER_ROLE, ignore_permissions=True, force=True
-		)
 	apply_managed_docperms()
 
 
@@ -158,11 +146,11 @@ def execute():
 
 
 def verify():
-	"""Fail if a non-platform role or profile remains in the live catalog."""
+	"""Fail if a non-platform role or unexpected profile remains in the catalog."""
 	roles = {row.name for row in _role_rows()}
 	unexpected_roles = sorted(roles - CANONICAL_ROLES - PLATFORM_ROLES - SERVICE_ROLES)
 	profiles = set(frappe.get_all("CRM Permission Profile", pluck="role", limit_page_length=0))
-	unexpected_profiles = sorted(profiles - CANONICAL_ROLES)
+	unexpected_profiles = sorted(profiles - EXPECTED_PERMISSION_PROFILE_ROLES)
 	if unexpected_roles or unexpected_profiles:
 		frappe.throw(
 			f"Canonical role verification failed: roles={unexpected_roles}, profiles={unexpected_profiles}"

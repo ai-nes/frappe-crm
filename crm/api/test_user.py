@@ -40,6 +40,21 @@ class TestUserRoleLog(FrappeTestCase):
 		self.assertEqual(logs[0].new_role, "Marketing")
 		self.assertEqual(logs[0].owner, "Administrator")
 
+	def test_role_change_can_grant_system_manager_access(self):
+		update_user_role(self.email, "System Manager")
+
+		roles = set(frappe.get_roles(self.email))
+		self.assertIn("System Manager", roles)
+		self.assertNotIn("Sale", roles)
+
+	def test_system_manager_can_change_another_system_manager_role(self):
+		update_user_role(self.email, "System Manager")
+		update_user_role(self.email, "Sale")
+
+		roles = set(frappe.get_roles(self.email))
+		self.assertIn("Sale", roles)
+		self.assertNotIn("System Manager", roles)
+
 	def test_removal_writes_one_log_row_with_null_new_role(self):
 		remove_crm_roles_from_user(self.email)
 
