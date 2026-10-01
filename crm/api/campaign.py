@@ -294,10 +294,13 @@ def get_campaign(code: str | None = None, name: str | None = None) -> dict[str, 
 @frappe.whitelist(methods=["GET"])
 def get_campaign_routing_options() -> dict[str, Any]:
 	"""Return active Sales Teams and Team Groups for campaign Lead routing."""
+	if frappe.session.user == "Guest" or not frappe.has_permission("CRM Campaign", "read"):
+		frappe.throw(_("Not permitted to read campaign routing options."), frappe.PermissionError)
+	# Campaign readers need these lookup fields without access to topology documents.
 	return {
 		"teams": [
 			dict(row)
-			for row in frappe.get_list(
+			for row in frappe.get_all(
 				"CRM Team",
 				filters={"is_active": 1, "team_type": "Sales"},
 				fields=["name", "team_name", "campus", "group"],
@@ -307,7 +310,7 @@ def get_campaign_routing_options() -> dict[str, Any]:
 		],
 		"groups": [
 			dict(row)
-			for row in frappe.get_list(
+			for row in frappe.get_all(
 				"CRM Team Group",
 				filters={"is_active": 1},
 				fields=["name", "group_name", "province"],
@@ -339,9 +342,7 @@ def update_campaign(name: str, **values: Any) -> dict[str, Any]:
 	identifier = str(name or "").strip()
 	campaign_name = identifier
 	if not frappe.db.exists("CRM Campaign", campaign_name):
-		campaign_name = frappe.db.get_value(
-			"CRM Campaign", {"stable_code": identifier}, "name"
-		)
+		campaign_name = frappe.db.get_value("CRM Campaign", {"stable_code": identifier}, "name")
 	doc = frappe.get_doc("CRM Campaign", campaign_name or identifier)
 	doc.check_permission("write")
 	if "stable_code" in values and values["stable_code"] != doc.stable_code:

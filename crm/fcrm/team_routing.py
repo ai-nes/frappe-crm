@@ -160,12 +160,12 @@ def team_routing_readiness(
 
 
 def _active_teams_for_province(
-	province: str,
+	province: str | None,
 	*,
 	campus: str | None = None,
 	team_id: str | None = None,
 ) -> list[dict[str, Any]]:
-	"""Return active Sales Teams under the active Group for one province."""
+	"""Return active Sales Teams in a province, or all provinces when None."""
 	filters: dict[str, Any] = {"is_active": 1, "team_type": "Sales"}
 	if team_id:
 		filters["name"] = team_id
@@ -186,7 +186,7 @@ def _active_teams_for_province(
 			["name", "group_name", "province", "is_active"],
 			as_dict=True,
 		)
-		if not group or not group.is_active or group.province != province:
+		if not group or not group.is_active or (province is not None and group.province != province):
 			continue
 		result.append({**dict(row), "groupName": group.group_name, "province": group.province})
 	return result
@@ -419,23 +419,32 @@ def list_province_recipients(
 	*,
 	campus: str | None = None,
 	at=None,
+	include_leads: bool = False,
+	allow_all_provinces: bool = False,
 ) -> list[dict[str, Any]]:
 	"""List active Sale/CTV recipients eligible for a Lead's routing scope."""
 	province = str(province or "").strip()
-	if not province:
+	if not province and not allow_all_provinces:
 		return []
 
 	targets = []
-	for team in _active_teams_for_province(province, campus=campus):
+	for team in _active_teams_for_province(province or None, campus=campus):
 		readiness = team_routing_readiness(
 			team["name"],
 			campus=team["campus"],
 			expected_province=province,
 			at=at,
 		)
-		if readiness["status"] != "ready":
+		if readiness["status"] != "ready" and not (
+			include_leads and readiness.get("reasonCode") in {"no_recipients", "team_lead_missing"}
+		):
 			continue
-		for recipient in _active_team_recipients(team["name"], at):
+		recipients = _active_team_recipients(team["name"], at) if readiness["status"] == "ready" else []
+		if include_leads:
+			leads = list_team_lead_recipients(team["name"])
+			lead_ids = {row["staff"] for row in leads}
+			recipients = [row for row in recipients if row["staff"] not in lead_ids] + leads
+		for recipient in recipients:
 			targets.append(
 				{
 					**recipient,
@@ -448,6 +457,37 @@ def list_province_recipients(
 		targets,
 		key=lambda row: (row["teamName"], row["staffName"], row["staff"]),
 	)
+
+
+def list_team_lead_recipients(team_id: str) -> list[dict[str, Any]]:
+	"""Resolve designated Team/Group leads for manual assignment, without capacity gating."""
+	team = frappe.db.get_value("CRM Team", team_id, ["team_lead_staff", "group"], as_dict=True)
+	if not team:
+		return []
+	group_lead = frappe.db.get_value("CRM Team Group", team.get("group"), "group_lead_staff")
+	result = []
+	seen = set()
+	for staff_id, function in ((group_lead, "Lead Group"), (team.get("team_lead_staff"), "Lead Team")):
+		if not staff_id or staff_id in seen:
+			continue
+		staff = frappe.db.get_value(
+			"CRM Staff", staff_id, ["name", "full_name", "user", "is_active"], as_dict=True
+		)
+		if not staff or not staff.is_active or not staff.user:
+			continue
+		if frappe.db.get_value("User", staff.user, "enabled") not in (1, True, "1"):
+			continue
+		seen.add(staff_id)
+		result.append(
+			{
+				"staff": staff_id,
+				"staffName": staff.full_name or staff_id,
+				"team": team_id,
+				"function": function,
+				"capacity": _capacity_snapshot(0, active_lead_count(staff_id), configured=False),
+			}
+		)
+	return result
 
 
 def select_recipient_for_teams(

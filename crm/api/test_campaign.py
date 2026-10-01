@@ -78,6 +78,36 @@ class TestPublicCampaignApi(TestCase):
 		self.assertIn('@frappe.whitelist(allow_guest=True, methods=["GET"])', source)
 
 
+class TestCampaignRoutingOptionsApi(TestCase):
+	def test_campaign_readers_can_load_lookup_options(self):
+		teams = [{"name": "TEAM-1", "team_name": "Sales", "campus": "HCM", "group": "GROUP-1"}]
+		groups = [{"name": "GROUP-1", "group_name": "Group", "province": "HCM"}]
+		with (
+			patch.object(campaign_api.frappe, "session", frappe._dict(user="campaign-reader@example.com")),
+			patch.object(campaign_api.frappe, "has_permission", return_value=True) as has_permission,
+			patch.object(campaign_api.frappe, "get_all", side_effect=[teams, groups]) as get_all,
+		):
+			result = campaign_api.get_campaign_routing_options()
+		self.assertEqual(result, {"teams": teams, "groups": groups})
+		has_permission.assert_called_once_with("CRM Campaign", "read")
+		self.assertEqual(get_all.call_args_list[0].kwargs["filters"], {"is_active": 1, "team_type": "Sales"})
+		self.assertEqual(get_all.call_args_list[0].kwargs["fields"], ["name", "team_name", "campus", "group"])
+		self.assertEqual(get_all.call_args_list[1].kwargs["filters"], {"is_active": 1})
+		self.assertEqual(get_all.call_args_list[1].kwargs["fields"], ["name", "group_name", "province"])
+
+	def test_unauthorized_users_cannot_load_lookup_options(self):
+		for user, permitted in [("Guest", True), ("unrelated@example.com", False)]:
+			with (
+				self.subTest(user=user),
+				patch.object(campaign_api.frappe, "session", frappe._dict(user=user)),
+				patch.object(campaign_api.frappe, "has_permission", return_value=permitted),
+				patch.object(campaign_api.frappe, "get_all") as get_all,
+			):
+				with self.assertRaises(frappe.PermissionError):
+					campaign_api.get_campaign_routing_options()
+				get_all.assert_not_called()
+
+
 class TestCampaignApi(FrappeTestCase):
 	def setUp(self):
 		self._original_user = frappe.session.user

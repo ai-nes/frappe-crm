@@ -112,6 +112,13 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 			patch.object(lead_processing.frappe.db, "get_value", side_effect=get_value_side_effect),
 			patch.object(
 				lead_processing,
+				"list_team_lead_recipients",
+				return_value=[
+					{"staff": "STAFF-LEAD", "function": "Lead Team"},
+				],
+			),
+			patch.object(
+				lead_processing,
 				"team_routing_readiness",
 				return_value={
 					"status": "not_ready",
@@ -134,6 +141,13 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 
 		lead_doc = {"branch": "CAMPUS-1", "province": "Ho Chi Minh City"}
 		with (
+			patch.object(
+				lead_processing,
+				"list_team_lead_recipients",
+				return_value=[
+					{"staff": "STAFF-LEAD", "function": "Lead Team"},
+				],
+			),
 			patch.object(
 				lead_processing.frappe.db,
 				"get_value",
@@ -172,6 +186,7 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 			return None
 
 		with (
+			patch.object(lead_processing, "list_team_lead_recipients", return_value=[]),
 			patch.object(lead_processing.frappe.db, "get_value", side_effect=get_value_side_effect),
 			patch.object(
 				lead_processing,
