@@ -167,7 +167,7 @@ const roleMap = {
   Marketing: __('Marketing'),
   'Lead Sale': __('Lead Sale'),
   'Admissions Director': __('Admissions Director'),
-  'System Manager': __('Admin'),
+  'System Manager': __('System Manager'),
 }
 
 const inviteByEmail = createResource({

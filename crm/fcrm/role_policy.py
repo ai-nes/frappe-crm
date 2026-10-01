@@ -232,7 +232,12 @@ def capability_details(capabilities):
 
 
 CANONICAL_SELECTABLE_ROLES = frozenset(
-	{ADMINISTRATOR_ROLE, *PROFILE_LABELS.values(), *PROFILE_ROLE_ALIASES["marketing"]}
+	{
+		SYSTEM_MANAGER_ROLE,
+		ADMINISTRATOR_ROLE,
+		*PROFILE_LABELS.values(),
+		*PROFILE_ROLE_ALIASES["marketing"],
+	}
 )
 
 _PERMISSION_FLAGS = {
