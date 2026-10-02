@@ -110,3 +110,19 @@ tường minh. Không tự chọn phòng ban tùy ý.
 
 Patch `crm.patches.v1_0.backfill_unassigned_sales_staff` áp dụng cùng quy tắc cho
 tài khoản hiện có. Chạy lại không tạo trùng, không tự thêm nhân sự vào Team.
+
+
+## 6. Điều kiện nhận Lead (2026-10-02)
+
+Droplist phân công thủ công và phân công Lead tự động không yêu cầu cấu hình
+`CRM Staff Capacity Period` và không chặn theo số Lead tối đa. Hạn mức đã lưu
+không ảnh hưởng đến việc nhận Lead. Phân công tự động vẫn dùng số Lead đang giữ
+để cân bằng tải; trường `capacity` trong response được giữ tương thích, với
+`limit` và `remaining` bằng `null`. Policy `capacity_required` cũ không còn chặn
+phân công Lead.
+
+Các kiểm tra tỉnh của Group, Team Sales đang hoạt động và sẵn sàng, membership
+còn hiệu lực, CRM Staff hoạt động, tài khoản bật và profile Sale/CTV Sale vẫn
+được áp dụng. Trưởng Team/Group chỉ xuất hiện trong droplist nếu có membership còn hiệu lực
+trong Team nhận Lead. Không tự thêm trưởng Group ngoài Team. Số thành viên
+trên màn quản lý Team tiếp tục đếm membership, nên có thể khác số lựa chọn.

@@ -75,6 +75,14 @@ class TestManualLeadRecipients(TestCase):
 		with (
 			patch.object(team_routing.frappe.db, "get_value", side_effect=get_value),
 			patch.object(team_routing, "active_lead_count", return_value=0),
+			patch.object(
+				team_routing,
+				"_active_memberships",
+				return_value=[
+					frappe._dict(staff="TEAM-LEAD"),
+					frappe._dict(staff="GROUP-LEAD"),
+				],
+			),
 		):
 			rows = team_routing.list_team_lead_recipients("TEAM-1")
 		self.assertEqual(
@@ -106,8 +114,40 @@ class TestManualLeadRecipients(TestCase):
 		with (
 			patch.object(team_routing.frappe.db, "get_value", side_effect=same_lead),
 			patch.object(team_routing, "active_lead_count", return_value=0),
+			patch.object(
+				team_routing,
+				"_active_memberships",
+				return_value=[
+					frappe._dict(staff="TEAM-LEAD"),
+					frappe._dict(staff="GROUP-LEAD"),
+				],
+			),
 		):
 			self.assertEqual(len(team_routing.list_team_lead_recipients("TEAM-1")), 1)
+
+	def test_leader_outside_team_membership_is_not_a_manual_recipient(self):
+		def get_value(doctype, name, fields, **kwargs):
+			if doctype == "CRM Team":
+				return frappe._dict(team_lead_staff="TEAM-LEAD", group="GROUP-1")
+			if doctype == "CRM Team Group":
+				return "GROUP-LEAD"
+			if doctype == "CRM Staff":
+				return frappe._dict(name=name, full_name=name, user=name, is_active=1)
+			if doctype == "User":
+				return 1
+
+		with (
+			patch.object(team_routing.frappe.db, "get_value", side_effect=get_value),
+			patch.object(team_routing, "active_lead_count", return_value=0),
+			patch.object(team_routing, "_active_memberships", return_value=[frappe._dict(staff="TEAM-LEAD")]),
+		):
+			rows = team_routing.list_team_lead_recipients("TEAM-1")
+			self.assertEqual([r["staff"] for r in rows], ["TEAM-LEAD"])
+		with (
+			patch.object(team_routing.frappe.db, "get_value", side_effect=get_value),
+			patch.object(team_routing, "_active_memberships", return_value=[]),
+		):
+			self.assertEqual(team_routing.list_team_lead_recipients("TEAM-1"), [])
 
 	def test_manual_list_includes_leads_without_sales_and_keeps_automatic_selection_separate(self):
 		team = {"name": "TEAM-1", "team_name": "Team 1", "campus": "OTHER-CAMPUS"}
@@ -159,7 +199,7 @@ class TestStaffCapacityConfiguredFlag(TestCase):
 		self.assertIsNone(capacity["limit"])
 		self.assertEqual(capacity["active"], 2)
 
-	def test_staff_capacity_is_configured_when_an_approved_period_covers_now(self):
+	def test_staff_capacity_ignores_existing_capacity_period(self):
 		with (
 			patch.object(
 				team_routing.frappe.db,
@@ -169,12 +209,12 @@ class TestStaffCapacityConfiguredFlag(TestCase):
 			patch.object(team_routing, "active_lead_count", return_value=1),
 		):
 			capacity = team_routing._staff_capacity("STAFF-1")
-		self.assertTrue(capacity["configured"])
-		self.assertEqual(capacity["limit"], 5)
+		self.assertFalse(capacity["configured"])
+		self.assertIsNone(capacity["limit"])
 
 
-class TestActiveTeamRecipientsRequireConfiguredCapacity(TestCase):
-	def test_staff_without_configured_capacity_is_excluded(self):
+class TestActiveTeamRecipientsWithoutCapacityGate(TestCase):
+	def test_staff_without_configured_capacity_is_included(self):
 		pool = [
 			{
 				"staff": "STAFF-UNSET",
@@ -193,9 +233,9 @@ class TestActiveTeamRecipientsRequireConfiguredCapacity(TestCase):
 		]
 		with patch.object(team_routing, "_team_recipient_pool", return_value=pool):
 			eligible = team_routing._active_team_recipients("TEAM-1")
-		self.assertEqual([row["staff"] for row in eligible], ["STAFF-OK"])
+		self.assertEqual([row["staff"] for row in eligible], ["STAFF-UNSET", "STAFF-OK"])
 
-	def test_staff_configured_but_over_limit_is_still_excluded(self):
+	def test_staff_over_legacy_limit_is_included(self):
 		pool = [
 			{
 				"staff": "STAFF-FULL",
@@ -207,4 +247,40 @@ class TestActiveTeamRecipientsRequireConfiguredCapacity(TestCase):
 		]
 		with patch.object(team_routing, "_team_recipient_pool", return_value=pool):
 			eligible = team_routing._active_team_recipients("TEAM-1")
-		self.assertEqual(eligible, [])
+		self.assertEqual(eligible, pool)
+
+
+class TestTeamSelectionWithoutCapacityGate(TestCase):
+	def test_policy_cannot_require_capacity_or_enforce_legacy_limit(self):
+		pool = [
+			{
+				"staff": "STAFF-FULL",
+				"staffName": "Full",
+				"team": "TEAM-1",
+				"function": "Sale",
+				"capacity": {"active": 5, "limit": 5, "remaining": 0, "configured": True},
+			},
+			{
+				"staff": "STAFF-UNSET",
+				"staffName": "Unset",
+				"team": "TEAM-1",
+				"function": "CTV Sale",
+				"capacity": {"active": 0, "limit": None, "remaining": None, "configured": False},
+			},
+		]
+		with patch.object(team_routing, "_team_recipient_pool", return_value=pool):
+			result = team_routing.select_recipient_for_teams(
+				[{"name": "TEAM-1", "team_name": "Team"}],
+				scope_key="GROUP:Province",
+				policy_version="test",
+				require_capacity=True,
+			)
+			self.assertEqual(result["ownerStaff"], "STAFF-UNSET")
+			result = team_routing.select_recipient_for_teams(
+				[{"name": "TEAM-1", "team_name": "Team"}],
+				scope_key="GROUP:Province",
+				policy_version="test",
+				require_capacity=True,
+				load_overrides={"STAFF-UNSET": 6},
+			)
+			self.assertEqual(result["ownerStaff"], "STAFF-FULL")
