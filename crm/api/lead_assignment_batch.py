@@ -2,7 +2,7 @@
 
 The backend keeps the explicit batch document as an audit record, while the
 operator-facing flow can simply scan every unassigned Lead and run the
-ordered Campaign → Group/province → campus policy resolver. The older
+configured all-Sales, province/team or Campaign policy resolver. The older
 explicit create/import APIs remain for backward compatibility and historical
 records.
 """
@@ -18,10 +18,10 @@ from frappe.utils import add_to_date, getdate, now_datetime, today
 
 from crm.api import lead_mapping
 from crm.api.assignment_workspace import _actor_context, _has_global_scope
-from crm.fcrm.lead_identity import resolve_lead_name
 from crm.fcrm.lead_assignment_workflow import (
 	get_lead_assignment_workflow_config as get_workflow_config,
 )
+from crm.fcrm.lead_identity import resolve_lead_name
 from crm.fcrm.lead_processing import (
 	_operator_lead_reason,
 	_processing_validation_issues,
@@ -31,6 +31,7 @@ from crm.fcrm.lead_processing import (
 	change_lead_ownership,
 	preview_lead,
 )
+from crm.fcrm.lead_routing_policy import get_lead_routing_policy, resolve_lead_recipient
 from crm.fcrm.student_assignment import (
 	ENRICHMENT_QUEUE,
 	MANUAL_QUEUE,
@@ -42,7 +43,6 @@ from crm.fcrm.team_routing import (
 	province_for_zone,
 	require_team_routing_ready,
 )
-from crm.fcrm.lead_routing_policy import get_lead_routing_policy, resolve_lead_recipient
 
 BATCH_DOCTYPE = "CRM Lead Assignment Batch"
 MAX_BATCH_SIZE = 1000
@@ -68,6 +68,8 @@ ROUTING_REVIEW_CODES = frozenset(
 		"CAMPAIGN_MAPPING_INVALID",
 		"CAMPAIGN_TARGET_UNAVAILABLE",
 		"GROUP_TARGET_UNAVAILABLE",
+		"PROVINCE_TEAM_NOT_CONFIGURED",
+		"PROVINCE_TEAM_SCOPE_MISMATCH",
 		"NO_ROUTING_LAYER",
 	}
 )
@@ -99,9 +101,7 @@ GENERIC_REASON_LABELS = {
 	"PREVIEW_FAILED": "Không thể xem trước phân công do lỗi hệ thống ngoài dự kiến.",
 	"ROUTING_FAILED": "Không thể hoàn tất phân công tự động do lỗi cấu hình Team.",
 }
-BATCH_IMPORT_REQUIRED_HEADERS = frozenset(
-	{"student_name", "phone", "province", "high_school", "major"}
-)
+BATCH_IMPORT_REQUIRED_HEADERS = frozenset({"student_name", "phone", "province", "high_school", "major"})
 HISTORY_STATUS_PRIORITY = {
 	"assigned": 0,
 	"skipped": 1,
@@ -174,13 +174,13 @@ LEAD_ASSIGNMENT_WORKFLOW_STEP_DEFINITIONS = (
 		"matching",
 		{
 			"title": "Bước 4 · Xác định tuyến phân bổ",
-			"description": "Campaign · Team Group/tỉnh · campus",
-			"detail": "Hệ thống xét lớp policy đang bật theo thứ tự ưu tiên rồi chọn Sale/CTV phù hợp trong đúng campus.",
+			"description": "Toàn bộ Sales · Team/tỉnh · Chiến dịch",
+			"detail": "Chia luân phiên cho Sale/CTV trong phạm vi của cách phân công đã chọn.",
 			"rules": [
-				"Campaign mapping hợp lệ được ưu tiên trước.",
-				"Nếu không có mapping Campaign, tỉnh sẽ tìm toàn bộ Team trong Group tương ứng.",
-				"Lớp campus chia đều bỏ qua tỉnh/Group nhưng không vượt campus của Lead.",
-				"Team không có Sale/CTV đủ điều kiện sẽ dừng ở manual review trong đúng lớp đã khớp.",
+				"Chia đều cho toàn bộ Sales đủ điều kiện, không giới hạn campus hoặc tỉnh.",
+				"Theo team/tỉnh chọn đúng team ưu tiên đã cấu hình cho tỉnh của Lead.",
+				"Theo chiến dịch dùng đích Team/Team Group trên Campaign.",
+				"Thiếu cấu hình hoặc người nhận thì chờ kiểm tra; không tự chuyển cách phân công.",
 			],
 			"tone": "primary",
 		},
@@ -585,9 +585,7 @@ def _preview_item(
 		return
 	workflow_config = workflow_config or get_workflow_config()
 	classification_enabled = bool(
-		workflow_config.get("stored", {})
-		.get("classification", {})
-		.get("enabled", True)
+		workflow_config.get("stored", {}).get("classification", {}).get("enabled", True)
 	)
 	if not classification_enabled and processing_status != "PROCESSED":
 		_reset_item(
@@ -765,7 +763,8 @@ def _persist_item(item) -> None:
 		{
 			fieldname: (
 				int(item.get(fieldname) or 0)
-				if fieldname in {
+				if fieldname
+				in {
 					"active_load",
 					"capacity_limit",
 					"remaining_capacity",
@@ -792,9 +791,7 @@ def _serialize_item(item) -> dict[str, Any]:
 	)
 	processing_status = lead_state.get("processing_status")
 	lead_owner = lead_state.get("owner_staff") or lead_state.get("assigned_to")
-	item_status = _effective_history_item_status(
-		item.status, processing_status, lead_state.get("resolution")
-	)
+	item_status = _effective_history_item_status(item.status, processing_status, lead_state.get("resolution"))
 	lead = (
 		frappe.db.get_value(
 			"CRM Lead",
@@ -822,9 +819,7 @@ def _serialize_item(item) -> dict[str, Any]:
 	student_code = frappe.db.get_value("CRM Student", student_id, "name") if student_id else None
 	high_school = lead.get("high_school")
 	high_school_label = (
-		frappe.db.get_value("CRM High School", high_school, "school_name")
-		if high_school
-		else None
+		frappe.db.get_value("CRM High School", high_school, "school_name") if high_school else None
 	)
 	return {
 		"id": item.name,
@@ -905,9 +900,7 @@ def _serialize_live_review_item(lead) -> dict[str, Any]:
 		reason = validation_reason
 	high_school = lead.get("high_school")
 	high_school_label = (
-		frappe.db.get_value("CRM High School", high_school, "school_name")
-		if high_school
-		else None
+		frappe.db.get_value("CRM High School", high_school, "school_name") if high_school else None
 	)
 	is_terminal = resolution in {"DUPLICATE", "INVALID", "SPAM"}
 	return {
@@ -927,7 +920,9 @@ def _serialize_live_review_item(lead) -> dict[str, Any]:
 		"branch": lead.get("branch"),
 		"status": "skipped" if is_terminal else "manual_review",
 		"reason": reason,
-		"errorCode": resolution if resolution in {"DUPLICATE", "INVALID", "SPAM", "FAILED"} else "LEAD_CLOSED",
+		"errorCode": resolution
+		if resolution in {"DUPLICATE", "INVALID", "SPAM", "FAILED"}
+		else "LEAD_CLOSED",
 		"missingFields": _live_review_missing_fields(lead),
 		"routingTier": None,
 		"queue": None,
@@ -952,10 +947,20 @@ def _serialize_live_review_item(lead) -> dict[str, Any]:
 	}
 
 
-def _live_closed_leads(lead_ids: set[str] | None = None) -> list[dict[str, Any]]:
+def _live_closed_leads(
+	lead_ids: set[str] | None = None, *, missing_information: bool = False
+) -> list[dict[str, Any]]:
 	# Closed Leads remain visible for audit and reason lookup. Terminal outcomes
 	# are projected as skipped and must not be offered an operator "Xử lý" action.
 	filters: dict[str, Any] = {"processing_status": "CLOSED"}
+	if missing_information:
+		filters = {
+			"processing_status": ["in", ["NEW", "PROCESSING", "PROCESSED", "CLOSED"]],
+			"resolution": ["not in", ["DUPLICATE", "SPAM", "CREATED"]],
+			"owner_staff": ["is", "not set"],
+			"assigned_to": ["is", "not set"],
+			"converted_student": ["is", "not set"],
+		}
 	if lead_ids:
 		filters["name"] = ["in", sorted(lead_ids)]
 	return frappe.get_list(
@@ -1152,9 +1157,7 @@ def _processing_workflow_summary() -> dict[str, int]:
 
 
 def _workflow_status(batch_status: str | None, step_id: str, summary: dict[str, int]) -> str:
-	attention_count = (
-		summary["deferred"] + summary["manualReview"] + summary["failed"] + summary["skipped"]
-	)
+	attention_count = summary["deferred"] + summary["manualReview"] + summary["failed"] + summary["skipped"]
 	has_lead = summary["total"] > 0
 	if not batch_status:
 		if not has_lead:
@@ -1589,10 +1592,7 @@ def run_lead_assignment_batch(batch_name: str):
 	stored_snapshot = _stored_workflow_snapshot(batch)
 	if stored_snapshot:
 		workflow_config = stored_snapshot
-		policy = (
-			stored_snapshot.get("matching", {}).get("routingPolicy")
-			or get_lead_routing_policy()
-		)
+		policy = stored_snapshot.get("matching", {}).get("routingPolicy") or get_lead_routing_policy()
 	else:
 		policy = get_lead_routing_policy()
 		workflow_config = get_workflow_config()
@@ -1611,10 +1611,8 @@ def run_lead_assignment_batch(batch_name: str):
 	batch.completed_at = None
 	_save_batch(batch)
 
-	# Capacity is measured from open assigned Leads. Without an in-run tally each
-	# item would see the same load and the whole batch would land on one Sale,
-	# contradicting the rotation the preview already showed the operator.
-	load_overrides: dict[str, int] = {}
+	# Each successful assignment commits ownership, so subsequent decisions read
+	# the updated load. Preview alone needs simulated load overrides.
 	for index, item in enumerate(batch.items):
 		if item.status in TERMINAL_ITEM_STATUSES:
 			continue
@@ -1624,10 +1622,7 @@ def run_lead_assignment_batch(batch_name: str):
 			lead = _batch_item_lead(item)
 			processing_status = str(lead.get("processing_status") or "NEW").upper()
 			if processing_status == "ASSIGNED":
-				if (
-					lead.get("converted_student")
-					or str(lead.get("resolution") or "").casefold() == "created"
-				):
+				if lead.get("converted_student") or str(lead.get("resolution") or "").casefold() == "created":
 					_reset_item(item, status="skipped", reason="ALREADY_CONVERTED")
 					item.execution_id = batch.execution_id
 					item.completed_at = now_datetime()
@@ -1670,9 +1665,7 @@ def run_lead_assignment_batch(batch_name: str):
 			if lead.get("owner_staff") or lead.get("assigned_to"):
 				_reset_item(item, status="skipped", reason="ALREADY_ASSIGNED")
 			else:
-				recipient = _resolve_batch_recipient(
-					batch, lead, actor_context, load_overrides=load_overrides, policy=policy
-				)
+				recipient = _resolve_batch_recipient(batch, lead, actor_context, policy=policy)
 				assignment = assign_lead(
 					lead.name,
 					recipient["ownerStaff"],
@@ -1681,8 +1674,8 @@ def run_lead_assignment_batch(batch_name: str):
 					idempotency_key=f"lead-batch-owner:{batch.name}:{item.name}:{lead.get('ownership_revision') or 0}",
 					expected_revision=int(lead.get("ownership_revision") or 0),
 					correlation_id=f"{batch.execution_id}:{item.name}",
+					_routing_scope=recipient.get("tier"),
 				)
-				load_overrides[recipient["ownerStaff"]] = load_overrides.get(recipient["ownerStaff"], 0) + 1
 				result = {
 					"status": "applied",
 					"owner_staff": recipient["ownerStaff"],
@@ -1958,9 +1951,7 @@ def retry_lead_assignment_batch(batch_name: str, item_ids: list[str] | str | Non
 	_require_access()
 	batch = frappe.get_doc(BATCH_DOCTYPE, batch_name)
 	workflow_config = _stored_workflow_snapshot(batch) or get_workflow_config()
-	max_retries = int(
-		workflow_config.get("stored", {}).get("review", {}).get("maxRetries", 3)
-	)
+	max_retries = int(workflow_config.get("stored", {}).get("review", {}).get("maxRetries", 3))
 	selected = set(_parse_list(item_ids, "item_ids")) if item_ids else None
 	reset_count = 0
 	for item in batch.items:
@@ -2111,12 +2102,22 @@ def list_lead_assignment_history_items(
 	lead_ids: list[str] | str | None = None,
 ):
 	"""Return batch history plus currently closed Leads that need operator review."""
+	_require_read_access()
 	try:
 		page_size = max(1, min(int(limit), 100))
 		page_number = max(1, int(page or 1))
 	except (TypeError, ValueError):
 		frappe.throw(_("Thông tin phân trang không hợp lệ."), frappe.ValidationError)
-	allowed_statuses = {"pending", "assigned", "deferred", "manual_review", "failed", "skipped", "issues"}
+	allowed_statuses = {
+		"pending",
+		"assigned",
+		"deferred",
+		"manual_review",
+		"failed",
+		"skipped",
+		"issues",
+		"missing_information",
+	}
 	if status and status != "all" and status not in allowed_statuses:
 		frappe.throw(_("Trạng thái hồ sơ không hợp lệ."), frappe.ValidationError)
 	search = str(q or "").strip().casefold()
@@ -2127,16 +2128,13 @@ def list_lead_assignment_history_items(
 		{resolve_lead_name(value) for value in selected_lead_ids} if selected_lead_ids else None
 	)
 	selected_public_lead_ids = (
-		{
-			frappe.db.get_value("CRM Lead", name, "lead_id") or name
-			for name in selected_lead_names
-		}
+		{frappe.db.get_value("CRM Lead", name, "lead_id") or name for name in selected_lead_names}
 		if selected_lead_names
 		else None
 	)
 	batches = []
 	batch_page = 1
-	while True:
+	while status != "missing_information":
 		batch_response = list_lead_assignment_batches(limit=100, page=batch_page)
 		batches.extend(batch_response.get("items", []))
 		if not batch_response.get("pagination", {}).get("has_next_page"):
@@ -2146,7 +2144,11 @@ def list_lead_assignment_history_items(
 	seen_lead_ids: set[str] = set()
 
 	def include_item(serialized: dict[str, Any]) -> None:
-		if serialized.get("status") == "manual_review" and serialized.get("resolution") == "PENDING":
+		if (
+			status != "missing_information"
+			and serialized.get("status") == "manual_review"
+			and serialized.get("resolution") == "PENDING"
+		):
 			validation_reason = _processing_validation_reason(serialized)
 			if validation_reason:
 				serialized["reason"] = validation_reason
@@ -2161,7 +2163,11 @@ def list_lead_assignment_history_items(
 			"failed",
 		}:
 			return
-		if status and status not in {"all", "issues"} and serialized["status"] != status:
+		if (
+			status
+			and status not in {"all", "issues", "missing_information"}
+			and serialized["status"] != status
+		):
 			return
 		if search:
 			searchable = " ".join(
@@ -2193,10 +2199,16 @@ def list_lead_assignment_history_items(
 			)
 			seen_lead_ids.add(str(serialized.get("leadId") or ""))
 			include_item(serialized)
-	for lead in _live_closed_leads(selected_lead_names):
+	for lead in _live_closed_leads(selected_lead_names, missing_information=status == "missing_information"):
+		if status == "missing_information" and not _processing_validation_issues(lead):
+			continue
 		if (lead.get("lead_id") or lead.name) in seen_lead_ids:
 			continue
-		include_item(_serialize_live_review_item(lead))
+		serialized = _serialize_live_review_item(lead)
+		if status == "missing_information":
+			serialized["processingStatus"] = lead.get("processing_status")
+			serialized["reason"] = "; ".join(_processing_validation_issues(lead))
+		include_item(serialized)
 	items.sort(key=lambda row: (row.get("batchCreatedAt") or "", row.get("id") or ""), reverse=True)
 	items.sort(key=lambda row: HISTORY_STATUS_PRIORITY.get(row.get("status"), 99))
 	total = len(items)

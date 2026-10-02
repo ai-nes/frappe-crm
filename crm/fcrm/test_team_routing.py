@@ -251,6 +251,38 @@ class TestActiveTeamRecipientsWithoutCapacityGate(TestCase):
 
 
 class TestTeamSelectionWithoutCapacityGate(TestCase):
+	def test_round_robin_uses_history_deduplicates_staff_and_matches_preview(self):
+		pool = [
+			{
+				"staff": staff,
+				"staffName": staff,
+				"team": "TEAM-1",
+				"function": "Sale",
+				"capacity": {"active": 0, "limit": None, "remaining": None},
+			}
+			for staff in ["SALE-A", "SALE-B"]
+		]
+		teams = [{"name": "TEAM-1", "team_name": "A"}, {"name": "TEAM-2", "team_name": "B"}]
+		with (
+			patch.object(team_routing, "_team_recipient_pool", return_value=pool),
+			patch.object(frappe.db, "get_value", return_value="SALE-A"),
+		):
+			first = team_routing.select_recipient_for_teams(
+				teams,
+				scope_key="GLOBAL:COMPANY",
+				policy_version="test",
+				strategy="round_robin",
+			)
+			preview_next = team_routing.select_recipient_for_teams(
+				teams,
+				scope_key="GLOBAL:COMPANY",
+				policy_version="test",
+				strategy="round_robin",
+				load_overrides={"SALE-B": 1},
+			)
+		self.assertEqual(first["ownerStaff"], "SALE-B")
+		self.assertEqual(preview_next["ownerStaff"], "SALE-A")
+
 	def test_policy_cannot_require_capacity_or_enforce_legacy_limit(self):
 		pool = [
 			{
