@@ -1,11 +1,17 @@
 import frappe
 from frappe.model.document import Document
 
-from crm.fcrm.interaction_log import external_id_for
+from crm.fcrm.interaction_log import MANUAL_INTERACTION_TYPE_ALIASES, external_id_for
 
 
 class CRMInteraction(Document):
 	def before_validate(self):
+		# Direct manual inserts use the same vocabulary as provider interactions.
+		# Do not rewrite historical rows or externally identified source records.
+		if self.is_new() and not self.source_namespace and not self.reference_doctype and not self.external_id:
+			self.interaction_type = MANUAL_INTERACTION_TYPE_ALIASES.get(
+				self.interaction_type, self.interaction_type
+			)
 		if not self.interaction_datetime:
 			self.interaction_datetime = frappe.utils.now_datetime()
 		if not self.actor:

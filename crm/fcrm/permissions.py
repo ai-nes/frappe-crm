@@ -386,7 +386,7 @@ def has_student_list_read_permission(doc, user=None):
 	)
 
 
-def get_interaction_permission_query_conditions(user=None, doctype=None):
+def get_interaction_permission_query_conditions(user=None, doctype=None, *, for_owner_scope=False):
 	"""Row-level scope for CRM Interaction: Student-linked or Contact-only.
 
 	A CRM Interaction has no independent row scope of its own -- before this
@@ -400,6 +400,8 @@ def get_interaction_permission_query_conditions(user=None, doctype=None):
 	if doctype != "CRM Interaction":
 		return "1=0"
 	user = user or frappe.session.user
+	if not for_owner_scope and can_read_full_lead_board(user):
+		return None
 	student_condition = get_permission_query_conditions("CRM Student", user=user)
 	contact_condition = get_permission_query_conditions("CRM Student", user=user)
 	table = "`tabCRM Interaction`"
@@ -446,12 +448,16 @@ def _has_interaction_create_permission(doc, user=None) -> bool:
 		student = frappe.db.exists("CRM Student", doc.student)
 		if not student:
 			return False
-		return has_permission(frappe.get_doc("CRM Student", doc.student), user=user)
+		return frappe.has_permission(
+			"CRM Student", ptype="read", doc=frappe.get_doc("CRM Student", doc.student), user=user
+		)
 	if doc.get("crm_contact"):
 		contact = frappe.db.exists("CRM Student", doc.crm_contact)
 		if not contact:
 			return False
-		return has_permission(frappe.get_doc("CRM Student", doc.crm_contact), user=user)
+		return frappe.has_permission(
+			"CRM Student", ptype="read", doc=frappe.get_doc("CRM Student", doc.crm_contact), user=user
+		)
 	# Neither target is set -- nothing to scope against; deny rather than
 	# silently allow an orphaned interaction to bypass row scope.
 	return False
@@ -464,7 +470,11 @@ def has_interaction_permission(doc, user=None, permission_type=None, ptype=None)
 	permission_type = permission_type or ptype
 	if permission_type == "create":
 		return _has_interaction_create_permission(doc, user=user)
-	condition = get_interaction_permission_query_conditions(user=user, doctype="CRM Interaction")
+	condition = get_interaction_permission_query_conditions(
+		user=user,
+		doctype="CRM Interaction",
+		for_owner_scope=permission_type not in {None, "read"},
+	)
 	if condition is None:
 		return True
 	if condition == "1=0":

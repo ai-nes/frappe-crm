@@ -769,6 +769,51 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(calls[0]["receiverName"], "Nguyễn Văn Minh")
 		self.assertEqual(calls[0]["phoneNumber"], "0901234412")
 
+	def test_manual_call_types_are_projected_without_channel(self):
+		interactions = [
+			frappe._dict(name=f"MANUAL-{code}", interaction_type=code, summary="Manual call")
+			for code in ("CALL", "PHONE_CALL", "COUNSELING")
+		]
+		with patch.object(director_students, "_table_exists", return_value=False):
+			calls = director_students._student_call_records("STU-1", interactions)
+		self.assertEqual([call["id"] for call in calls], [row.name for row in interactions])
+
+	def test_manual_zalo_alias_is_projected_without_channel(self):
+		messages = director_students._student_zalo_messages(
+			"STU-1", [frappe._dict(name="MANUAL-ZALO", interaction_type="ZALO_CHAT", summary="Hello")]
+		)
+		self.assertEqual([message["id"] for message in messages], ["MANUAL-ZALO"])
+
+	def test_manual_zalo_summary_does_not_invent_message_delivery(self):
+		with patch.object(director_students, "_user_name", return_value="Người ghi nhận"):
+			messages = director_students._student_zalo_messages("STU-1", [frappe._dict(
+				name="MANUAL", interaction_type="MESSAGE", direction="inbound",
+				summary="Tư vấn học phí", notes="Hẹn gọi lại", outcome="Captured",
+				actor="sale@example.com", external_id="generated-manual-id",
+			)])
+		manual = messages[0]
+		self.assertEqual(manual["entryKind"], "manual_summary")
+		self.assertEqual(manual["recordedBy"], "Người ghi nhận")
+		self.assertEqual(manual["summary"], "Tư vấn học phí")
+		self.assertEqual(manual["notes"], "Hẹn gọi lại")
+		self.assertNotIn("status", manual)
+		self.assertNotIn("attachmentName", manual)
+		self.assertEqual(manual["senderName"], "")
+
+	def test_provider_zalo_without_channel_is_still_a_message(self):
+		for source in (
+			{"source_namespace": "chatwoot", "source_record_id": "123"},
+			{"conversation_id": "456"},
+			{"reference_doctype": "Chatwoot Message", "reference_docname": "789"},
+		):
+			with self.subTest(source=source):
+				message = director_students._student_zalo_messages("STU-1", [frappe._dict(
+					name="PROVIDER", interaction_type="MESSAGE", direction="inbound",
+					notes="Tin nhắn thực tế", **source,
+				)])[0]
+				self.assertEqual(message["entryKind"], "message")
+				self.assertEqual(message["content"], "Tin nhắn thực tế")
+
 	def test_display_code_resolves_against_students_not_leads(self):
 		"""The display code is built from the Student name, so no Lead can match it."""
 		captured = {}
@@ -1111,9 +1156,11 @@ class TestDirectorStudents(FrappeTestCase):
 			calls[0][1]["filters"],
 			{
 				"student": ["in", ["STU-1"]],
-				"interaction_type": ["in", ("MESSAGE", "TIN_NHAN_CHATWOOT")],
 			},
 		)
+		self.assertEqual(calls[0][1]["or_filters"], calls[1][1]["or_filters"])
+		self.assertIn("ZALO_CHAT", calls[0][1]["or_filters"][0][2])
+		self.assertEqual(calls[0][1]["or_filters"][1], ["channel", "=", "zalo"])
 		self.assertEqual(calls[0][1]["limit_start"], 1)
 		self.assertEqual(calls[0][1]["limit_page_length"], 1)
 		self.assertEqual(calls[1][1]["limit_page_length"], 0)

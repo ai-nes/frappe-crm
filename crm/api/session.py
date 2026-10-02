@@ -100,12 +100,14 @@ def _crm_feature_flags(profile):
 def _session_doctype_permissions(roles, *, administrator=False):
 	"""Return DocType flags exposed to the SPA for the authenticated user."""
 	permissions = doctype_permissions_for_roles(roles, administrator=administrator)
-	if frappe.db.exists("DocType", "Task"):
-		permissions["Task"] = {
-			"row_scope": "assigned",
+	for doctype, row_scope in (("Task", "assigned"), ("CRM Interaction", "student")):
+		if not frappe.db.exists("DocType", doctype):
+			continue
+		permissions[doctype] = {
+			"row_scope": row_scope,
 			**{
 				permission: bool(
-					frappe.has_permission("Task", ptype=permission, user=frappe.session.user)
+					frappe.has_permission(doctype, ptype=permission, user=frappe.session.user)
 				)
 				for permission in ("read", "write", "create", "delete", "export")
 			},

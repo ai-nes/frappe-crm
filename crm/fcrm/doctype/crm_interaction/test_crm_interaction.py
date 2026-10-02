@@ -70,6 +70,24 @@ class TestCRMInteraction(FrappeTestCase):
 		self.assertEqual(interaction.student, student.name)
 		self.assertTrue(interaction.interaction_datetime)
 
+	def test_manual_aliases_use_canonical_types_before_validation(self):
+		for alias, canonical in (
+			("ZALO_CHAT", "MESSAGE"), ("ZALO", "MESSAGE"), ("CALL", "PHONE_CALL"),
+			("MESSAGE_CHATWOOT", "MESSAGE"), ("TIN_NHAN_CHATWOOT", "MESSAGE"),
+		):
+			with self.subTest(alias=alias):
+				doc = frappe.get_doc({"doctype": "CRM Interaction", "interaction_type": alias, "__islocal": 1})
+				doc.before_validate()
+				self.assertEqual(doc.interaction_type, canonical)
+
+	def test_provider_alias_is_not_rewritten(self):
+		doc = frappe.get_doc({
+			"doctype": "CRM Interaction", "interaction_type": "ZALO_CHAT", "source_namespace": "provider",
+			"__islocal": 1,
+		})
+		doc.before_validate()
+		self.assertEqual(doc.interaction_type, "ZALO_CHAT")
+
 	def test_intent_snapshots_student_and_importance(self):
 		student = self._make_student()
 		interaction = self._make_interaction(student)
