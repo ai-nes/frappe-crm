@@ -15,17 +15,19 @@ from crm.api.assignment_workspace import (
 	_overview_sources,
 	_safe_get_all,
 )
-from crm.fcrm.role_policy import resolve_crm_profile
 from crm.fcrm.lead_assignment_workflow import (
 	STEP_IDS,
-	get_lead_assignment_workflow_config as get_workflow_config,
 	normalize_step_id,
 	step_snapshot,
 	update_stored_step,
 )
+from crm.fcrm.lead_assignment_workflow import (
+	get_lead_assignment_workflow_config as get_workflow_config,
+)
 from crm.fcrm.lead_routing_policy import get_lead_routing_policy, validate_policy_payload
+from crm.fcrm.role_policy import resolve_crm_profile
 from crm.fcrm.student_feature_flags import enabled as feature_enabled
-from crm.fcrm.team_routing import _capacity_snapshot, active_lead_count_by_staff
+from crm.fcrm.team_routing import _active_teams_for_province, _capacity_snapshot, active_lead_count_by_staff
 
 RECIPIENT_FUNCTIONS = {"Sale", "CTV Sale"}
 CONTROL_DOCTYPE = "CRM Assignment Control"
@@ -43,7 +45,9 @@ def _as_bool(value) -> bool:
 def _require_control_access():
 	context = _actor_context()
 	if "system.configure" not in context["capabilities"]:
-		frappe.throw(_("Chỉ Quản trị hệ thống mới được thay đổi thiết lập phân công tự động."), frappe.PermissionError)
+		frappe.throw(
+			_("Chỉ Quản trị hệ thống mới được thay đổi thiết lập phân công tự động."), frappe.PermissionError
+		)
 	return context
 
 
@@ -77,6 +81,8 @@ def _stored_control():
 				"lead_global_layer_enabled",
 				"lead_layer_order",
 				"lead_distribution_strategy",
+				"lead_routing_mode",
+				"lead_province_team_priority",
 				"lead_assignment_workflow_config",
 				"lead_workflow_revision",
 				"lead_workflow_last_changed_by",
@@ -99,16 +105,11 @@ def _routing_enabled(control) -> bool:
 def _load_rows(context):
 	sources = _overview_sources(context)
 	allowed_teams = {
-		row.name
-		for row in sources["teams"]
-		if row.get("is_active") and row.get("team_type") == "Sales"
+		row.name for row in sources["teams"] if row.get("is_active") and row.get("team_type") == "Sales"
 	}
 	staff_map = {row.name: row for row in sources["staff"]}
 	team_map = {row.name: row for row in sources["teams"]}
-	user_enabled = {
-		row.name: bool(row.get("enabled"))
-		for row in _safe_get_all("User", ["name", "enabled"])
-	}
+	user_enabled = {row.name: bool(row.get("enabled")) for row in _safe_get_all("User", ["name", "enabled"])}
 	campus_map = {
 		row.name: row.get("campus_name") or row.name
 		for row in _safe_get_all("CRM Campus", ["name", "campus_name"])
@@ -146,13 +147,15 @@ def _load_rows(context):
 		maximum = int(capacity.get("max_active_students") or 0) if capacity else 0
 		workload = "unconfigured"
 		if maximum > 0:
-			workload = "over_capacity" if active >= maximum else "near_capacity" if active >= maximum * 0.85 else "healthy"
+			workload = (
+				"over_capacity"
+				if active >= maximum
+				else "near_capacity"
+				if active >= maximum * 0.85
+				else "healthy"
+			)
 		eligible_membership = next(
-			(
-				row
-				for row in staff_memberships
-				if (row.get("function") or "Sale") in RECIPIENT_FUNCTIONS
-			),
+			(row for row in staff_memberships if (row.get("function") or "Sale") in RECIPIENT_FUNCTIONS),
 			None,
 		)
 		function = (eligible_membership or primary_membership).get("function") or "Sale"
@@ -161,9 +164,9 @@ def _load_rows(context):
 			recipient_eligible = bool(staff.get("user")) and user_enabled.get(staff.get("user"), False)
 		if recipient_eligible:
 			recipient_eligible = resolve_crm_profile(frappe.get_roles(staff.get("user"))) in {
-			"sales",
-			"ctv_sale",
-		}
+				"sales",
+				"ctv_sale",
+			}
 		rows.append(
 			{
 				"staff": staff_id,
@@ -173,7 +176,8 @@ def _load_rows(context):
 				"team_name": team.get("team_name") if team else team_id,
 				"team_names": team_names,
 				"campus": staff.get("campus") or (team.get("campus") if team else None),
-				"campus_name": campus_map.get(staff.get("campus")) or campus_map.get(team.get("campus") if team else None),
+				"campus_name": campus_map.get(staff.get("campus"))
+				or campus_map.get(team.get("campus") if team else None),
 				"function": function,
 				"active_leads": active,
 				"capacity": maximum or None,
@@ -181,8 +185,12 @@ def _load_rows(context):
 				"load_percent": round(active / maximum * 100, 1) if maximum else None,
 				"workload": workload,
 				"capacity_configured": bool(maximum),
-				"period_start": str(capacity.get("period_start")) if capacity and capacity.get("period_start") else None,
-				"period_end": str(capacity.get("period_end")) if capacity and capacity.get("period_end") else None,
+				"period_start": str(capacity.get("period_start"))
+				if capacity and capacity.get("period_start")
+				else None,
+				"period_end": str(capacity.get("period_end"))
+				if capacity and capacity.get("period_end")
+				else None,
 				"recipient_eligible": recipient_eligible,
 				"is_active": bool(staff.get("is_active")),
 			}
@@ -216,14 +224,10 @@ def _policy_rows(context, sources):
 
 def _activation_checks(load_rows, policies, sources):
 	sales_team_ids = {
-		row.name
-		for row in sources["teams"]
-		if row.get("is_active") and row.get("team_type") == "Sales"
+		row.name for row in sources["teams"] if row.get("is_active") and row.get("team_type") == "Sales"
 	}
 	required_pools = [
-		row
-		for row in sources["pools"]
-		if row.get("is_active") and row.get("team") in sales_team_ids
+		row for row in sources["pools"] if row.get("is_active") and row.get("team") in sales_team_ids
 	]
 	today_date = getdate()
 	current_policies = [
@@ -232,24 +236,13 @@ def _activation_checks(load_rows, policies, sources):
 		if row.get("status") == "active"
 		and row.get("effective_from")
 		and getdate(row.get("effective_from")) <= today_date
-		and (
-			not row.get("effective_until")
-			or getdate(row.get("effective_until")) >= today_date
-		)
+		and (not row.get("effective_until") or getdate(row.get("effective_until")) >= today_date)
 	]
 	policies_by_pool = {}
 	for row in current_policies:
 		policies_by_pool.setdefault(row.get("student_pool"), []).append(row)
-	missing_pools = [
-		row
-		for row in required_pools
-		if not policies_by_pool.get(row.name)
-	]
-	overlapping_pools = [
-		row
-		for row in required_pools
-		if len(policies_by_pool.get(row.name, [])) > 1
-	]
+	missing_pools = [row for row in required_pools if not policies_by_pool.get(row.name)]
+	overlapping_pools = [row for row in required_pools if len(policies_by_pool.get(row.name, [])) > 1]
 	recipients = [row for row in load_rows if row.get("recipient_eligible") and row.get("is_active")]
 	missing_capacity = [row for row in recipients if not row.get("capacity_configured")]
 	policy_ready = bool(required_pools) and not missing_pools and not overlapping_pools
@@ -287,7 +280,9 @@ def _activation_checks(load_rows, policies, sources):
 			"label": _("Mọi nhân viên đều có giới hạn nhận Lead"),
 			"passed": not missing_capacity,
 			"count": len(missing_capacity),
-			"detail": _("Còn thiếu: {0}.").format(", ".join(row["staff_name"] for row in missing_capacity[:5]))
+			"detail": _("Còn thiếu: {0}.").format(
+				", ".join(row["staff_name"] for row in missing_capacity[:5])
+			)
 			if missing_capacity
 			else _("Mỗi nhân viên có giới hạn Lead và còn chỗ trống được tính."),
 		},
@@ -298,8 +293,7 @@ def _activation_checks(load_rows, policies, sources):
 def _policy_options(sources):
 	return {
 		"campuses": [
-			{"value": row.name, "label": row.get("campus_name") or row.name}
-			for row in sources["campuses"]
+			{"value": row.name, "label": row.get("campus_name") or row.name} for row in sources["campuses"]
 		],
 		"pools": [
 			{
@@ -408,13 +402,22 @@ def _workflow_snapshot_response(context, control=None):
 	control = control if control is not None else _stored_control()
 	config = get_workflow_config(control)
 	policy = get_lead_routing_policy(control)
+	steps = {step_id: step_snapshot(config, step_id, policy=policy) for step_id in STEP_IDS}
+	steps["matching"]["settings"]["teamOptions"] = [
+		{
+			"id": team["name"],
+			"label": team["team_name"],
+			"province": team["province"],
+			"provinceLabel": frappe.db.get_value("CRM Province", team["province"], "province_name")
+			or team["province"],
+		}
+		for team in _active_teams_for_province(None)
+		if team.get("province")
+	]
 	return {
 		"schemaVersion": config["schemaVersion"],
 		"config": config,
-		"steps": {
-			step_id: step_snapshot(config, step_id, policy=policy)
-			for step_id in STEP_IDS
-		},
+		"steps": steps,
 		"policy": policy,
 		"canManage": _can_manage_lead_routing_policy(context),
 	}
@@ -436,6 +439,8 @@ def update_lead_routing_policy(
 	global_layer_enabled: bool | str | None = None,
 	distribution_strategy: str | None = None,
 	capacity_required: bool | str | None = None,
+	routing_mode: str | None = None,
+	province_team_priority: dict | str | None = None,
 	reason: str | None = None,
 ):
 	"""Update the active Lead policy immediately and increment its revision."""
@@ -451,6 +456,8 @@ def update_lead_routing_policy(
 		global_layer_enabled=global_layer_enabled,
 		distribution_strategy=distribution_strategy,
 		capacity_required=capacity_required,
+		routing_mode=routing_mode,
+		province_team_priority=province_team_priority,
 	)
 	doc = frappe.get_single(CONTROL_DOCTYPE)
 	for fieldname, value in values.items():
@@ -493,6 +500,8 @@ def update_lead_assignment_workflow_step(
 			global_layer_enabled=settings.get("globalLayerEnabled"),
 			distribution_strategy=settings.get("distributionStrategy"),
 			capacity_required=settings.get("capacityRequired"),
+			routing_mode=settings.get("routingMode"),
+			province_team_priority=settings.get("provinceTeamPriority"),
 		)
 		for fieldname, value in values.items():
 			if value is not None:
@@ -585,7 +594,11 @@ def upsert_staff_capacity(
 		{"staff": staff, "period_start": start, "period_end": end},
 		"name",
 	)
-	doc = frappe.get_doc("CRM Staff Capacity Period", existing) if existing else frappe.new_doc("CRM Staff Capacity Period")
+	doc = (
+		frappe.get_doc("CRM Staff Capacity Period", existing)
+		if existing
+		else frappe.new_doc("CRM Staff Capacity Period")
+	)
 	doc.staff = staff
 	doc.team = team
 	doc.campus = staff_row.campus

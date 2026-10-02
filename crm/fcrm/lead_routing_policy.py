@@ -15,6 +15,7 @@ from frappe import _
 
 from crm.fcrm.team_routing import (
 	_active_teams_for_campus,
+	_active_teams_for_company,
 	_active_teams_for_group,
 	_active_teams_for_province,
 	select_recipient_for_teams,
@@ -25,7 +26,7 @@ LAYER_KEYS = ("campaign", "group", "global")
 LAYER_LABELS = {
 	"campaign": "Theo chiến dịch",
 	"group": "Theo Team Group/tỉnh",
-	"global": "Chia đều trong campus",
+	"global": "Chia đều cho toàn bộ Sales",
 }
 STRATEGIES = ("least_load", "round_robin")
 DEFAULT_LAYER_ORDER = list(LAYER_KEYS)
@@ -46,18 +47,23 @@ def _control_values() -> dict[str, Any]:
 		return {}
 	try:
 		doc = frappe.get_single(CONTROL_DOCTYPE)
-		return {fieldname: doc.get(fieldname) for fieldname in (
-			"routing_enabled",
-			"capacity_required",
-			"lead_campaign_layer_enabled",
-			"lead_group_layer_enabled",
-			"lead_global_layer_enabled",
-			"lead_layer_order",
-			"lead_distribution_strategy",
-			"revision",
-			"last_changed_by",
-			"last_change_reason",
-		)}
+		return {
+			fieldname: doc.get(fieldname)
+			for fieldname in (
+				"routing_enabled",
+				"capacity_required",
+				"lead_campaign_layer_enabled",
+				"lead_group_layer_enabled",
+				"lead_global_layer_enabled",
+				"lead_layer_order",
+				"lead_distribution_strategy",
+				"lead_routing_mode",
+				"lead_province_team_priority",
+				"revision",
+				"last_changed_by",
+				"last_change_reason",
+			)
+		}
 	except Exception:
 		return {}
 
@@ -99,17 +105,26 @@ def get_lead_routing_policy(control: dict[str, Any] | None = None) -> dict[str, 
 	# Existing singletons predate the governed Lead policy fields. Frappe adds
 	# new Check columns as 0 on those rows even though the DocType defaults are
 	# enabled; an empty order/strategy is the unambiguous legacy signature.
-	legacy_defaults = not str(control.get("lead_layer_order") or "").strip() and not str(
-		control.get("lead_distribution_strategy") or ""
-	).strip()
+	legacy_defaults = (
+		not str(control.get("lead_layer_order") or "").strip()
+		and not str(control.get("lead_distribution_strategy") or "").strip()
+	)
 	layer_enabled = {
 		"campaign": True if legacy_defaults else _as_bool(control.get("lead_campaign_layer_enabled"), True),
 		"group": True if legacy_defaults else _as_bool(control.get("lead_group_layer_enabled"), True),
 		"global": True if legacy_defaults else _as_bool(control.get("lead_global_layer_enabled"), True),
 	}
 	revision = int(control.get("revision") or 0)
+	mode = str(control.get("lead_routing_mode") or "").strip()
+	if mode not in LAYER_KEYS:
+		mode = next((key for key in order if layer_enabled[key]), "group")
+	priorities = control.get("lead_province_team_priority") or {}
+	if isinstance(priorities, str):
+		priorities = frappe.parse_json(priorities)
 	return {
 		"enabled": _as_bool(control.get("routing_enabled"), False),
+		"routingMode": mode,
+		"provinceTeamPriority": priorities if isinstance(priorities, dict) else {},
 		"layers": [
 			{
 				"key": key,
@@ -120,12 +135,12 @@ def get_lead_routing_policy(control: dict[str, Any] | None = None) -> dict[str, 
 			for index, key in enumerate(order)
 		],
 		"layerOrder": order,
-		"distributionStrategy": normalize_strategy(control.get("lead_distribution_strategy")),
+		"distributionStrategy": "round_robin",
 		"capacityRequired": _as_bool(control.get("capacity_required"), True),
 		"revision": revision,
 		"version": f"lead-routing-v{revision}",
 		"applyScope": "new_decisions",
-		"sameCampus": True,
+		"sameCampus": mode == "campaign",
 		"teamLeadFallback": False,
 		"lastChangedBy": control.get("last_changed_by"),
 		"lastChangeReason": control.get("last_change_reason"),
@@ -141,21 +156,52 @@ def validate_policy_payload(
 	global_layer_enabled: Any = None,
 	distribution_strategy: Any = None,
 	capacity_required: Any = None,
+	routing_mode: Any = None,
+	province_team_priority: Any = None,
 ) -> dict[str, Any]:
 	"""Return normalized update values and reject unsupported rule shapes."""
 	order = None if layer_order is None else normalize_layer_order(layer_order)
 	strategy = None if distribution_strategy in (None, "") else normalize_strategy(distribution_strategy)
-	if distribution_strategy not in (None, "") and str(distribution_strategy).strip().casefold() not in STRATEGIES:
+	if (
+		distribution_strategy not in (None, "")
+		and str(distribution_strategy).strip().casefold() not in STRATEGIES
+	):
 		frappe.throw(_("Thuật toán phân bổ không được hỗ trợ."), frappe.ValidationError)
+	if routing_mode is not None and routing_mode not in LAYER_KEYS:
+		frappe.throw(_("Cách phân công Lead không hợp lệ."), frappe.ValidationError)
+	priorities = None
+	if province_team_priority is not None:
+		priorities = (
+			frappe.parse_json(province_team_priority)
+			if isinstance(province_team_priority, str)
+			else province_team_priority
+		)
+		if not isinstance(priorities, dict):
+			frappe.throw(_("Cấu hình team theo tỉnh phải là object."), frappe.ValidationError)
+		for province_id, target_team in priorities.items():
+			if not isinstance(province_id, str) or not isinstance(target_team, str) or not target_team:
+				frappe.throw(_("Tỉnh và team ưu tiên không hợp lệ."), frappe.ValidationError)
+			if not frappe.db.exists("CRM Province", province_id) or not _active_teams_for_province(
+				province_id, team_id=target_team
+			):
+				frappe.throw(
+					_("Team ưu tiên phải đang hoạt động và phụ trách đúng tỉnh."), frappe.ValidationError
+				)
 	return {
+		"lead_routing_mode": routing_mode,
+		"lead_province_team_priority": priorities,
 		"routing_enabled": None if enabled is None else int(_as_bool(enabled)),
 		"lead_layer_order": None if order is None else ",".join(order),
 		"lead_campaign_layer_enabled": (
 			None if campaign_layer_enabled is None else int(_as_bool(campaign_layer_enabled))
 		),
-		"lead_group_layer_enabled": None if group_layer_enabled is None else int(_as_bool(group_layer_enabled)),
-		"lead_global_layer_enabled": None if global_layer_enabled is None else int(_as_bool(global_layer_enabled)),
-		"lead_distribution_strategy": strategy,
+		"lead_group_layer_enabled": None
+		if group_layer_enabled is None
+		else int(_as_bool(group_layer_enabled)),
+		"lead_global_layer_enabled": None
+		if global_layer_enabled is None
+		else int(_as_bool(global_layer_enabled)),
+		"lead_distribution_strategy": "round_robin" if routing_mode is not None else strategy,
 		"capacity_required": None if capacity_required is None else int(_as_bool(capacity_required)),
 	}
 
@@ -167,7 +213,9 @@ def _routing_error(code: str, message: str):
 	raise exception
 
 
-def _campaign_scope(lead, campus: str | None, *, team_id: str | None = None) -> tuple[list[dict[str, Any]], str] | None:
+def _campaign_scope(
+	lead, campus: str | None, *, team_id: str | None = None
+) -> tuple[list[dict[str, Any]], str] | None:
 	campaign = str(lead.get("campaign") or "").strip()
 	if not campaign:
 		return None
@@ -203,10 +251,14 @@ def _campaign_scope(lead, campus: str | None, *, team_id: str | None = None) -> 
 	if target_type == "Team Group":
 		target = row.get("lead_routing_target_group")
 		if not target:
-			_routing_error("CAMPAIGN_MAPPING_INVALID", "Campaign đang bật phân bổ nhưng chưa chọn Team Group.")
+			_routing_error(
+				"CAMPAIGN_MAPPING_INVALID", "Campaign đang bật phân bổ nhưng chưa chọn Team Group."
+			)
 		teams = _active_teams_for_group(target, campus=campus, team_id=team_id)
 		if not teams:
-			_routing_error("CAMPAIGN_TARGET_UNAVAILABLE", "Team Group phân bổ của Campaign không còn hoạt động.")
+			_routing_error(
+				"CAMPAIGN_TARGET_UNAVAILABLE", "Team Group phân bổ của Campaign không còn hoạt động."
+			)
 		return teams, f"CAMPAIGN:{campaign}"
 	_routing_error("CAMPAIGN_MAPPING_INVALID", "Campaign đang bật phân bổ nhưng loại đích không hợp lệ.")
 
@@ -225,11 +277,14 @@ def resolve_lead_recipient(
 	if not policy.get("enabled"):
 		_routing_error("LEAD_ROUTING_DISABLED", "Cơ chế phân bổ Lead đang được tắt.")
 	campus = str(campus or lead.get("branch") or "").strip() or None
-	if not campus:
+	mode = policy.get("routingMode")
+	if not campus and mode != "global" and mode != "group":
 		_routing_error("MISSING_CAMPUS", "Lead chưa xác định cơ sở để phân bổ an toàn.")
 
 	for layer in policy.get("layers") or []:
-		if not layer.get("enabled"):
+		if mode in LAYER_KEYS and layer.get("key") != mode:
+			continue
+		if mode not in LAYER_KEYS and not layer.get("enabled"):
 			continue
 		key = layer.get("key")
 		teams: list[dict[str, Any]] = []
@@ -237,12 +292,25 @@ def resolve_lead_recipient(
 		if key == "campaign":
 			campaign_scope = _campaign_scope(lead, campus, team_id=team_id)
 			if campaign_scope is None:
+				if mode == "campaign":
+					_routing_error("CAMPAIGN_MAPPING_INVALID", "Campaign chưa cấu hình đích nhận Lead.")
 				continue
 			teams, scope_key = campaign_scope
 		elif key == "group":
 			if not province:
+				if mode == "group":
+					_routing_error("MISSING_PROVINCE", "Lead chưa có tỉnh để chọn team ưu tiên.")
 				continue
-			teams = _active_teams_for_province(province, campus=campus, team_id=team_id)
+			preferred_team = (policy.get("provinceTeamPriority") or {}).get(province)
+			if mode == "group" and not preferred_team:
+				_routing_error("PROVINCE_TEAM_NOT_CONFIGURED", "Chưa chọn team ưu tiên cho tỉnh của Lead.")
+			if preferred_team and team_id and preferred_team != team_id:
+				_routing_error(
+					"PROVINCE_TEAM_SCOPE_MISMATCH", "Team của batch không khớp team ưu tiên của tỉnh."
+				)
+			teams = _active_teams_for_province(
+				province, campus=None if mode == "group" else campus, team_id=preferred_team or team_id
+			)
 			if not teams:
 				_routing_error(
 					"GROUP_TARGET_UNAVAILABLE",
@@ -250,8 +318,12 @@ def resolve_lead_recipient(
 				)
 			scope_key = f"GROUP:{province}"
 		elif key == "global":
-			teams = _active_teams_for_campus(campus, team_id=team_id)
-			scope_key = f"GLOBAL:{campus}"
+			teams = (
+				_active_teams_for_company()
+				if mode == "global"
+				else _active_teams_for_campus(campus, team_id=team_id)
+			)
+			scope_key = "GLOBAL:COMPANY" if mode == "global" else f"GLOBAL:{campus}"
 		if not teams:
 			_routing_error("NO_ELIGIBLE_RECIPIENT", "Không có Team đang hoạt động trong phạm vi phân bổ.")
 		return select_recipient_for_teams(

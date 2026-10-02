@@ -224,6 +224,17 @@ def _active_teams_for_group(
 	]
 
 
+def _active_teams_for_company() -> list[dict[str, Any]]:
+	"""Active Sales Teams across campuses, including teams without geography."""
+	return frappe.get_all(
+		"CRM Team",
+		filters={"is_active": 1, "team_type": "Sales"},
+		fields=["name", "team_name", "group", "campus", "team_type", "is_active"],
+		order_by="team_name asc, name asc",
+		limit_page_length=0,
+	)
+
+
 def _active_teams_for_campus(
 	campus: str,
 	*,
@@ -473,6 +484,7 @@ def select_recipient_for_teams(
 	overrides = load_overrides or {}
 	strategy = strategy if strategy in {"least_load", "round_robin"} else "least_load"
 	candidates = []
+	seen_staff = set()
 	blocked_team_reasons = []
 	for team in teams:
 		pool = _team_recipient_pool(team["name"], at)
@@ -480,6 +492,9 @@ def select_recipient_for_teams(
 			blocked_team_reasons.append(f"{team.get('team_name') or team['name']}: chưa có Sale/CTV")
 			continue
 		for recipient in pool:
+			if recipient["staff"] in seen_staff:
+				continue
+			seen_staff.add(recipient["staff"])
 			capacity = dict(recipient["capacity"])
 			effective_active = int(capacity.get("active") or 0) + int(overrides.get(recipient["staff"], 0))
 			candidates.append(
@@ -501,7 +516,17 @@ def select_recipient_for_teams(
 
 	candidates.sort(key=lambda row: (row["teamName"], row["staffName"], row["staff"]))
 	if strategy == "round_robin":
-		cursor = sum(int(row["effectiveActive"]) for row in candidates) % len(candidates)
+		# Use successful ownership history rather than active load: conversions or
+		# closed Leads must not reset the rotation. Preview only simulates steps.
+		prefix = scope_key.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+		last_staff = frappe.db.get_value(
+			"CRM Assignment Log",
+			{"parenttype": "CRM Lead", "auto_routed": 1, "reason": ["like", f"{prefix} → %"]},
+			"to_staff",
+			order_by="changed_at desc, creation desc",
+		)
+		last_index = next((index for index, row in enumerate(candidates) if row["staff"] == last_staff), -1)
+		cursor = (last_index + 1 + sum(int(value) for value in overrides.values())) % len(candidates)
 		winner = candidates[cursor]
 	else:
 		winner = min(

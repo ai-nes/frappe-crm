@@ -1052,6 +1052,9 @@ def _load_lookups(rows: list) -> dict[str, dict[str, str]]:
 		"majors": _lookup_map("CRM Major", {row.get("major") for row in rows}, "major_name"),
 		"aspirations": _lookup_map("CRM Aspiration", {row.get("aspiration") for row in rows}, "display_name"),
 		"owners": _lookup_map("CRM Staff", {row.get("owner_staff") for row in rows}, "full_name"),
+		"ownerUsers": _lookup_map(
+			"CRM Staff", {row.get("owner_staff") for row in rows}, "user", fallback_to_name=False
+		),
 		"sources": _lookup_map("CRM Lead Source", {row.get("source") for row in rows}, "source_name"),
 		"campaigns": _lookup_map("CRM Campaign", {row.get("campaign") for row in rows}, "title"),
 		"platforms": _lookup_map("CRM Platform", {row.get("platform") for row in rows}, "platform_name"),
@@ -1060,14 +1063,19 @@ def _load_lookups(rows: list) -> dict[str, dict[str, str]]:
 	}
 
 
-def _lookup_map(doctype: str, names: set[str | None], label_field: str) -> dict[str, str]:
+def _lookup_map(
+	doctype: str, names: set[str | None], label_field: str, *, fallback_to_name: bool = True
+) -> dict[str, str]:
 	keys = [name for name in names if name]
 	if not keys or not _table_exists(doctype):
 		return {}
 	rows = frappe.get_all(
 		doctype, filters={"name": ["in", keys]}, fields=["name", label_field], limit_page_length=0
 	)
-	return {row.get("name"): row.get(label_field) or row.get("name") for row in rows}
+	return {
+		row.get("name"): row.get(label_field) or (row.get("name") if fallback_to_name else "")
+		for row in rows
+	}
 
 
 def _latest_by_student(
@@ -1131,8 +1139,9 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 	next_action = (action.get("objective") if action else None) or (
 		activity.get("next_follow_up_action") if activity else None
 	)
-	owner_key = (action.get("action_owner") if action else None) or row.get("owner_staff")
+	owner_key = row.get("owner_staff")
 	owner = lookups.get("owners", {}).get(owner_key) or owner_key
+	owner_user = lookups.get("ownerUsers", {}).get(owner_key) or None
 	revision = row.get("ownership_revision")
 	if revision is None:
 		frappe.throw(
@@ -1186,6 +1195,7 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 		"nextActionType": action.get("action_type") if action else None,
 		"nextActionDueAt": _as_iso(action.get("due_at")) if action and action.get("due_at") else None,
 		"owner": owner,
+		"ownerId": owner_user,
 		"revision": revision,
 		"source": lookups.get("sources", {}).get(row.get("source")) or row.get("source"),
 		"priority": priority["label"] if priority else None,
@@ -1643,6 +1653,7 @@ def _build_student_360(row, item) -> dict[str, Any]:
 			"aspiration": item.get("aspiration"),
 			"aspirationId": row.get("aspiration"),
 			"counselor": item.get("owner"),
+			"ownerId": item.get("ownerId"),
 			"revision": item.get("revision"),
 			"engagementRevision": row.get("engagement_revision"),
 			"studentStage": item.get("studentStage") or _student_stage_value(row),

@@ -8,6 +8,8 @@
   "assignment_mode",
   "capacity_required",
   "lead_routing_section",
+  "lead_routing_mode",
+  "lead_province_team_priority",
   "lead_campaign_layer_enabled",
   "lead_group_layer_enabled",
   "lead_global_layer_enabled",
@@ -50,6 +52,18 @@
    "fieldname": "lead_routing_section",
    "fieldtype": "Section Break",
    "label": "Lead Routing Policy"
+  },
+  {
+   "fieldname": "lead_routing_mode",
+   "fieldtype": "Select",
+   "label": "Lead Routing Mode",
+   "options": "\nglobal\ngroup\ncampaign"
+  },
+  {
+   "fieldname": "lead_province_team_priority",
+   "fieldtype": "JSON",
+   "default": "{}",
+   "label": "Preferred Team by Province"
   },
   {
    "default": "1",

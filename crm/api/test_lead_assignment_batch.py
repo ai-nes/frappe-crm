@@ -10,6 +10,55 @@ from crm.fcrm import team_routing
 
 
 class TestLeadAssignmentBatchHelpers(TestCase):
+	def test_missing_information_history_uses_live_validation_before_pagination(self):
+		leads = [
+			frappe._dict(
+				name="LEAD-INCOMPLETE", student_name="Nguyễn Văn A", phone="0900000000",
+				province=None, processing_status="NEW", resolution="PENDING",
+			),
+			frappe._dict(
+				name="LEAD-CORRECTED", student_name="Nguyễn Văn B", phone="0900000001",
+				province="PROVINCE-1", high_school=None, major=None,
+				processing_status="CLOSED", resolution="INVALID",
+			),
+		]
+		with (
+			patch.object(lead_assignment_batch, "_require_read_access"),
+			patch.object(lead_assignment_batch, "_live_closed_leads", return_value=leads) as live_leads,
+			patch.object(lead_assignment_batch, "list_lead_assignment_batches") as batches,
+		):
+			result = lead_assignment_batch.list_lead_assignment_history_items(
+				status="missing_information", limit=1,
+			)
+			searched = lead_assignment_batch.list_lead_assignment_history_items(
+				status="missing_information", q="không tìm thấy",
+			)
+		self.assertEqual(result["pagination"]["total"], 1)
+		self.assertEqual(result["items"][0]["leadId"], "LEAD-INCOMPLETE")
+		self.assertEqual(result["items"][0]["missingFields"], ["Tỉnh"])
+		self.assertEqual(result["items"][0]["processingStatus"], "NEW")
+		self.assertEqual(searched["pagination"]["total"], 0)
+		live_leads.assert_called_with(None, missing_information=True)
+		batches.assert_not_called()
+
+	def test_missing_information_history_requires_routing_read_permission(self):
+		with (
+			patch.object(lead_assignment_batch, "_require_read_access", side_effect=frappe.PermissionError),
+			patch.object(lead_assignment_batch, "_live_closed_leads") as live_leads,
+		):
+			with self.assertRaises(frappe.PermissionError):
+				lead_assignment_batch.list_lead_assignment_history_items(status="missing_information")
+		live_leads.assert_not_called()
+
+	def test_missing_information_query_keeps_lead_permissions_and_excludes_terminal_outcomes(self):
+		with patch.object(frappe, "get_list", return_value=[]) as get_list:
+			lead_assignment_batch._live_closed_leads(missing_information=True)
+		filters = get_list.call_args.kwargs["filters"]
+		self.assertEqual(get_list.call_args.args[0], "CRM Lead")
+		self.assertEqual(filters["owner_staff"], ["is", "not set"])
+		self.assertEqual(filters["converted_student"], ["is", "not set"])
+		self.assertEqual(filters["resolution"], ["not in", ["DUPLICATE", "SPAM", "CREATED"]])
+
 	class _BatchScope:
 		target_team = None
 		pool = None

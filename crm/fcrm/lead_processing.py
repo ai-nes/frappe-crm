@@ -435,17 +435,28 @@ def list_lead_assignment_targets(lead: str) -> dict[str, Any]:
 	}
 
 
-def _validate_lead_ownership_target(lead_doc, owner_staff: str, target_team_id: str) -> None:
+def _validate_lead_ownership_target(
+	lead_doc, owner_staff: str, target_team_id: str, *, allow_cross_province: bool = False
+) -> None:
 	"""Validate an active Sale/CTV or designated leader within the Group's province."""
 	# Lead ownership follows the Group's province; campus is not a Team boundary.
-	leader = next(
-		(row for row in list_team_lead_recipients(target_team_id) if row["staff"] == owner_staff), None
+	leader = (
+		None
+		if allow_cross_province
+		else next(
+			(row for row in list_team_lead_recipients(target_team_id) if row["staff"] == owner_staff), None
+		)
 	)
-
-	readiness = team_routing_readiness(
-		target_team_id,
-		expected_province=str(lead_doc.get("province") or "").strip() or None,
-	)
+	if allow_cross_province:
+		team = frappe.db.get_value("CRM Team", target_team_id, ["is_active", "team_type"], as_dict=True)
+		if not team or not team.is_active or team.team_type != "Sales":
+			_fail("RECIPIENT_NOT_ELIGIBLE", "Target Team must be an active Sales Team.")
+		readiness = {"status": "ready"}
+	else:
+		readiness = team_routing_readiness(
+			target_team_id,
+			expected_province=str(lead_doc.get("province") or "").strip() or None,
+		)
 	fallback_allowed = leader and (
 		readiness.get("reasonCode") == "no_recipients"
 		or (leader["function"] == "Lead Group" and readiness.get("reasonCode") == "team_lead_missing")
@@ -602,11 +613,15 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 	processing_reason = _reason(reason)
 	if not processing_reason:
 		if status == "ASSIGNED":
-			processing_reason = "Đã kiểm tra đủ họ tên, số điện thoại và tỉnh/thành phố; Lead đã được phân công."
+			processing_reason = (
+				"Đã kiểm tra đủ họ tên, số điện thoại và tỉnh/thành phố; Lead đã được phân công."
+			)
 		elif status == "PROCESSED":
 			processing_reason = "Đã kiểm tra đủ họ tên, số điện thoại và tỉnh/thành phố; chờ phân công."
 		else:
-			processing_reason = classification.get("reason") or "Đã đóng hồ sơ vì thông tin bị trùng với hồ sơ khác."
+			processing_reason = (
+				classification.get("reason") or "Đã đóng hồ sơ vì thông tin bị trùng với hồ sơ khác."
+			)
 	_set_processing_values(
 		lead_doc.name,
 		{
@@ -769,9 +784,7 @@ def preview_new_leads(admission_year: Any = None, limit: Any = None) -> dict[str
 		try:
 			lead_doc = _load_lead(name)
 			result = _preview_lead_document(lead_doc)
-			outcome = str(
-				result.get("processing_outcome") or result.get("resolution") or ""
-			).strip().upper()
+			outcome = str(result.get("processing_outcome") or result.get("resolution") or "").strip().upper()
 			if outcome == "CREATED":
 				summary["readyToAssign"] += 1
 			elif outcome == "MATCHED":
@@ -793,15 +806,9 @@ def preview_new_leads(admission_year: Any = None, limit: Any = None) -> dict[str
 					"status": result.get("status"),
 					"resolution": result.get("resolution"),
 					"processingOutcome": result.get("processing_outcome"),
-					"targetStudent": (
-						result.get("target_student") or result.get("targetStudent")
-					),
-					"duplicateOf": (
-						result.get("duplicate_of") or result.get("duplicateOf")
-					),
-					"duplicateType": (
-						result.get("duplicate_type") or result.get("duplicateType")
-					),
+					"targetStudent": (result.get("target_student") or result.get("targetStudent")),
+					"duplicateOf": (result.get("duplicate_of") or result.get("duplicateOf")),
+					"duplicateType": (result.get("duplicate_type") or result.get("duplicateType")),
 					"reason": result.get("reason"),
 					"errorCode": result.get("error_code") or result.get("errorCode"),
 				}
@@ -860,6 +867,7 @@ def change_lead_ownership(
 	target_id: str | None = None,
 	_commit: bool = True,
 	_route_trigger: str | None = None,
+	_routing_scope: str | None = None,
 ) -> dict[str, Any]:
 	"""Atomically change a Lead's ownership projection without creating a Student."""
 	lead_name = _required(lead, "lead")
@@ -891,7 +899,13 @@ def change_lead_ownership(
 	previous_pool = lead_doc.get("owning_pool")
 	if target_kind == "owner":
 		owner_staff = _required(owner_staff, "owner_staff")
-		_validate_lead_ownership_target(lead_doc, owner_staff, target_team_id)
+		_validate_lead_ownership_target(
+			lead_doc,
+			owner_staff,
+			target_team_id,
+			allow_cross_province=_route_trigger == "assignment_batch"
+			and _routing_scope in {"global", "campaign"},
+		)
 		ownership_values = {
 			"assigned_to": owner_staff,
 			"owner_staff": owner_staff,
@@ -953,6 +967,8 @@ def assign_lead(
 	idempotency_key: str,
 	expected_revision: Any,
 	correlation_id: str | None = None,
+	*,
+	_routing_scope: str | None = None,
 ) -> dict[str, Any]:
 	"""Assign or reassign a Lead to a Sale and move it to ASSIGNED."""
 	lead_doc = _load_lead(lead)
@@ -974,6 +990,7 @@ def assign_lead(
 			correlation_id=correlation_id,
 			_commit=False,
 			_route_trigger="assignment_batch",
+			_routing_scope=_routing_scope,
 		)
 		_set_processing_values(
 			lead_doc.name,

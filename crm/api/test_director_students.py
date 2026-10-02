@@ -120,6 +120,7 @@ class TestDirectorStudents(FrappeTestCase):
 				"provinces": {"P-1": "Cần Thơ"},
 				"majors": {"M-1": "Trí tuệ nhân tạo"},
 				"owners": {"STAFF-1": "Trần Quốc Bảo"},
+				"ownerUsers": {"STAFF-1": "sale@example.com"},
 				"sources": {"SRC-1": "Career Talk 28/05"},
 			},
 			activity=frappe._dict(
@@ -128,6 +129,7 @@ class TestDirectorStudents(FrappeTestCase):
 			),
 			action=frappe._dict(
 				objective="Gọi phụ huynh về học phí",
+				action_owner="OTHER-STAFF",
 				priority="high",
 				due_at="2026-08-31 16:00:00",
 			),
@@ -150,6 +152,8 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(item["scoreDelta"], 13)
 		self.assertEqual(item["nextAction"], "Gọi phụ huynh về học phí")
 		self.assertEqual(item["revision"], 4)
+		self.assertEqual(item["owner"], "Trần Quốc Bảo")
+		self.assertEqual(item["ownerId"], "sale@example.com")
 		self.assertEqual(item["priority"], "Cao")
 		self.assertEqual(item["priorityCode"], "high")
 		self.assertEqual(item["lastActivityAt"], "2026-08-31T09:56:00+07:00")
@@ -157,6 +161,29 @@ class TestDirectorStudents(FrappeTestCase):
 	def test_student_row_mapping_rejects_missing_ownership_revision(self):
 		with self.assertRaises(frappe.ValidationError):
 			director_students._map_student_row(frappe._dict(name="ENR-1"))
+
+	def test_staff_user_lookup_does_not_fabricate_a_user_from_staff_name(self):
+		with (
+			patch.object(director_students, "_table_exists", return_value=True),
+			patch.object(
+				director_students.frappe,
+				"get_all",
+				return_value=[frappe._dict(name="STAFF-1", user=None)],
+			),
+		):
+			self.assertEqual(
+				director_students._lookup_map("CRM Staff", {"STAFF-1"}, "user", fallback_to_name=False),
+				{"STAFF-1": ""},
+			)
+
+	def test_unassigned_student_does_not_inherit_the_action_owner(self):
+		item = director_students._map_student_row(
+			frappe._dict(name="ENR-1", ownership_revision=0),
+			action=frappe._dict(action_owner="STAFF-1"),
+		)
+		self.assertIsNone(item["owner"])
+		self.assertIsNone(item["ownerId"])
+		self.assertEqual(item["assignmentStatus"], "unassigned")
 
 	def test_list_endpoint_returns_dashboard_envelope_and_server_applied_filters(self):
 		row = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An", ownership_revision=4)
@@ -365,6 +392,7 @@ class TestDirectorStudents(FrappeTestCase):
 			"lastActivityAt": "2026-08-31T09:56:00+07:00",
 			"nextAction": "Gọi phụ huynh về học phí",
 			"owner": "Trần Quốc Bảo",
+			"ownerId": "sale@example.com",
 			"revision": 4,
 			"source": "Career Talk 28/05",
 			"sourceLeadLabel": "Nguyễn Minh An",
@@ -407,6 +435,7 @@ class TestDirectorStudents(FrappeTestCase):
 
 		self.assertEqual(response["student"]["phone"], "0900000000")
 		self.assertEqual(response["student"]["studentId"], "CRMC-1")
+		self.assertEqual(response["student"]["ownerId"], "sale@example.com")
 		self.assertEqual(response["student"]["email"], "an@example.com")
 		self.assertEqual(response["student"]["provinceId"], "P-1")
 		self.assertEqual(response["student"]["ward"], "Phường An Bình")
