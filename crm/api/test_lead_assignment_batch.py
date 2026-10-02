@@ -179,8 +179,12 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 				lead_assignment_batch.frappe,
 				"get_list",
 				return_value=[
-					frappe._dict(name="LEAD-1", processing_status="PROCESSED", owner_staff=None, assigned_to=None),
-					frappe._dict(name="LEAD-2", processing_status="ASSIGNED", owner_staff="SALE-1", assigned_to=None),
+					frappe._dict(
+						name="LEAD-1", processing_status="PROCESSED", owner_staff=None, assigned_to=None
+					),
+					frappe._dict(
+						name="LEAD-2", processing_status="ASSIGNED", owner_staff="SALE-1", assigned_to=None
+					),
 					frappe._dict(
 						name="LEAD-3",
 						processing_status="CLOSED",
@@ -622,9 +626,7 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 			lead_assignment_batch.run_lead_assignment_batch(batch.name)
 
 		self.assertEqual(batch.workflow_config_version, "lead-assignment-workflow-v6")
-		self.assertEqual(
-			batch.workflow_config_snapshot["matching"]["routingPolicy"], policy
-		)
+		self.assertEqual(batch.workflow_config_snapshot["matching"]["routingPolicy"], policy)
 
 	def test_assignment_batch_has_no_student_handoff_helper(self):
 		self.assertFalse(hasattr(lead_assignment_batch, "_handoff_assigned_lead"))
@@ -740,14 +742,7 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertEqual(result["function"], "Sale")
 		self.assertEqual(result["policyVersion"], "province-capacity-v1")
 
-	def test_province_selection_rejects_staff_with_no_capacity_configured(self):
-		"""A Sale/CTV who has never been given a capacity period is not eligible.
-
-		This is a deliberate business rule, not a display default: missing
-		capacity used to mean "unlimited", but now means "cannot receive any
-		Lead until an admin sets it up" — and the failure message must name
-		that cause distinctly from "everyone is full".
-		"""
+	def test_province_selection_accepts_staff_without_capacity_configuration(self):
 		teams = [{"name": "TEAM-NORTH", "team_name": "Đội Tư vấn Khu Bắc", "campus": "CAMPUS-1"}]
 		recipients = {
 			"TEAM-NORTH": [
@@ -773,11 +768,8 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 				side_effect=lambda team_id, at=None: recipients[team_id],
 			),
 		):
-			with self.assertRaises(frappe.ValidationError) as ctx:
-				team_routing.select_province_recipient("Ho Chi Minh City")
-		self.assertIn("thiết lập capacity", str(ctx.exception))
-		self.assertIn("Nguyễn Minh Khôi", str(ctx.exception))
-		self.assertEqual(ctx.exception.code, "STAFF_CAPACITY_NOT_CONFIGURED")
+			result = team_routing.select_province_recipient("Ho Chi Minh City")
+		self.assertEqual(result["ownerStaff"], "STAFF-NORTH")
 
 	def test_fallback_recipient_selects_team_lead_when_no_sale_or_ctv_active(self):
 		teams = [{"name": "TEAM-NORTH", "team_name": "Đội Tư vấn Khu Bắc", "campus": "CAMPUS-1"}]

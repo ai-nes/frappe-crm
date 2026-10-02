@@ -274,27 +274,8 @@ def _capacity_snapshot(limit: int, active: int, *, configured: bool = True) -> d
 
 
 def _staff_capacity(staff: str, at=None) -> dict[str, int | bool | None]:
-	"""Read the staff's capacity for the given moment.
-
-	A Sale/CTV Sale must have an approved capacity period covering ``at`` to
-	receive any Lead at all; ``configured=False`` marks a staff who has never
-	been given one, so callers can tell "not set up yet" apart from "set up
-	and currently full" instead of silently treating both as unlimited.
-	"""
-	at = at or now_datetime()
-	period = frappe.db.get_value(
-		"CRM Staff Capacity Period",
-		{
-			"staff": staff,
-			"period_start": ["<=", getdate(at)],
-			"period_end": [">=", getdate(at)],
-			"approved": 1,
-		},
-		["max_active_students"],
-		as_dict=True,
-	)
-	limit = int((period or {}).get("max_active_students") or 0)
-	return _capacity_snapshot(limit, active_lead_count(staff), configured=period is not None)
+	"""Report active Lead load without requiring or enforcing a capacity period."""
+	return _capacity_snapshot(0, active_lead_count(staff), configured=False)
 
 
 def active_lead_count(staff: str) -> int:
@@ -353,12 +334,7 @@ def active_lead_count_by_staff(staff_ids: list[str]) -> dict[str, int]:
 
 
 def _team_recipient_pool(team_id: str, at=None) -> list[dict[str, Any]]:
-	"""Resolve active Sale/CTV members of a Team with their capacity, unfiltered.
-
-	Includes members who are not (yet) eligible to receive a Lead, so callers
-	that need to explain *why* no one is eligible (e.g. capacity never set up
-	vs. capacity full) can inspect each member's ``capacity`` before deciding.
-	"""
+	"""Resolve active Sale/CTV members and their current Lead load."""
 	at = at or now_datetime()
 	team_lead_staff = frappe.db.get_value("CRM Team", team_id, "team_lead_staff")
 	memberships = [
@@ -399,19 +375,8 @@ def _team_recipient_pool(team_id: str, at=None) -> list[dict[str, Any]]:
 
 
 def _active_team_recipients(team_id: str, at=None) -> list[dict[str, Any]]:
-	"""Resolve Sale/CTV recipients currently eligible to receive a Lead.
-
-	Eligibility requires an explicitly configured capacity period; a Sale/CTV
-	who has never been given one is not treated as unlimited, they simply
-	cannot receive a Lead until an admin sets their capacity (Quản lý người
-	dùng) — this is a deliberate business rule, not a display default.
-	"""
-	return [
-		row
-		for row in _team_recipient_pool(team_id, at)
-		if row["capacity"]["configured"]
-		and not (row["capacity"]["limit"] and row["capacity"]["active"] >= row["capacity"]["limit"])
-	]
+	"""Return active Sale/CTV recipients without a Lead capacity gate."""
+	return _team_recipient_pool(team_id, at)
 
 
 def list_province_recipients(
@@ -460,15 +425,16 @@ def list_province_recipients(
 
 
 def list_team_lead_recipients(team_id: str) -> list[dict[str, Any]]:
-	"""Resolve designated Team/Group leads for manual assignment, without capacity gating."""
+	"""Resolve designated leaders who are active members of the target Team."""
 	team = frappe.db.get_value("CRM Team", team_id, ["team_lead_staff", "group"], as_dict=True)
 	if not team:
 		return []
 	group_lead = frappe.db.get_value("CRM Team Group", team.get("group"), "group_lead_staff")
+	member_ids = {row.staff for row in _active_memberships(team_id)}
 	result = []
 	seen = set()
 	for staff_id, function in ((group_lead, "Lead Group"), (team.get("team_lead_staff"), "Lead Team")):
-		if not staff_id or staff_id in seen:
+		if not staff_id or staff_id in seen or staff_id not in member_ids:
 			continue
 		staff = frappe.db.get_value(
 			"CRM Staff", staff_id, ["name", "full_name", "user", "is_active"], as_dict=True
@@ -500,18 +466,13 @@ def select_recipient_for_teams(
 	load_overrides: dict[str, int] | None = None,
 	at=None,
 ) -> dict[str, Any]:
-	"""Select a Sale/CTV across an already resolved Team scope.
+	"""Select an active Sale/CTV by load, without enforcing Lead capacity.
 
-	Capacity ceilings remain hard limits even when the policy allows recipients
-	without a configured capacity period.  ``round_robin`` uses the current
-	active load as a deterministic cursor, which keeps a fresh batch rotating
-	without introducing a second mutable cursor document.
+	``require_capacity`` is retained for compatibility with existing policy callers.
 	"""
 	overrides = load_overrides or {}
 	strategy = strategy if strategy in {"least_load", "round_robin"} else "least_load"
 	candidates = []
-	unconfigured_recipients = []
-	over_capacity_recipients = []
 	blocked_team_reasons = []
 	for team in teams:
 		pool = _team_recipient_pool(team["name"], at)
@@ -520,14 +481,7 @@ def select_recipient_for_teams(
 			continue
 		for recipient in pool:
 			capacity = dict(recipient["capacity"])
-			if require_capacity and not capacity.get("configured"):
-				unconfigured_recipients.append(f"{recipient['staffName']} ({team.get('team_name') or team['name']})")
-				continue
 			effective_active = int(capacity.get("active") or 0) + int(overrides.get(recipient["staff"], 0))
-			limit = capacity.get("limit")
-			if limit and effective_active >= limit:
-				over_capacity_recipients.append(f"{recipient['staffName']} ({team.get('team_name') or team['name']})")
-				continue
 			candidates.append(
 				{
 					**recipient,
@@ -536,18 +490,14 @@ def select_recipient_for_teams(
 				}
 			)
 	if not candidates:
-		if unconfigured_recipients:
-			_raise_routing_error(
-				"STAFF_CAPACITY_NOT_CONFIGURED",
-				"Chưa có Sale/CTV đủ điều kiện vì chưa thiết lập capacity: "
-				+ ", ".join(unconfigured_recipients),
-			)
 		if blocked_team_reasons:
 			_raise_routing_error(
 				"NO_ELIGIBLE_RECIPIENT",
 				"Không có Team đủ điều kiện: " + "; ".join(blocked_team_reasons),
 			)
-		_raise_routing_error("NO_ELIGIBLE_RECIPIENT", "Tất cả Sale/CTV trong phạm vi đã đạt giới hạn nhận Lead.")
+		_raise_routing_error(
+			"NO_ELIGIBLE_RECIPIENT", "Không có Sale/CTV đủ điều kiện trong phạm vi phân công."
+		)
 
 	candidates.sort(key=lambda row: (row["teamName"], row["staffName"], row["staff"]))
 	if strategy == "round_robin":
@@ -590,18 +540,7 @@ def select_province_recipient(
 	load_overrides: dict[str, int] | None = None,
 	at=None,
 ) -> dict[str, Any]:
-	"""Select the least-loaded Sale/CTV across Teams managing a province.
-
-	The deterministic tie-break keeps previews stable while the capacity check
-	still protects a Sale from receiving more active Leads than configured. A
-	Sale/CTV must have an explicitly configured capacity period to be eligible;
-	one who has never been set up is not treated as unlimited — it is a setup
-	blocker, raised as ``STAFF_CAPACITY_NOT_CONFIGURED`` rather than the
-	generic ``NO_ELIGIBLE_RECIPIENT`` used for "everyone full" or "team not
-	ready", so a caller (the Lead batch runner) can tell them apart: the
-	former must wait for an admin to configure capacity instead of silently
-	falling back to the Team's Trưởng nhóm.
-	"""
+	"""Select the least-loaded active Sale/CTV across Teams managing a province."""
 	province = str(province or "").strip()
 	if not province:
 		_raise_routing_error("MISSING_PROVINCE", "Lead chưa có tỉnh để phân công.")
@@ -613,8 +552,6 @@ def select_province_recipient(
 	overrides = load_overrides or {}
 	candidates = []
 	blocked_team_reasons = []
-	unconfigured_recipients = []
-	over_capacity_recipients = []
 	for team in teams:
 		readiness = team_routing_readiness(
 			team["name"],
@@ -627,14 +564,7 @@ def select_province_recipient(
 			continue
 		for recipient in _team_recipient_pool(team["name"], at):
 			capacity = recipient["capacity"]
-			if not capacity["configured"]:
-				unconfigured_recipients.append(f"{recipient['staffName']} ({team['team_name']})")
-				continue
 			effective_active = capacity["active"] + int(overrides.get(recipient["staff"], 0))
-			limit = capacity["limit"]
-			if limit and effective_active >= limit:
-				over_capacity_recipients.append(f"{recipient['staffName']} ({team['team_name']})")
-				continue
 			candidates.append(
 				{**recipient, "teamName": team["team_name"], "effectiveActive": effective_active}
 			)
@@ -643,26 +573,7 @@ def select_province_recipient(
 			_raise_routing_error(
 				"NO_ELIGIBLE_RECIPIENT", "Không có Team đủ điều kiện: " + "; ".join(blocked_team_reasons)
 			)
-		if unconfigured_recipients:
-			# Distinct from NO_ELIGIBLE_RECIPIENT on purpose: a batch run must NOT
-			# silently fall back to the Team's Trưởng nhóm for this cause the way
-			# it does for "everyone full" or "team not ready" — capacity that was
-			# simply never set up is fixable by an admin, and the Lead should wait
-			# in manual review (and auto-route on the next run) instead of quietly
-			# landing on someone who was never meant to receive it.
-			message = (
-				"Team có Sale/CTV nhưng không ai đủ điều kiện nhận Lead: "
-				f"{len(over_capacity_recipients)} người đã đạt giới hạn, "
-				f"{len(unconfigured_recipients)} người chưa thiết lập capacity "
-				f"({', '.join(unconfigured_recipients)})."
-				if over_capacity_recipients
-				else (
-					"Team có Sale/CTV nhưng chưa ai được thiết lập capacity (số Lead tối đa nhận cùng lúc): "
-					f"{', '.join(unconfigured_recipients)}."
-				)
-			)
-			_raise_routing_error("STAFF_CAPACITY_NOT_CONFIGURED", message)
-		_raise_routing_error("NO_ELIGIBLE_RECIPIENT", "Team có Sale/CTV nhưng tất cả đã đạt giới hạn nhận Lead.")
+		_raise_routing_error("NO_ELIGIBLE_RECIPIENT", "Team chưa có Sale/CTV đủ điều kiện nhận Lead.")
 	winner = min(
 		candidates,
 		key=lambda row: (row["effectiveActive"], row["teamName"], row["staffName"], row["staff"]),
