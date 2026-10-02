@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 import frappe
 from frappe import _
 
-from crm.fcrm.interaction_log import CHATWOOT_INTERACTION_TYPE
+from crm.fcrm.interaction_log import CALL_INTERACTION_TYPES, ZALO_INTERACTION_TYPES
 from crm.fcrm.interaction_semantics import resolve_interaction_type
 from crm.fcrm.lead_identity import resolve_lead_name
 from crm.fcrm.permissions import (
@@ -48,7 +48,7 @@ LIFECYCLE_STATUS_ALIASES = {
 }
 # Keep the canonical Chatwoot type and the legacy seeded type readable while
 # older CRM Interaction rows are being migrated to the canonical vocabulary.
-CHATWOOT_INTERACTION_TYPES = (CHATWOOT_INTERACTION_TYPE, "TIN_NHAN_CHATWOOT")
+CHATWOOT_INTERACTION_TYPES = ZALO_INTERACTION_TYPES
 _TRANSCRIPT_BLOCK_RE = re.compile(r"\[TRANSCRIPT\](.*?)\[/TRANSCRIPT\]", re.IGNORECASE | re.DOTALL)
 _SUMMARY_BLOCK_RE = re.compile(
 	r"\[AI_CALL_SUMMARY_V1\](.*?)\[/AI_CALL_SUMMARY_V1\]",
@@ -377,6 +377,8 @@ CHATWOOT_INTERACTION_FIELDS = [
 	"source_namespace",
 	"source_record_id",
 	"creation",
+	"reference_doctype",
+	"reference_docname",
 ]
 
 
@@ -406,11 +408,15 @@ def get_student_chatwoot_interactions(
 	page_length = _parse_int(page_size, "page_size", 50, minimum=1, maximum=100)
 	filters = {
 		"student": ["in", _student_query_ids([canonical_id])],
-		"interaction_type": ["in", CHATWOOT_INTERACTION_TYPES],
 	}
+	or_filters = [
+		["interaction_type", "in", ZALO_INTERACTION_TYPES],
+		["channel", "=", "zalo"],
+	]
 	rows = frappe.get_list(
 		"CRM Interaction",
 		filters=filters,
+		or_filters=or_filters,
 		fields=CHATWOOT_INTERACTION_FIELDS,
 		order_by="interaction_datetime desc, creation desc, name desc",
 		limit_start=(page_number - 1) * page_length,
@@ -419,6 +425,7 @@ def get_student_chatwoot_interactions(
 	all_visible_names = frappe.get_list(
 		"CRM Interaction",
 		filters=filters,
+		or_filters=or_filters,
 		fields=["name"],
 		limit_page_length=0,
 		pluck="name",
@@ -1901,6 +1908,7 @@ def _student_interactions(student_id: str | None) -> list:
 			"actor",
 			"crm_contact",
 			"conversation_id",
+			"agent_id",
 			"reference_doctype",
 			"reference_docname",
 			"source_namespace",
@@ -2010,6 +2018,31 @@ def _student_zalo_messages(
 		direction = "inbound" if _fold(ix.get("direction") or "") in {"inbound", "incoming"} else "outbound"
 		actor_name = _user_name(ix.get("actor"), fallback=staff_name)
 
+		# Manual summaries have no transport/provider context. Ignore direction:
+		# Frappe may default it to inbound even when no message was exchanged.
+		is_manual = not any(
+			ix.get(field)
+			for field in (
+				"channel", "source_namespace", "source_record_id", "conversation_id",
+				"agent_id", "reference_doctype", "reference_docname",
+			)
+		)
+		if is_manual:
+			messages.append({
+				"id": str(ix.get("name")),
+				"time": _format_activity_time(ix.get("interaction_datetime")),
+				"entryKind": "manual_summary",
+				"recordedBy": actor_name,
+				"summary": ix.get("summary") or "",
+				"notes": ix.get("notes") or "",
+				"outcome": ix.get("outcome") or "",
+				"content": ix.get("summary") or ix.get("notes") or "Ghi nhận Zalo",
+				"senderName": "",
+				"recipientName": "",
+				"direction": direction,
+			})
+			continue
+
 		contact_name = parent_name if parent_name else student_name
 		contact_role = parent_role if parent_name else "Học sinh"
 
@@ -2049,6 +2082,7 @@ def _student_zalo_messages(
 			{
 				"id": str(ix.get("name")),
 				"time": _format_activity_time(ix.get("interaction_datetime")),
+				"entryKind": "message",
 				"senderName": sender_name,
 				"senderRole": sender_role,
 				"recipientName": recipient_name,
@@ -2210,7 +2244,7 @@ def _student_call_records(
 			"call" in channel
 			or "phone" in channel
 			or "goi" in channel
-			or ix_type in {"connected", "outreach"}
+			or ix_type in {_fold(value) for value in CALL_INTERACTION_TYPES}
 		)
 		if not is_call:
 			continue

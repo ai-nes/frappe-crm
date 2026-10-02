@@ -7,6 +7,7 @@ from crm.api.agent_migrations import SALES_WORKLIST_ROLE_NAMES
 from crm.api.capability import _is_capability_gateway_user
 from crm.api.session import (
 	_get_policy_roles,
+	_session_doctype_permissions,
 	_session_role_flags,
 	get_crm_user_role,
 	me,
@@ -27,6 +28,17 @@ from crm.fcrm.role_policy import (
 
 
 class TestSessionRoleContract(FrappeTestCase):
+	def test_interaction_create_flag_uses_effective_docperm(self):
+		for allowed in (True, False):
+			with (
+				self.subTest(allowed=allowed),
+				patch.object(frappe.db, "exists", return_value=True),
+				patch.object(frappe, "has_permission", return_value=allowed) as permission,
+			):
+				flags = _session_doctype_permissions({"Lead Sale"})
+				self.assertEqual(flags["CRM Interaction"]["create"], allowed)
+				permission.assert_any_call("CRM Interaction", ptype="create", user=frappe.session.user)
+
 	def test_explicit_administrator_profile_survives_frappe_role_filter(self):
 		with (
 			patch.object(frappe, "get_roles", return_value=["All", "Guest", "Desk User"]),
